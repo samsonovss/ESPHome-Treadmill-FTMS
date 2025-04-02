@@ -1,0 +1,1596 @@
+esphome:
+  name: treadmill
+  friendly_name: treadmill
+  on_boot:
+    - priority: 600
+      then:
+        - script.execute: update_heart_rate_zones
+        - globals.set:
+            id: ble_client_connected
+            value: 'false'
+        - text_sensor.template.publish:
+            id: ble_server_status
+            state: "Отключен"
+        - text_sensor.template.publish:
+            id: connection_status
+            state: "Отключено"
+        - sensor.template.publish:
+            id: heart_rate_sensor
+            state: !lambda 'return NAN;'
+        - globals.set:
+            id: treadmill_running
+            value: 'false'
+        - globals.set:
+            id: current_distance_km
+            value: '0.0'
+        - globals.set:
+            id: current_speed
+            value: '0.0'
+        # - lambda: |-
+        #     id(boot_time) = millis();
+        #     id(target_incline_goal) = 0;  // Устанавливаем цель 0 при старте
+        #     char buffer[13];
+        #     snprintf(buffer, sizeof(buffer), "[SETINC:000]");
+        #     id(uart_bus)->write_str(buffer);
+        #     ESP_LOGI("treadmill", "Boot: Sent initial [SETINC:000]");
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+  level: DEBUG
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "replace"
+
+ota:
+  - platform: esphome
+    password: "replace"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Treadmill Fallback Hotspot"
+    password: "1YLAT5mbrJu6"
+
+captive_portal:
+
+uart:
+  - id: uart_bus
+    tx_pin: 
+      number: GPIO17
+      inverted: false
+    rx_pin: 
+      number: GPIO18
+      mode: 
+        input: true
+        pullup: true
+      inverted: false
+    baud_rate: 4900
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+    rx_buffer_size: 512
+    debug:
+      direction: RX
+      dummy_receiver: false
+      after:
+        timeout: 100ms
+        bytes: 30
+      sequence:
+        - lambda: |-
+            char message[31] = {0};
+            int len = 0;
+            for (size_t i = 0; i < std::min(bytes.size(), size_t(30)); i++) {
+              if (bytes[i] != 0x00) {
+                message[len++] = bytes[i];
+              }
+            }
+            if (len > 0) {
+              ESP_LOGD("UART", "Получено: %s", message);
+
+              // Функция для парсинга команды между [ и ]
+              auto parse_command = [&](const char* start) {
+                if (start == nullptr || *start != '[') return;
+                const char* end = strchr(start, ']');
+                if (end == nullptr || end <= start + 1) return; // Нет закрывающей скобки или пустая команда
+
+                // Извлекаем имя команды и значение
+                const char* colon = strchr(start + 1, ':');
+                if (colon == nullptr || colon >= end) return; // Нет двоеточия
+
+                char command_name[16] = {0}; // Максимум 15 символов для имени команды + '\0'
+                char command_value[16] = {0}; // Максимум 15 символов для значения + '\0'
+
+                int name_len = colon - (start + 1);
+                int value_len = end - (colon + 1);
+                if (name_len >= sizeof(command_name) || value_len >= sizeof(command_value)) {
+                  ESP_LOGW("UART", "Слишком длинная команда или значение: %s", start);
+                  return;
+                }
+
+                memcpy(command_name, start + 1, name_len);
+                memcpy(command_value, colon + 1, value_len);
+
+                ESP_LOGD("UART", "Команда: %s, Значение: %s", command_name, command_value);
+
+                // Обработка известных команд
+                if (strcmp(command_name, "SETSPD") == 0) {
+                  int speed = 0;
+                  bool valid = true;
+                  for (int i = 0; command_value[i] != '\0' && i < 5; i++) { // Ограничение 5 цифр
+                    if (command_value[i] < '0' || command_value[i] > '9') {
+                      valid = false;
+                      break;
+                    }
+                    speed = speed * 10 + (command_value[i] - '0');
+                  }
+                  if (valid) {
+                    id(treadmill_speed_feedback) = speed;
+                    ESP_LOGD("UART", "Скорость обновлена: %d", speed);
+                  } else {
+                    ESP_LOGW("UART", "Некорректная скорость: %s", command_value);
+                  }
+                }
+                else if (strcmp(command_name, "SETINC") == 0) {
+                  int incline = 0;
+                  bool valid = true;
+                  for (int i = 0; command_value[i] != '\0' && i < 5; i++) {
+                    if (command_value[i] < '0' || command_value[i] > '9') {
+                      valid = false;
+                      break;
+                    }
+                    incline = incline * 10 + (command_value[i] - '0');
+                  }
+                  if (valid) {
+                    id(treadmill_incline_feedback) = incline;
+                    ESP_LOGD("UART", "Наклон обновлен: %d", incline);
+                  } else {
+                    ESP_LOGW("UART", "Некорректный наклон: %s", command_value);
+                  }
+                }
+                // Другие команды просто логируются
+                else {
+                  ESP_LOGD("UART", "Неизвестная команда обработана: %s=%s", command_name, command_value);
+                }
+              };
+
+              // Поиск первой команды в message
+              const char* start = strchr(message, '[');
+              parse_command(start);
+
+              // Если нет команды
+              if (start == nullptr) {
+                ESP_LOGD("UART", "Не найдено команд в формате [КОМАНДА:ЗНАЧЕНИЕ]: %s", message);
+              }
+            }
+
+# uart:
+#   - id: uart_bus
+#     tx_pin: 
+#       number: GPIO17
+#       inverted: false
+#     rx_pin: 
+#       number: GPIO18
+#       mode: 
+#         input: true
+#         pullup: true
+#       inverted: false
+#     baud_rate: 4900
+#     data_bits: 8
+#     parity: NONE
+#     stop_bits: 1
+#     rx_buffer_size: 512
+#     debug:
+#       direction: RX
+#       dummy_receiver: false  # Отключаем dummy_receiver
+#       after:
+#         timeout: 100ms  # Оставляем увеличенный таймаут
+#         bytes: 12  # Исправляем на 12 байт, чтобы вместить [SETSPD:XXX]
+#       sequence:
+#         - lambda: |-
+#             std::vector<uint8_t> filtered_bytes;
+#             filtered_bytes.reserve(30); // Ограничить размер
+#             for (auto byte : bytes) {
+#               if (byte != 0x00) {
+#                 filtered_bytes.push_back(byte);
+#               }
+#             }
+#             if (!filtered_bytes.empty()) {
+#               // Преобразуем байты в строку
+#               std::string message(filtered_bytes.begin(), filtered_bytes.end());
+#               UARTDebug::log_string(direction, filtered_bytes);  // Логируем для отладки
+
+#               // Парсинг скорости [SETSPD:XXX]
+#               size_t spd_pos = message.find("[SETSPD:");
+#               if (spd_pos != std::string::npos) {
+#                 std::string spd_str = message.substr(spd_pos + 8, 3);
+#                 int speed = std::stoi(spd_str);
+#                 id(treadmill_speed_feedback) = speed;
+#                 ESP_LOGD("UART", "Скорость обратной связи обновлена: %d", speed);
+#               }
+
+#               // Парсинг наклона [SETINC:XXX]
+#               size_t inc_pos = message.find("[SETINC:");
+#               if (inc_pos != std::string::npos) {
+#                 std::string inc_str = message.substr(inc_pos + 8, 3);
+#                 int incline = std::stoi(inc_str);
+#                 id(treadmill_incline_feedback) = incline;
+#                 ESP_LOGD("UART", "Наклон обратной связи обновлен: %d", incline);
+#               }
+#             }
+
+# выводит все сообщения дебага, без фильтра шума с 0x000
+# uart:
+#   - id: uart_bus
+#     tx_pin: 
+#       number: GPIO17
+#       inverted: false
+#     rx_pin: 
+#       number: GPIO18
+#       mode: 
+#         input: true
+#         pullup: true
+#       inverted: false
+#     baud_rate: 5000
+#     data_bits: 8
+#     parity: NONE
+#     stop_bits: 1
+#     rx_buffer_size: 1024
+#     debug:
+#       direction: RX
+#       dummy_receiver: false  # Отключаем dummy_receiver
+#       after:
+#         timeout: 100ms  # Оставляем увеличенный таймаут
+#         bytes: 30  # Исправляем на 12 байт, чтобы вместить [SETSPD:XXX]
+#       sequence:
+#         - lambda: |-
+#             std::vector<uint8_t> filtered_bytes;
+#             for (auto byte : bytes) {
+#               if (byte != 0x00) {
+#                 filtered_bytes.push_back(byte);
+#               }
+#             }
+#             if (!filtered_bytes.empty()) {
+#               UARTDebug::log_string(direction, filtered_bytes);
+#             }
+
+time:
+  - platform: sntp
+    id: sntp_time
+
+# Глобальные переменные — обратная связь и управление беговой дорожкой
+globals:
+  # Хранит текущую скорость беговой дорожки, полученную через UART
+  - id: treadmill_speed_feedback
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0 (дорожка остановлена)
+                                # Используется для получения скорости от контроллера через UART (например, "[SETSPD:010]")
+
+  # Хранит текущий наклон беговой дорожки, полученный через UART
+  - id: treadmill_incline_feedback
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0 (без наклона)
+                                # Используется для получения наклона от контроллера через UART (например, "[SETINC:000]")
+
+  # Хранит текущий целевой наклон беговой дорожки, установленный системой
+  - id: target_incline
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0 (без наклона)
+                                # Используется для передачи текущего значения наклона в UART и отображения в интерфейсе
+
+  # Хранит время последней команды установки наклона в миллисекундах
+  - id: incline_set_time
+    type: unsigned long
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0
+                                # Используется для отслеживания времени отправки команд наклона (ограничение в 25 секунд)
+
+  # Указывает, активно ли управление наклоном в данный момент
+  - id: incline_active
+    type: bool
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: 'false'      # Начальное значение — false (наклон не активен)
+                                # Используется для управления интервалом отправки команд наклона через UART
+
+  # Хранит время загрузки устройства в миллисекундах
+  - id: boot_time
+    type: unsigned long
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0
+                                # Используется для фиксации начального наклона на 0 в первые 10 секунд после старта (закомментировано)
+
+  # Хранит целевое значение наклона, заданное пользователем
+  - id: target_incline_goal
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0 (без наклона)
+                                # Используется для установки наклона через ползунок "Set Incline" (внутренний формат: 1% = 30 единиц)
+
+  # Хранит время последнего полученного пакета через UART в миллисекундах
+  - id: last_packet_time
+    type: uint32_t
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0
+                                # Используется для проверки активности беговой дорожки (binary_sensor "Treadmill Powered On")
+
+  # Указывает, включён ли автоматический режим управления скоростью на основе пульса
+  - id: auto_mode
+    type: bool
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: 'false'      # Начальное значение — false (ручной режим)
+                                # Используется в программах "Custom Pulse Zone", "Fat Burn", "Recovery run" для регулировки скорости
+
+  # Указывает, была ли тренировка остановлена вручную
+  - id: manual_stop
+    type: bool
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: 'false'      # Начальное значение — false (не остановлена)
+                                # Используется для сброса состояния при запуске новых программ
+
+  # Указывает, работает ли мотор беговой дорожки
+  - id: motor_running
+    type: bool
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: 'false'      # Начальное значение — false (мотор выключен)
+                                # Используется для управления состоянием дорожки в скриптах (start, stop, intervals)
+
+  # Хранит текущую скорость беговой дорожки во внутреннем формате (1 км/ч = 10)
+  - id: target_speed
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0 (дорожка остановлена)
+                                # Используется для отправки текущей скорости через UART и синхронизации с интерфейсом
+
+  # Хранит целевую скорость беговой дорожки, к которой стремится система
+  - id: target_speed_goal
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0 (дорожка остановлена)
+                                # Используется для плавного изменения скорости в скрипте "smooth_speed" и регулировки по пульсу
+
+  # Хранит максимальный пульс пользователя, рассчитанный на основе возраста и пола
+  - id: max_heart_rate
+    type: float
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0.0'        # Начальное значение — 0.0 (не определено)
+                                # Используется в скрипте "update_heart_rate_zones" для расчёта зон пульса
+
+  # Хранит минимальную границу целевой зоны пульса
+  - id: target_heart_rate_min
+    type: float
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0.0'        # Начальное значение — 0.0 (не определено)
+                                # Используется для регулировки скорости в автоматическом режиме и интервальной тренировке
+
+  # Хранит максимальную границу целевой зоны пульса
+  - id: target_heart_rate_max
+    type: float
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0.0'        # Начальное значение — 0.0 (не определено)
+                                # Используется для регулировки скорости в автоматическом режиме и интервальной тренировке
+
+  # Указывает, активна ли фаза разминки
+  - id: warm_up_active
+    type: bool
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: 'false'      # Начальное значение — false (разминка не активна)
+                                # Используется для управления логикой разминки в скрипте "warm_up"
+
+  # Хранит текущую скорость беговой дорожки в км/ч для расчётов
+  - id: current_speed
+    type: float
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0.0'        # Начальное значение — 0.0 (дорожка остановлена)
+                                # Используется для хранения скорости при сбросе на старте (on_boot)
+
+  # Хранит длину окружности ролика беговой дорожки в метрах
+  - id: roller_circumference
+    type: float
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0.2763'     # Начальное значение — 0.2763 метра (по умолчанию для расчёта скорости)
+                                # Используется в "Treadmill Speed Motor" для расчёта скорости по импульсам
+
+  # Хранит передаточное число редуктора беговой дорожки
+  - id: gear_ratio
+    type: float
+    restore_value: yes          # Сохраняем значение после перезагрузки
+    initial_value: '74.5'       # Начальное значение — 74.5 (по умолчанию для расчёта скорости)
+                                # Используется в "Treadmill Speed Motor" для расчёта скорости по импульсам
+
+  # Указывает, движется ли беговая дорожка на основе импульсов
+  - id: treadmill_running
+    type: bool
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: 'false'      # Начальное значение — false (дорожка остановлена)
+                                # Используется в "Treadmill Speed Motor" для определения движения по импульсам
+
+  # Хранит текущую дистанцию, пройденную на беговой дорожке в километрах
+  - id: current_distance_km
+    type: float
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0.0'        # Начальное значение — 0.0 (дистанция не пройдена)
+                                # Используется в "Treadmill Distance" для расчёта дистанции и сброса на старте
+
+  # Хранит флаги состояния беговой дорожки для передачи через BLE
+  - id: treadmill_flags
+    type: uint16_t
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0x0028'     # Начальное значение — 0x0028 (специфическое значение для протокола BLE)
+                                # Используется в скрипте "send_treadmill_data" для передачи статуса через BLE
+
+  # Хранит время в секундах, в течение которого импульсы не поступают
+  - id: run_stopped_timer
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0
+                                # Используется в "Treadmill Speed Motor" для определения остановки движения
+
+  # Указывает, подключён ли BLE-клиент к серверу беговой дорожки
+  - id: ble_client_connected
+    type: bool
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: 'false'      # Начальное значение — false (не подключён)
+                                # Используется для управления отправкой данных через BLE и отображения статуса
+
+  # Хранит оставшееся время основной тренировки в секундах
+  - id: remaining_run_time
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0 (тренировка не начата)
+                                # Используется в скриптах "start_manual", "start_program", "run_program" для отслеживания времени
+
+  # Хранит текущую фазу интервальной тренировки ("high" или "low")
+  - id: interval_phase
+    type: std::string
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '"high"'     # Начальное значение — "high" (высокая интенсивность)
+                                # Используется в скрипте "interval_training" для переключения фаз HIIT
+
+  # Хранит время текущей фазы интервальной тренировки в секундах
+  - id: interval_time
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0
+                                # Используется в скрипте "interval_training" для отслеживания длительности фазы
+
+  # Хранит оставшееся время разминки в секундах
+  - id: remaining_warm_up_time
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0 (разминка не начата)
+                                # Используется в скриптах "start_program", "warm_up" для управления разминкой
+
+  # Хранит оставшееся время заминки в секундах
+  - id: remaining_cool_down_time
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0 (заминка не начата)
+                                # Используется в скриптах "run_program", "cool_down" для управления заминкой
+
+  # Хранит общее время разминки в секундах (счетчик для логики)
+  - id: warm_up_time
+    type: int
+    restore_value: no           # Не сохраняем значение после перезагрузки
+    initial_value: '0'          # Начальное значение — 0
+                                # Используется в скрипте "warm_up" для отслеживания времени ожидания пульса
+
+# Скрипты
+script:
+# Скрипт запускает беговую дорожку в ручном режиме с начальной скоростью 1 км/ч (если скорость не задана) и без этапов разминки и заминки.
+  - id: start_manual
+    then:
+      - lambda: |-
+          id(motor_running) = true;                                         // Включаем мотор беговой дорожки
+          id(manual_stop) = false;                                          // Сбрасываем флаг ручной остановки для корректного запуска
+          if (id(target_speed) == 0) {                                      // Если целевая скорость не установлена (0), задаём начальную скорость 1 км/ч (10 во внутреннем формате)
+            id(target_speed) = 10;
+            id(target_speed_goal) = 10;
+          }
+          id(set_speed).publish_state(id(target_speed) / 10.0);             // Обновляем ползунок скорости в интерфейсе (переводим из внутреннего формата в км/ч)
+          //char buffer[13];                                                  // Формируем команду для отправки через UART (например, "[SETSPD:010]" для 1 км/ч)
+          //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));  
+          //id(uart_bus)->write_str(buffer);                                  // Отправляем команду через UART
+          id(remaining_warm_up_time) = 0;                                   // Устанавливаем время разминки в 0, так как это ручной режим без разминки
+          float run_time = id(set_run_time).state;                          // Получаем заданное пользователем время основной тренировки
+          id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;      // Устанавливаем оставшееся время тренировки в секундах (переводим минуты в секунды)
+          id(remaining_cool_down_time) = 0;                                 // Устанавливаем время заминки в 0, так как в ручном режиме заминка не предусмотрена
+
+# Скрипт запускает программу тренировки, начиная с разминки, устанавливая начальную скорость и задавая время разминки и основной части.
+  - id: start_program
+    then:
+      - lambda: |- 
+          id(motor_running) = true;                                         // Включаем мотор беговой дорожки
+          id(manual_stop) = false;                                          // Сбрасываем флаг ручной остановки для корректного запуска
+          id(warm_up_active) = true;                                        // Активируем режим разминки перед основной программой
+          id(target_speed) = 10;                                            // Устанавливаем начальную скорость 1 км/ч (10 во внутреннем формате)
+          id(target_speed_goal) = 10;                                       // Устанавливаем целевую скорость 1 км/ч
+          id(set_speed).publish_state(id(target_speed) / 10.0);             // Обновляем ползунок скорости в интерфейсе
+          //char buffer[13];                                                  // Формируем команду для отправки через UART
+          //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));  
+          //id(uart_bus)->write_str(buffer);                                  // Отправляем команду через UART
+          float wu_time = id(set_warm_up_time).state;                       // Получаем заданное время разминки из интерфейса
+          id(remaining_warm_up_time) = (wu_time > 0) ? wu_time * 60 : 300;  // Устанавливаем оставшееся время разминки в секундах (по умолчанию 5 минут)
+          float run_time = id(set_run_time).state;                          // Получаем заданное время основной тренировки
+          id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;      // Устанавливаем оставшееся время основной тренировки в секундах
+          id(remaining_cool_down_time) = 0;                                 // Устанавливаем время заминки в 0, так как оно начнётся позже
+          id(warm_up_time) = 0;                                             // Сбрасываем счетчик времени разминки
+          id(program_status).publish_state("Warm-up: In progress");         // Обновляем статус программы в интерфейсе
+
+# Скрипт управляет процессом разминки, увеличивая скорость до достижения зоны 1 пульса, переходя к основной программе или останавливаясь при ошибке.
+  - id: warm_up
+    then:
+      - lambda: |- 
+          static int warm_up_time = 0;                                      // Счетчик времени разминки в секундах
+          warm_up_time++;                                                   // Увеличиваем счетчик на 1 каждую секунду
+          float heart_rate = id(heart_rate_sensor).state;                   // Получаем текущий пульс с датчика
+          float zone_1_min = id(max_heart_rate) * 0.5;                      // Вычисляем минимальный пульс для зоны 1 (50% от максимума)
+          if (warm_up_time % 10 == 0 && heart_rate < zone_1_min && !isnan(heart_rate)) { // Каждые 10 секунд увеличиваем скорость, если пульс ниже зоны 1
+            if (id(target_speed) < 120) {                                   // Проверяем, что скорость не превышает 12 км/ч
+              id(target_speed) += 1;                                        // Увеличиваем скорость на 0.1 км/ч
+              id(target_speed_goal) = id(target_speed);                     // Синхронизируем целевую скорость
+              id(set_speed).publish_state(id(target_speed) / 10.0);         // Обновляем ползунок скорости
+              //char buffer[13];                                              // Формируем команду для UART
+              //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
+              //id(uart_bus)->write_str(buffer);                              // Отправляем команду через UART
+            }
+          }
+          if (heart_rate >= zone_1_min && !isnan(heart_rate) && id(remaining_warm_up_time) <= 0) { // Завершаем разминку, если пульс в зоне 1 и время истекло
+            id(warm_up_active) = false;                                     // Отключаем режим разминки
+            id(program_status).publish_state("Warm-up: Завершён");          // Обновляем статус
+            warm_up_time = 0;                                               // Сбрасываем счетчик
+            if (id(program_select).state != "None" && id(remaining_run_time) > 0) { // Переходим к основной программе, если она выбрана
+              std::string program = id(program_select).state;               // Получаем название программы
+              int remaining_minutes = id(remaining_run_time) / 60;          // Вычисляем оставшиеся минуты
+              int remaining_seconds = id(remaining_run_time) % 60;          // Вычисляем оставшиеся секунды
+              char buffer[50];                                              // Формируем строку статуса
+              snprintf(buffer, sizeof(buffer), "%s: In progress (%d:%02d)", program.c_str(), remaining_minutes, remaining_seconds);
+              id(program_status).publish_state(buffer);                     // Обновляем статус
+              if (program == "HIIT") {                                      // Настраиваем интервальную тренировку
+                id(interval_time) = 0;
+                id(interval_phase) = "high";
+              } else if (program == "Custom Pulse Zone" || program == "Fat Burn" || program == "Recovery run") { // Включаем автоматический режим
+                id(auto_mode) = true;
+              }
+            }
+          }
+          else if (warm_up_time >= 60 && isnan(heart_rate)) {               // Останавливаем, если пульс не определяется 60 секунд
+            id(warm_up_active) = false;                                     // Отключаем разминку
+            id(motor_running) = false;                                      // Выключаем мотор
+            id(target_speed) = 0;                                           // Сбрасываем скорость
+            id(target_speed_goal) = 0;                                      // Сбрасываем целевую скорость
+            id(set_speed).publish_state(0.0);                               // Обновляем ползунок
+            id(treadmill_speed_sensor_uart).publish_state(0.0);             // Сбрасываем датчик скорости
+            //char buffer[13];                                                // Формируем команду остановки
+            //snprintf(buffer, sizeof(buffer), "[SETSPD:000]");
+            //id(uart_bus)->write_str(buffer);                                // Отправляем команду через UART
+            id(program_status).publish_state("Warm-up: Ошибка пульса");     // Обновляем статус
+            warm_up_time = 0;                                               // Сбрасываем счетчик
+          }
+          else {                                                            // Обновляем статус разминки
+            char buffer[64];                                                // Формируем строку статуса
+            if (id(remaining_warm_up_time) > 0) {                           // Если время разминки ещё есть
+              int remaining_minutes = id(remaining_warm_up_time) / 60;      // Вычисляем минуты
+              snprintf(buffer, sizeof(buffer), "Warm-up: In progress (%d min)", remaining_minutes);
+            } else {                                                        // Если время истекло, ждём пульс
+              if (isnan(heart_rate)) {
+                snprintf(buffer, sizeof(buffer), "Warm-up: Waiting for pulse");
+              } else {
+                snprintf(buffer, sizeof(buffer), "Warm-up: Waiting for pulse %.0f", zone_1_min);
+              }
+            }
+            id(program_status).publish_state(buffer);                       // Обновляем статус
+          }
+
+# Скрипт управляет заминкой, постепенно снижая скорость и останавливая дорожку по завершении.
+  - id: cool_down
+    then:
+      - lambda: |- 
+          id(remaining_cool_down_time)--;                                   // Уменьшаем время заминки на 1 секунду
+          if (id(remaining_cool_down_time) % 12 == 0 && id(target_speed) > 6) { // Каждые 12 секунд снижаем скорость, если она выше 0.6 км/ч
+            id(target_speed) -= 1;                                          // Уменьшаем скорость на 0.1 км/ч
+            id(target_speed_goal) = id(target_speed);                       // Синхронизируем целевую скорость
+            id(set_speed).publish_state(id(target_speed) / 10.0);           // Обновляем ползунок
+            //char buffer[13];                                                // Формируем команду для UART
+            //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
+            //id(uart_bus)->write_str(buffer);                                // Отправляем команду через UART
+          }
+          if (id(remaining_cool_down_time) <= 0) {                          // Завершаем заминку, если время истекло
+            id(motor_running) = false;                                      // Выключаем мотор
+            id(target_speed) = 0;                                           // Сбрасываем скорость
+            id(target_speed_goal) = 0;                                      // Сбрасываем целевую скорость
+            id(set_speed).publish_state(0.0);                               // Обновляем ползунок
+            id(treadmill_speed_sensor_uart).publish_state(0.0);             // Сбрасываем датчик скорости
+            //char buffer[13];                                                // Формируем команду остановки
+            //snprintf(buffer, sizeof(buffer), "[SETSPD:000]");
+            //id(uart_bus)->write_str(buffer);                                // Отправляем команду через UART
+            id(program_status).publish_state("Cool-down: Завершён");        // Обновляем статус
+            id(set_cool_down_time).publish_state(0.0);                      // Сбрасываем ползунок заминки
+            id(stop_program).execute();                                     // Вызываем полный сброс
+          }
+          if (id(remaining_cool_down_time) > 0 && id(remaining_cool_down_time) % 10 == 0) { // Обновляем статус каждые 10 секунд
+            int remaining_minutes = id(remaining_cool_down_time) / 60;      // Вычисляем минуты
+            int remaining_seconds = id(remaining_cool_down_time) % 60;      // Вычисляем секунды
+            char buffer[50];                                                // Формируем строку статуса
+            snprintf(buffer, sizeof(buffer), "Cool-down: In progress (%d:%02d)", remaining_minutes, remaining_seconds);
+            id(program_status).publish_state(buffer);                       // Обновляем статус
+          }
+          if (id(remaining_cool_down_time) % 60 == 0) {                     // Обновляем ползунок каждую минуту
+            int remaining_minutes = id(remaining_cool_down_time) / 60;      // Вычисляем минуты
+            id(set_cool_down_time).publish_state((float)remaining_minutes); // Обновляем ползунок
+          }
+
+# Скрипт реализует интервальную тренировку, чередуя высокую и низкую интенсивность на основе пульса.
+  - id: interval_training
+    then:
+      - lambda: |-
+          id(interval_time)++;                                              // Увеличиваем счетчик времени интервала
+          const char* phase = id(interval_phase).c_str();                   // Получаем текущую фазу интервала (high или low)
+          int phase_duration = 60;                                          // Длительность каждой фазы — 60 секунд
+          float heart_rate = id(heart_rate_sensor).state;                   // Получаем текущий пульс
+          float zone_1_min = id(max_heart_rate) * 0.5;                      // Зона 1: нижняя граница 50%
+          float zone_1_max = id(max_heart_rate) * 0.6;                      // Зона 1: верхняя граница 60%
+          float zone_4_min = id(max_heart_rate) * 0.8;                      // Зона 4: нижняя граница 80%
+          if (strcmp(phase, "high") == 0) {                                 // Устанавливаем зону 4 для высокой интенсивности
+            id(zone_select).publish_state("4");
+            id(target_heart_rate_min) = zone_4_min;
+            id(target_heart_rate_max) = id(max_heart_rate) * 0.9;
+          } else {                                                          // Устанавливаем зону 1 для низкой интенсивности
+            id(zone_select).publish_state("1");
+            id(target_heart_rate_min) = zone_1_min;
+            id(target_heart_rate_max) = zone_1_max;
+          }
+          if (id(interval_time) % 10 == 0 && !isnan(heart_rate)) {          // Каждые 10 секунд корректируем скорость
+            int step = (abs(heart_rate - id(target_heart_rate_min)) >= 15) ? 5 : 1; // Шаг 0.5 или 0.1 км/ч
+            if (strcmp(phase, "high") == 0 && heart_rate < zone_4_min && id(target_speed_goal) < 120) { // Увеличиваем скорость в фазе high
+              id(target_speed_goal) += step;
+            } else if (strcmp(phase, "low") == 0 && heart_rate > zone_1_max && id(target_speed_goal) > 6) { // Уменьшаем скорость в фазе low
+              id(target_speed_goal) -= step;
+            }
+          }
+          bool in_target_zone = (strcmp(phase, "high") == 0 && heart_rate >= zone_4_min) || // Пульс в целевой зоне
+                                (strcmp(phase, "low") == 0 && heart_rate >= zone_1_min && heart_rate <= zone_1_max);
+          if (id(interval_time) >= phase_duration && in_target_zone) {      // Переключаем фазу, если время истекло и пульс в норме
+            id(interval_time) = 0;                                          // Сбрасываем счетчик
+            id(interval_phase) = (strcmp(phase, "high") == 0) ? "low" : "high"; // Меняем фазу
+          }
+
+# Скрипт плавно регулирует текущую скорость к целевой с шагом 0.1 км/ч.
+  - id: smooth_speed
+    mode: queued
+    then:
+      - lambda: |-
+          if (id(target_speed) < id(target_speed_goal)) {                   // Плавно увеличиваем скорость, если текущая ниже цели
+            id(target_speed) += 1;                                          // Увеличиваем на 0.1 км/ч
+            if (id(target_speed) > id(target_speed_goal)) id(target_speed) = id(target_speed_goal); // Не превышаем цель
+          } else if (id(target_speed) > id(target_speed_goal)) {            // Плавно уменьшаем скорость, если текущая выше цели
+            id(target_speed) -= 1;                                          // Уменьшаем на 0.1 км/ч
+            if (id(target_speed) < id(target_speed_goal)) id(target_speed) = id(target_speed_goal); // Не опускаемся ниже цели
+          }
+          id(motor_running) = true;                                         // Включаем мотор
+          //char buffer[13];                                                  // Формируем команду для UART
+          //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
+          //id(uart_bus)->write_str(buffer);                                  // Отправляем команду через UART
+
+# Скрипт регулирует целевую скорость на основе пульса, увеличивая или уменьшая её, если пульс выходит из заданной зоны.
+  - id: adjust_speed_by_pulse
+    mode: queued
+    then:
+      - lambda: |- 
+          static int pulse_out_of_zone_count = 0;                           // Счетчик секунд, когда пульс вне зоны
+          float heart_rate = id(heart_rate_sensor).state;                   // Получаем текущий пульс
+          if (isnan(heart_rate)) {                                          // Если пульс не определяется, устанавливаем минимальную скорость
+            id(target_speed_goal) = 10;                                     // Устанавливаем 1 км/ч
+            id(motor_running) = true;                                       // Включаем мотор
+          } else if (heart_rate >= id(target_heart_rate_min) && heart_rate <= id(target_heart_rate_max)) { // Если пульс в зоне, сбрасываем счетчик
+            pulse_out_of_zone_count = 0;
+          } else {                                                          // Если пульс вне зоны, корректируем скорость
+            pulse_out_of_zone_count++;                                      // Увеличиваем счетчик
+            if (pulse_out_of_zone_count >= 2) {                             // Ждём 2 секунды перед изменением
+              if (heart_rate < id(target_heart_rate_min)) {                 // Если пульс ниже зоны
+                if (heart_rate < (id(target_heart_rate_min) - 20) && id(target_speed_goal) < 120) { // Большая разница — увеличиваем на 0.5 км/ч
+                  id(target_speed_goal) += 5;
+                } else if (id(target_speed_goal) < 120) {                   // Малая разница — увеличиваем на 0.1 км/ч
+                  id(target_speed_goal) += 1;
+                }
+              } else if (heart_rate > id(target_heart_rate_max) && id(target_speed_goal) > 6) { // Если пульс выше зоны, уменьшаем на 0.5 км/ч
+                id(target_speed_goal) -= 5;
+              }
+              pulse_out_of_zone_count = 0;                                  // Сбрасываем счетчик
+            }
+          }
+
+# Скрипт управляет основной частью тренировки, отслеживая время и переходя к заминке по завершении.
+  - id: run_program
+    then:
+      - lambda: |- 
+          id(remaining_run_time)--;                                         // Уменьшаем оставшееся время основной тренировки
+          if (id(remaining_run_time) % 60 == 0 || id(remaining_run_time) == 0) { // Обновляем ползунок времени каждую минуту
+            int remaining_minutes = id(remaining_run_time) / 60;            // Вычисляем минуты
+            id(set_run_time).publish_state((float)remaining_minutes);       // Обновляем ползунок
+          }
+          if (id(remaining_run_time) % 10 == 0 || id(remaining_run_time) == 0) { // Обновляем статус каждые 10 секунд
+            int remaining_minutes = id(remaining_run_time) / 60;            // Вычисляем минуты
+            int remaining_seconds = id(remaining_run_time) % 60;            // Вычисляем секунды
+            std::string program = id(program_select).state;                 // Получаем название программы
+            char buffer[50];                                                // Формируем строку статуса
+            snprintf(buffer, sizeof(buffer), "%s: In progress (%d:%02d)", program.c_str(), remaining_minutes, remaining_seconds);
+            id(program_status).publish_state(buffer);                       // Обновляем статус
+          }
+          if (id(remaining_run_time) <= 0 && id(program_select).state != "None") { // Переходим к заминке, если время истекло
+            float cool_down_time = id(set_cool_down_time).state;            // Получаем время заминки
+            id(remaining_cool_down_time) = (cool_down_time > 0) ? cool_down_time * 60 : 300; // Устанавливаем время заминки (по умолчанию 5 минут)
+            int cool_down_minutes = id(remaining_cool_down_time) / 60;      // Вычисляем минуты
+            int cool_down_seconds = id(remaining_cool_down_time) % 60;      // Вычисляем секунды
+            char buffer[50];                                                // Формируем строку статуса
+            snprintf(buffer, sizeof(buffer), "Cool-down: In progress (%d:%02d)", cool_down_minutes, cool_down_seconds);
+            id(program_status).publish_state(buffer);                       // Обновляем статус
+            id(cool_down).execute();                                        // Запускаем заминку
+          }
+
+# Скрипт полностью останавливает программу, сбрасывая все параметры и переводя дорожку в состояние покоя.
+  - id: stop_program
+    then:
+      - lambda: |-
+          id(motor_running) = false;                                        // Выключаем мотор
+          id(auto_mode) = false;                                            // Отключаем автоматический режим
+          id(warm_up_active) = false;                                       // Отключаем разминку
+          id(target_speed) = 0;                                             // Сбрасываем текущую скорость
+          id(target_speed_goal) = 0;                                        // Сбрасываем целевую скорость
+          id(set_speed).publish_state(0.0);                                 // Обновляем ползунок скорости
+          id(set_incline).publish_state(0.0);                               // Сбрасываем наклон
+          id(treadmill_speed_sensor_uart).publish_state(0.0);               // Сбрасываем датчик скорости
+          //char buffer[13];                                                  // Формируем команду остановки
+          //snprintf(buffer, sizeof(buffer), "[SETSPD:000]");
+          //id(uart_bus)->write_str(buffer);                                  // Отправляем команду через UART
+          id(remaining_run_time) = 0;                                       // Сбрасываем время тренировки
+          id(set_run_time).publish_state(0.0);                              // Обновляем ползунок тренировки
+          id(remaining_warm_up_time) = 0;                                   // Сбрасываем время разминки
+          id(set_warm_up_time).publish_state(0.0);                          // Обновляем ползунок разминки
+          id(remaining_cool_down_time) = 0;                                 // Сбрасываем время заминки
+          id(set_cool_down_time).publish_state(0.0);                        // Обновляем ползунок заминки
+          id(warm_up_time) = 0;                                             // Сбрасываем счетчик разминки
+          id(interval_time) = 0;                                            // Сбрасываем счетчик интервалов
+          id(program_status).publish_state("Idle");                         // Устанавливаем статус "Idle"
+          id(manual_stop) = false;                                          // Сбрасываем флаг ручной остановки
+
+# Скрипт отправляет данные о скорости и наклоне беговой дорожки через BLE.
+  - id: send_treadmill_data
+    then:
+      - lambda: |-
+          float speed_kph = id(treadmill_speed_sensor_uart).state;          // Получаем текущую скорость с датчика
+          float incline = id(treadmill_incline_sensor_uart).state;          // Получаем текущий наклон с датчика
+          uint16_t inst_speed = (uint16_t)(speed_kph * 100);                // Преобразуем скорость в сотые для передачи
+          int16_t inst_incline = (int16_t)(incline * 10);                   // Преобразуем наклон в десятые для передачи
+          uint16_t flags = id(treadmill_flags);                             // Получаем флаги состояния дорожки
+          std::vector<uint8_t> treadmillData(6, 0);                         // Формируем массив данных для BLE
+          treadmillData[0] = (uint8_t)(flags & 0xFF);                       // Младший байт флагов
+          treadmillData[1] = (uint8_t)(flags >> 8);                         // Старший байт флагов
+          treadmillData[2] = (uint8_t)(inst_speed & 0xFF);                  // Младший байт скорости
+          treadmillData[3] = (uint8_t)(inst_speed >> 8);                    // Старший байт скорости
+          treadmillData[4] = (uint8_t)(inst_incline & 0xFF);                // Младший байт наклона
+          treadmillData[5] = (uint8_t)(inst_incline >> 8);                  // Старший байт наклона
+          id(treadmill_data_char).set_value(treadmillData);                 // Устанавливаем данные в характеристику BLE
+          id(treadmill_data_char).notify();                                 // Отправляем уведомление через BLE
+
+# Скрипт обновляет зоны пульса на основе возраста и пола пользователя, отображая информацию в интерфейсе.
+  - id: update_heart_rate_zones
+    then:
+      - lambda: |-
+          float age = id(age_number).state;                                 // Получаем возраст пользователя
+          if (id(gender_select).state == "Male") {                          // Вычисляем максимальный пульс для мужчин
+            id(max_heart_rate) = 214 - (0.8 * age);
+          } else {                                                          // Вычисляем максимальный пульс для женщин
+            id(max_heart_rate) = 209 - (0.7 * age);
+          }
+          int zone = atoi(id(zone_select).state.c_str());                   // Получаем номер выбранной зоны пульса
+          id(target_heart_rate_min) = id(max_heart_rate) * (0.5 + (zone - 1) * 0.1); // Вычисляем нижнюю границу зоны
+          id(target_heart_rate_max) = id(max_heart_rate) * (0.6 + (zone - 1) * 0.1); // Вычисляем верхнюю границу зоны
+          char buffer[100];                                                 // Формируем строку с информацией
+          snprintf(buffer, sizeof(buffer), "Пол: %s, Возраст: %.0f, Зона: %d, Пульс: %.0f-%.0f bpm",
+                   id(gender_select).state.c_str(), age, zone,
+                   id(target_heart_rate_min), id(target_heart_rate_max));
+          id(selected_data).publish_state(buffer);                          // Обновляем текстовый сенсор в интерфейсе
+
+
+interval:
+  # Интервал отправляет команды скорости каждые 500 мс, если мотор работает и скорость достигнута
+  - interval: 500ms
+    then:
+      - if:
+          condition:
+            # Проверяем, что мотор работает и текущая скорость равна целевой
+            lambda: 'return id(motor_running) && id(target_speed) == id(target_speed_goal);' 
+          then:
+            - lambda: |-
+                char buffer[13];                                                        // Создаём буфер для команды UART (например, "[SETSPD:010]")
+                snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));    // Формируем команду с текущей скоростью (внутренний формат: 1 км/ч = 10)
+                id(uart_bus)->write_str(buffer);                                        // Отправляем команду через UART для поддержания скорости
+
+  # Интервал управляет наклоном беговой дорожки, отправляя команды каждую секунду при активном моторе
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            # Выполняется только если мотор работает
+            lambda: 'return id(motor_running);'                                 
+          then:
+            - if:
+                condition:
+                  # Проверяем, прошло ли менее 10 секунд с момента загрузки
+                  lambda: 'return (millis() - id(boot_time)) < 10000;'
+                then:
+                  - lambda: |-
+                      char buffer[13];                                            // Создаём буфер для команды UART
+                      snprintf(buffer, sizeof(buffer), "[SETINC:000]");           // Формируем команду для установки наклона в 0
+                      id(uart_bus)->write_str(buffer);                            // Отправляем команду через UART для фиксации наклона в 0 при старте
+                      //ESP_LOGI("treadmill", "Boot interval: Sent [SETINC:000], Elapsed: %lu ms", millis() - id(boot_time)); 
+                else:
+                  - if:
+                      condition:
+                        # Проверяем, активен ли наклон и прошло ли менее 25 секунд с последней команды
+                        lambda: 'return id(incline_active) && (millis() - id(incline_set_time)) < 25000;' 
+                      then:
+                        - lambda: |-
+                            char buffer[13];                                                            // Создаём буфер для команды UART
+                            snprintf(buffer, sizeof(buffer), "[SETINC:%03d]", id(target_incline_goal)); // Формируем команду с целевым наклоном (1% = 30 единиц)
+                            id(uart_bus)->write_str(buffer);                                            // Отправляем команду через UART для установки наклона
+                            //ESP_LOGI("treadmill", "Incline command sent: %s, Goal: %d, Elapsed: %lu ms", buffer, id(target_incline_goal), millis() - id(incline_set_time)); 
+                      else:
+                        - if:
+                            condition:
+                              # Проверяем, активен ли наклон после истечения 25 секунд
+                              lambda: 'return id(incline_active);'
+                            then:
+                              - lambda: |-
+                                  id(incline_active) = false;                                         // Отключаем флаг активности наклона после 25 секунд
+                                  //ESP_LOGI("treadmill", "Incline sending stopped after 25s"); 
+
+  # Интервал запускает интервальную тренировку (HIIT) каждую секунду при выполнении условий
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            # Проверяем, что мотор работает, выбрана программа HIIT и разминка завершена
+            lambda: 'return id(motor_running) && id(program_select).state == "HIIT" && !id(warm_up_active);'
+          then:
+             # Выполняем скрипт интервальной тренировки для управления фазами
+            - script.execute: interval_training
+
+  # Интервал регулирует скорость по пульсу каждые 10 секунд в автоматическом режиме
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            # Проверяем, что мотор работает, включён авторежим и разминка завершена
+            lambda: 'return id(motor_running) && id(auto_mode) && !id(warm_up_active);' 
+          then:
+            - lambda: |-
+                //ESP_LOGI("treadmill", "Adjust Speed Interval: AutoMode=%d, WarmUpActive=%d", id(auto_mode), id(warm_up_active)); 
+            # Выполняем скрипт регулировки скорости на основе пульса
+            - script.execute: adjust_speed_by_pulse
+
+  # Интервал плавно изменяет скорость каждые 2 секунды, если текущая скорость отличается от целевой
+  - interval: 2s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              // Проверяем, что мотор работает, скорость не равна целевой и разминка завершена
+              bool should_run = id(motor_running) && id(target_speed) != id(target_speed_goal) && !id(warm_up_active); 
+              //ESP_LOGI("treadmill", "Smooth Speed Check: MotorRunning=%d, TargetSpeed=%d, SpeedGoal=%d, WarmUpActive=%d, ShouldRun=%d", 
+                       //id(motor_running), id(target_speed), id(target_speed_goal), id(warm_up_active), should_run);
+              // Возвращаем результат проверки
+              return should_run;                                            
+          then:
+            # Выполняем скрипт плавного изменения скорости
+            - script.execute: smooth_speed                                    
+
+  # Интервал управляет разминкой каждую секунду, обновляя время и вызывая логику разминки
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            # Проверяем, что мотор работает и разминка активна
+            lambda: 'return id(motor_running) && id(warm_up_active);'
+          then:
+            - lambda: |- 
+                if (id(remaining_warm_up_time) > 0) {                               // Если осталось время разминки
+                  id(remaining_warm_up_time)--;                                     // Уменьшаем оставшееся время на 1 секунду
+                  if (id(remaining_warm_up_time) % 60 == 0) {                       // Каждые 60 секунд обновляем ползунок
+                    int remaining_minutes = id(remaining_warm_up_time) / 60;        // Вычисляем оставшиеся минуты
+                    id(set_warm_up_time).publish_state((float)remaining_minutes);   // Обновляем ползунок разминки в интерфейсе
+                  }
+                }
+                // Выполняем скрипт разминки для управления скоростью и пульсом
+                id(warm_up).execute();
+
+  # Интервал управляет основной частью тренировки каждую секунду, отслеживая время
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            # Проверяем, что мотор работает, есть время тренировки, разминка завершена
+            lambda: 'return id(motor_running) && id(remaining_run_time) > 0 && id(remaining_warm_up_time) <= 0 && !id(warm_up_active);'
+          then:
+            # Выполняем скрипт основной программы для отслеживания времени и перехода к заминке
+            - script.execute: run_program
+
+  # Интервал управляет заминкой каждую секунду, снижая скорость и завершая тренировку
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            # Проверяем, что мотор работает, есть время заминки и основная тренировка завершена
+            lambda: 'return id(motor_running) && id(remaining_cool_down_time) > 0 && id(remaining_run_time) <= 0;'
+          then:
+            # Выполняем скрипт заминки для снижения скорости и остановки
+            - script.execute: cool_down                                     
+
+# Кнопки и селекторы
+button:
+  - platform: template
+    name: "Start Treadmill"
+    on_press:
+      - if:
+          condition:
+            lambda: 'return id(program_select).state != "None";'
+          then:
+            - script.execute: start_program
+          else:
+            - script.execute: start_manual
+
+  - platform: template
+    name: "Stop Treadmill"
+    id: stop_treadmill_button
+    on_press:
+      - script.execute: stop_program
+
+  - platform: template
+    name: "Speed +0.1"
+    internal: true
+    id: speed_up_button
+    on_press:
+      - lambda: |-
+          if (id(target_speed) < 120) {
+            id(target_speed) += 1;
+            id(target_speed_goal) = id(target_speed);
+            id(motor_running) = true;
+            id(set_speed).publish_state(id(target_speed) / 10.0);
+            char buffer[13];
+            snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
+            id(uart_bus)->write_str(buffer);
+          }
+
+  - platform: template
+    name: "Speed -0.1"
+    internal: true
+    id: speed_down_button
+    on_press:
+      - lambda: |-
+          if (id(target_speed) > 6) {
+            id(target_speed) -= 1;
+            id(target_speed_goal) = id(target_speed);
+            id(motor_running) = true;
+            id(set_speed).publish_state(id(target_speed) / 10.0);
+            char buffer[13];
+            snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
+            id(uart_bus)->write_str(buffer);
+          }
+
+# Сенсоры
+sensor:
+  - platform: template
+    name: "Treadmill Speed Feedback"
+    id: treadmill_speed_feedback_sensor
+    unit_of_measurement: "km/h"
+    accuracy_decimals: 1
+    update_interval: 500ms
+    lambda: |-
+      return id(treadmill_speed_feedback) / 10.0;
+
+  - platform: template
+    name: "Treadmill Incline Feedback"
+    id: treadmill_incline_feedback_sensor
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 500ms
+    lambda: |-
+      return id(treadmill_incline_feedback) / 10.0;
+
+
+  - platform: template
+    name: "Treadmill Speed"
+    unit_of_measurement: "km/h"
+    accuracy_decimals: 1
+    update_interval: 1s
+    id: treadmill_speed_sensor_uart
+    lambda: |-
+      return id(motor_running) ? id(target_speed) / 10.0 : 0.0;
+    on_value:
+      - if:
+          condition:
+            lambda: 'return id(ble_client_connected);'
+          then:
+            - script.execute: send_treadmill_data
+
+  - platform: template
+    name: "Treadmill Incline"
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 1s
+    id: treadmill_incline_sensor_uart
+    lambda: |-
+      return id(target_incline) / 10.0;
+
+  - platform: template
+    name: "ESP32 Free Memory"
+    lambda: |-
+      return (float)ESP.getFreeHeap() / 1024.0;
+    unit_of_measurement: "kB"
+    accuracy_decimals: 1
+    update_interval: 60s
+    entity_category: diagnostic
+    icon: "mdi:memory"
+
+  - platform: wifi_signal
+    name: "ESP32 WiFi Signal"
+    update_interval: 60s
+
+  - platform: template
+    name: "Treadmill Distance"
+    id: treadmill_distance_km
+    lambda: |-
+      static float current_distance_km = 0.0;
+      if (!id(motor_running)) {
+        current_distance_km = 0.0;
+        return current_distance_km;
+      }
+      float speed_kph = id(target_speed) / 10.0;
+      float distance_increment_km = speed_kph / 3600.0;
+      current_distance_km += distance_increment_km;
+      return current_distance_km;
+    unit_of_measurement: "km"
+    accuracy_decimals: 2
+    update_interval: 1s
+    icon: "mdi:map-marker-distance"
+
+  - platform: template
+    name: "Treadmill Time"
+    id: treadmill_time_min
+    lambda: |-
+      static float total_time_min = 0.0;
+      if (!id(motor_running)) {
+        total_time_min = 0.0;
+        return total_time_min;
+      }
+      total_time_min += 1.0 / 60.0;
+      return total_time_min;
+    unit_of_measurement: "min"
+    accuracy_decimals: 2
+    update_interval: 1s
+    icon: "mdi:timer-play-outline"
+
+  - platform: pulse_counter
+    pin:
+      number: GPIO19
+      mode:
+        input: true
+        pullup: true
+    name: "Raw Treadmill Data"
+    id: treadmill_raw_data
+    unit_of_measurement: "pulses/s"
+    accuracy_decimals: 0
+    update_interval: 1s
+    count_mode:
+      rising_edge: INCREMENT
+      falling_edge: DISABLE
+    internal_filter: 13us
+
+  - platform: template
+    name: "Treadmill Speed Motor"
+    id: treadmill_speed_kph
+    unit_of_measurement: "km/h"
+    accuracy_decimals: 1
+    lambda: |-
+      float rc = id(roller_circumference);
+      float pulses_per_rotation = 144.0;
+      float gr_r = id(gear_ratio);
+      float raw_pulses = id(treadmill_raw_data).state;
+      if (raw_pulses == 0.0) {
+        if (id(treadmill_running)) {
+          id(run_stopped_timer)++;
+          if (id(run_stopped_timer) >= 2) {
+            id(treadmill_running) = false;
+          }
+        }
+        return 0.0;
+      }
+      float speed_kph = (raw_pulses / pulses_per_rotation / gr_r) * rc * 3.6;
+      id(treadmill_running) = true;
+      id(run_stopped_timer) = 0;
+      return speed_kph;
+    update_interval: 1s
+    icon: "mdi:run"
+    filters:
+      - exponential_moving_average:
+          alpha: 0.25
+          send_every: 1
+
+  - platform: ble_client
+    type: characteristic
+    ble_client_id: fit_smart
+    name: "Heart Rate"
+    id: heart_rate_sensor
+    service_uuid: "180d"
+    characteristic_uuid: "2a37"
+    notify: true
+    lambda: |-
+      if (!id(fit_smart).connected()) {
+        return NAN;
+      }
+      if (x.size() < 2) return NAN;
+      uint8_t flags = x[0];
+      uint8_t heart_rate = x[1];
+      if (flags & 0x01) {
+        heart_rate = (x[2] << 8) | x[1];
+      }
+      if (heart_rate != NAN) {
+        std::vector<uint8_t> hr_data(2, 0);
+        hr_data[0] = 0x06;
+        hr_data[1] = heart_rate;
+        id(heart_rate_data).set_value(hr_data);
+        id(heart_rate_data).notify();
+      }
+      return (float)heart_rate;
+    unit_of_measurement: "bpm"
+    icon: "mdi:heart"
+
+  - platform: ble_client
+    type: characteristic
+    ble_client_id: fit_smart
+    name: "Battery Level"
+    id: battery_level_sensor
+    service_uuid: "180F"
+    characteristic_uuid: "2A19"
+    notify: true
+    lambda: |-
+      if (!id(fit_smart).connected()) {
+        return NAN;
+      }
+      if (x.size() < 1) return NAN;
+      uint8_t battery_level = x[0];
+      return (float)battery_level;
+    unit_of_measurement: "%"
+    icon: "mdi:battery"
+
+# BLE
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1100ms
+    window: 300ms
+    active: false
+
+ble_client:
+  - mac_address: "C9:5A:91:C1:92:58"
+    id: fit_smart
+    on_disconnect:
+      - sensor.template.publish:
+          id: heart_rate_sensor
+          state: !lambda 'return NAN;'
+      - text_sensor.template.publish:
+          id: connection_status
+          state: "Отключено"
+    on_connect:
+      - text_sensor.template.publish:
+          id: connection_status
+          state: "Подключен"
+
+esp32_ble_server:
+  model: KICKR RUN 36B6
+  manufacturer: "Wahoo KICKR RUN"
+  firmware_version: "1.0.0"
+  manufacturer_data: [0xFF, 0xFF, 0x4B, 0x49, 0x43, 0x4B, 0x52, 0x20, 0x52, 0x55, 0x4E, 0x20, 0x33, 0x36, 0x42, 0x36]
+  on_connect:
+    - globals.set:
+        id: ble_client_connected
+        value: 'true'
+    - text_sensor.template.publish:
+        id: ble_server_status
+        state: "Подключен"
+  on_disconnect:
+    - globals.set:
+        id: ble_client_connected
+        value: 'false'
+    - text_sensor.template.publish:
+        id: ble_server_status
+        state: "Отключен"
+  services:
+    - uuid: "00001826-0000-1000-8000-00805F9B34FB"
+      advertise: true
+      characteristics:
+        - uuid: "00002ACD-0000-1000-8000-00805F9B34FB"
+          id: treadmill_data_char
+          notify: true
+          read: true
+          value: !lambda 'return id(treadmill_data_char).get_value();'
+    - uuid: "0000180D-0000-1000-8000-00805F9B34FB"
+      advertise: true
+      characteristics:
+        - uuid: "00002A37-0000-1000-8000-00805F9B34FB"
+          id: heart_rate_data
+          notify: true
+          read: true
+          value: !lambda |-
+            if (isnan(id(heart_rate_sensor).state)) {
+              return std::vector<uint8_t>{};
+            }
+            uint8_t heart_rate = (uint8_t)(id(heart_rate_sensor).state);
+            std::vector<uint8_t> hr_data(2, 0);
+            hr_data[0] = 0x06;
+            hr_data[1] = heart_rate;
+            return hr_data;
+
+# Бинарные сенсоры
+binary_sensor:
+  - platform: template
+    name: "Treadmill Powered On"
+    id: treadmill_powered_on
+    lambda: |-
+      uint32_t now = millis();                  // Текущее время
+      if (id(uart_bus).available()) {           // Если есть хотя бы один байт
+        uint8_t c;                              // Переменная для байта
+        if (id(uart_bus).read_byte(&c)) {       // Читаем только один байт
+          id(last_packet_time) = now;           // Обновляем время
+        }
+      }
+      return (now - id(last_packet_time) < 5000);  // Проверяем, прошло ли менее 5 секунд
+    filters:
+      - delayed_off: 5s
+
+  - platform: template
+    name: "Treadmill Usage"
+    id: treadmill_usage
+    lambda: |-
+      return id(treadmill_speed_sensor_uart).state > 0.0;
+
+  - platform: gpio
+    pin:
+      number: 13
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Speed Up Button"
+    on_press:
+      - button.press: speed_up_button
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+
+  - platform: gpio
+    pin:
+      number: 14
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Speed Down Button"
+    on_press:
+      - button.press: speed_down_button
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+
+# Текстовые сенсоры
+text_sensor:
+  - platform: template
+    name: "Pulse monitor"
+    id: connection_status
+    icon: "mdi:bluetooth"
+
+  - platform: template
+    name: "Zwift"
+    id: ble_server_status
+    icon: "mdi:bluetooth"
+
+  - platform: template
+    name: "Selected Data"
+    id: selected_data
+    icon: "mdi:information"
+
+  - platform: template
+    name: "Program Status"
+    id: program_status
+    icon: "mdi:run"
+    # Убираем update_interval, пусть обновляется только через publish_state
+    lambda: |-
+      return id(program_status).state;  // Просто возвращаем текущее значение
+
+select:
+  - platform: template
+    name: "Workout Program"
+    id: program_select
+    restore_value: no
+    options:
+      - "None"
+      - "Custom Pulse Zone"
+      - "Fat Burn"
+      - "Recovery run"
+      - "HIIT"
+    initial_option: "None"
+    optimistic: true
+    on_value:
+      - lambda: |-
+          std::string program = x;
+          if (program == "None") {
+            id(zone_select).publish_state("1");
+            id(set_warm_up_time).publish_state(00.0); //время разминки
+            id(set_cool_down_time).publish_state(00.0); //время заминки
+            id(stop_program).execute();
+          } else if (program == "Fat Burn") {
+            id(zone_select).publish_state("2");
+            id(set_run_time).publish_state(40.0); //время тренировки 
+            id(set_warm_up_time).publish_state(05.0); //время разминки
+            id(set_cool_down_time).publish_state(05.0); //время заминки
+            id(remaining_run_time) = 40 * 60;
+            id(manual_stop) = false;
+          } else if (program == "Recovery run") {
+            id(zone_select).publish_state("1");
+            id(set_run_time).publish_state(25.0);
+            id(set_warm_up_time).publish_state(05.0); //время разминки
+            id(set_cool_down_time).publish_state(05.0); //время заминки
+            id(remaining_run_time) = 25 * 60;
+            id(manual_stop) = false;
+          } else if (program == "HIIT") {
+            id(set_run_time).publish_state(30.0);
+            id(remaining_run_time) = 30 * 60;
+            id(set_warm_up_time).publish_state(05.0); //время разминки
+            id(set_cool_down_time).publish_state(05.0); //время заминки
+            id(interval_phase) = "high";
+            id(interval_time) = 0;
+            id(manual_stop) = false;
+          } else if (program == "Custom Pulse Zone") {
+            id(set_warm_up_time).publish_state(05.0); //время разминки
+            id(set_cool_down_time).publish_state(05.0); //время заминки
+            id(manual_stop) = false;
+          }
+
+# Выбор пола, зоны, возраста
+  - platform: template
+    name: "Gender"
+    id: gender_select
+    restore_value: yes
+    options:
+      - "Male"
+      - "Female"
+    initial_option: "Male"
+    optimistic: true
+    on_value:
+      - script.execute: update_heart_rate_zones
+
+  - platform: template
+    name: "Heart Rate Zone"
+    id: zone_select
+    restore_value: no
+    options:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+    initial_option: "2"
+    optimistic: true
+    on_value:
+      - script.execute: update_heart_rate_zones
+
+  # - platform: template
+  #   name: "UART Data Bits"
+  #   id: uart_data_bits
+  #   options:
+  #     - "5"
+  #     - "6"
+  #     - "7"
+  #     - "8"
+  #   initial_option: "8"
+  #   optimistic: true
+  #   restore_value: true
+  #   entity_category: config
+  #   icon: "mdi:numeric"
+  #   set_action:
+  #     - lambda: |-
+  #         id(uart_bus).flush();
+  #         uint8_t new_data_bits = (uint8_t)stoi(x);
+  #         ESP_LOGD("UART", "Changing data bits from %i to %i", id(uart_bus).get_data_bits(), new_data_bits);
+  #         if (id(uart_bus).get_data_bits() != new_data_bits) {
+  #           id(uart_bus).set_data_bits(new_data_bits);
+  #           id(uart_bus).load_settings();
+  #         }
+
+  # - platform: template
+  #   name: "UART Parity"
+  #   id: uart_parity
+  #   options:
+  #     - "NONE"
+  #     - "EVEN"
+  #     - "ODD"
+  #   initial_option: "NONE"
+  #   optimistic: true
+  #   restore_value: true
+  #   entity_category: config
+  #   icon: "mdi:check-circle"
+  #   set_action:
+  #     - lambda: |-
+  #         id(uart_bus).flush();
+  #         uart::UARTParityOptions new_parity;
+  #         if (x == "NONE") {
+  #           new_parity = uart::UARTParityOptions::UART_CONFIG_PARITY_NONE;
+  #         } else if (x == "EVEN") {
+  #           new_parity = uart::UARTParityOptions::UART_CONFIG_PARITY_EVEN;
+  #         } else {
+  #           new_parity = uart::UARTParityOptions::UART_CONFIG_PARITY_ODD;
+  #         }
+  #         ESP_LOGD("UART", "Changing parity to %s", x.c_str());
+  #         id(uart_bus).set_parity(new_parity);
+  #         id(uart_bus).load_settings();
+
+  # - platform: template
+  #   name: "UART Stop Bits"
+  #   id: uart_stop_bits
+  #   options:
+  #     - "1"
+  #     - "2"
+  #   initial_option: "1"
+  #   optimistic: true
+  #   restore_value: true
+  #   entity_category: config
+  #   icon: "mdi:stop-circle"
+  #   set_action:
+  #     - lambda: |-
+  #         id(uart_bus).flush();
+  #         uint8_t new_stop_bits = (uint8_t)stoi(x);
+  #         ESP_LOGD("UART", "Changing stop bits from %i to %i", id(uart_bus).get_stop_bits(), new_stop_bits);
+  #         if (id(uart_bus).get_stop_bits() != new_stop_bits) {
+  #           id(uart_bus).set_stop_bits(new_stop_bits);
+  #           id(uart_bus).load_settings();
+  #         }
+
+number:
+  - platform: template
+    name: "Age"
+    id: age_number
+    min_value: 16
+    max_value: 100
+    step: 1
+    initial_value: 30
+    optimistic: true
+    restore_value: yes
+    on_value:
+      - script.execute: update_heart_rate_zones
+
+  - platform: template
+    name: "Set Speed"
+    id: set_speed
+    min_value: 0.6
+    max_value: 12.0
+    step: 0.1
+    unit_of_measurement: "km/h"
+    icon: "mdi:speedometer"
+    optimistic: true
+    restore_value: no
+    initial_value: 0.0
+    on_value:
+      - lambda: |-
+          if (id(auto_mode)) {                          // Если авторежим, игнорируем
+            return;                                     
+          }
+          float speed = x;                              // Берём значение ползунка (в км/ч)
+          int target = (int)(speed * 10);               // Переводим в внутренний формат (1 км/ч = 10)
+          if (target < 6 && target != 0) target = 6;    // Минимальная скорость 0.6 км/ч
+          if (target > 120) target = 120;               // Максимальная скорость 12 км/ч
+          id(target_speed) = target;                    // Записываем в глобальную переменную
+          id(target_speed_goal) = target;               // Синхронизируем целевую скорость
+          if (id(motor_running)) {                      // Если мотор работает
+            char buffer[13];                            
+            snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
+            id(uart_bus)->write_str(buffer);            // Отправляем команду
+          }
+
+# Ползунок наклона
+  - platform: template
+    name: "Set Incline"
+    id: set_incline
+    min_value: 0.0
+    max_value: 5.0  # Реальный наклон до 5%
+    step: 0.5       # Шаг 0.1%
+    unit_of_measurement: "%"
+    icon: "mdi:angle-acute"
+    optimistic: true
+    on_value:
+      - lambda: |-
+          float incline = x;  // Реальный процент (0–5.0)
+          int incline_value = (int)(incline * 30);  // 1% = 30 единиц, 5% = 150 единиц
+          id(target_incline_goal) = incline_value;
+          id(incline_set_time) = millis();
+          id(incline_active) = true;
+          ESP_LOGI("treadmill", "Set Incline updated: %.1f%, Goal set to %d", incline, incline_value);
+
+  - platform: template
+    name: "Set Warm-up Time"
+    id: set_warm_up_time
+    min_value: 0
+    max_value: 10
+    step: 1
+    unit_of_measurement: "min"
+    icon: "mdi:timer-play-outline"
+    optimistic: true
+    restore_value: no
+    initial_value: 5  # По умолчанию 5 минут
+
+  - platform: template
+    name: "Set Run Time"
+    id: set_run_time
+    min_value: 0
+    max_value: 60
+    step: 1
+    unit_of_measurement: "min"
+    icon: "mdi:timer"
+    optimistic: true
+    restore_value: no
+    initial_value: 0
+    on_value:
+      - lambda: |- 
+          int new_time_seconds = (int)(x * 60);  // Преобразуем минуты в секунды
+          if (id(motor_running)) {
+            if (id(remaining_warm_up_time) <= 0 && !id(warm_up_active)) {
+              // Обновляем только во время основной программы
+              id(remaining_run_time) = new_time_seconds;
+            } else if (id(remaining_warm_up_time) > 0 || id(warm_up_active)) {
+              // Если идет разминка, восстанавливаем исходное значение ползунка
+              id(set_run_time).publish_state(id(set_run_time).state);
+            }
+          } else {
+            // Если мотор не работает, задаем начальное значение
+            id(remaining_run_time) = new_time_seconds;
+          }
+
+  - platform: template
+    name: "Set Cool-down Time"
+    id: set_cool_down_time
+    min_value: 0
+    max_value: 10
+    step: 1
+    unit_of_measurement: "min"
+    icon: "mdi:timer-stop-outline"
+    optimistic: true
+    restore_value: no
+    initial_value: 5  # По умолчанию 5 минут
+
+
+  # - platform: template
+  #   name: "UART Baud Rate"
+  #   id: uart_baud_rate
+  #   min_value: 1000
+  #   max_value: 115200
+  #   step: 100
+  #   initial_value: 5000
+  #   optimistic: true
+  #   restore_value: yes
+  #   entity_category: config
+  #   icon: "mdi:swap-horizontal"
+  #   on_value:
+  #     - lambda: |-
+  #         id(uart_bus).flush();  // Очищаем буфер перед сменой скорости
+  #         uint32_t new_baud_rate = (uint32_t)x;  // Преобразуем значение ползунка в uint32_t
+  #         ESP_LOGD("UART", "Changing baud rate from %i to %i", id(uart_bus).get_baud_rate(), new_baud_rate);
+  #         if (id(uart_bus).get_baud_rate() != new_baud_rate) {
+  #           id(uart_bus).set_baud_rate(new_baud_rate);
+  #           id(uart_bus).load_settings();
+  #         }
