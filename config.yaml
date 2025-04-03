@@ -46,11 +46,11 @@ logger:
 # Enable Home Assistant API
 api:
   encryption:
-    key: "replace"
+    key: "<YOUR_API_KEY>"
 
 ota:
   - platform: esphome
-    password: "replace"
+    password: "<YOUR_OTA_PASSWORD>"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -59,7 +59,7 @@ wifi:
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Treadmill Fallback Hotspot"
-    password: "1YLAT5mbrJu6"
+    password: "<YOUR_FALLBACK_WIFI_PASSWORD>"
 
 captive_portal:
 
@@ -272,133 +272,133 @@ globals:
   # Хранит текущую скорость беговой дорожки, полученную через UART
   - id: treadmill_speed_feedback
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0 (дорожка остановлена)
                                 # Используется для получения скорости от контроллера через UART (например, "[SETSPD:010]")
 
   # Хранит текущий наклон беговой дорожки, полученный через UART
   - id: treadmill_incline_feedback
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0 (без наклона)
                                 # Используется для получения наклона от контроллера через UART (например, "[SETINC:000]")
 
   # Хранит текущий целевой наклон беговой дорожки, установленный системой
   - id: target_incline
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0 (без наклона)
                                 # Используется для передачи текущего значения наклона в UART и отображения в интерфейсе
 
   # Хранит время последней команды установки наклона в миллисекундах
   - id: incline_set_time
     type: unsigned long
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0
                                 # Используется для отслеживания времени отправки команд наклона (ограничение в 25 секунд)
 
   # Указывает, активно ли управление наклоном в данный момент
   - id: incline_active
     type: bool
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: 'false'      # Начальное значение — false (наклон не активен)
                                 # Используется для управления интервалом отправки команд наклона через UART
 
   # Хранит время загрузки устройства в миллисекундах
   - id: boot_time
     type: unsigned long
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0
                                 # Используется для фиксации начального наклона на 0 в первые 10 секунд после старта (закомментировано)
 
   # Хранит целевое значение наклона, заданное пользователем
   - id: target_incline_goal
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0 (без наклона)
                                 # Используется для установки наклона через ползунок "Set Incline" (внутренний формат: 1% = 30 единиц)
 
   # Хранит время последнего полученного пакета через UART в миллисекундах
   - id: last_packet_time
     type: uint32_t
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0
                                 # Используется для проверки активности беговой дорожки (binary_sensor "Treadmill Powered On")
 
   # Указывает, включён ли автоматический режим управления скоростью на основе пульса
   - id: auto_mode
     type: bool
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: 'false'      # Начальное значение — false (ручной режим)
                                 # Используется в программах "Custom Pulse Zone", "Fat Burn", "Recovery run" для регулировки скорости
 
   # Указывает, была ли тренировка остановлена вручную
   - id: manual_stop
     type: bool
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: 'false'      # Начальное значение — false (не остановлена)
                                 # Используется для сброса состояния при запуске новых программ
 
   # Указывает, работает ли мотор беговой дорожки
   - id: motor_running
     type: bool
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: 'false'      # Начальное значение — false (мотор выключен)
                                 # Используется для управления состоянием дорожки в скриптах (start, stop, intervals)
 
   # Хранит текущую скорость беговой дорожки во внутреннем формате (1 км/ч = 10)
   - id: target_speed
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0 (дорожка остановлена)
                                 # Используется для отправки текущей скорости через UART и синхронизации с интерфейсом
 
   # Хранит целевую скорость беговой дорожки, к которой стремится система
   - id: target_speed_goal
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0 (дорожка остановлена)
                                 # Используется для плавного изменения скорости в скрипте "smooth_speed" и регулировки по пульсу
 
   # Хранит максимальный пульс пользователя, рассчитанный на основе возраста и пола
   - id: max_heart_rate
     type: float
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0.0'        # Начальное значение — 0.0 (не определено)
                                 # Используется в скрипте "update_heart_rate_zones" для расчёта зон пульса
 
   # Хранит минимальную границу целевой зоны пульса
   - id: target_heart_rate_min
     type: float
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0.0'        # Начальное значение — 0.0 (не определено)
                                 # Используется для регулировки скорости в автоматическом режиме и интервальной тренировке
 
   # Хранит максимальную границу целевой зоны пульса
   - id: target_heart_rate_max
     type: float
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0.0'        # Начальное значение — 0.0 (не определено)
                                 # Используется для регулировки скорости в автоматическом режиме и интервальной тренировке
 
   # Указывает, активна ли фаза разминки
   - id: warm_up_active
     type: bool
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: 'false'      # Начальное значение — false (разминка не активна)
                                 # Используется для управления логикой разминки в скрипте "warm_up"
 
   # Хранит текущую скорость беговой дорожки в км/ч для расчётов
   - id: current_speed
     type: float
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0.0'        # Начальное значение — 0.0 (дорожка остановлена)
                                 # Используется для хранения скорости при сбросе на старте (on_boot)
 
   # Хранит длину окружности ролика беговой дорожки в метрах
   - id: roller_circumference
     type: float
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0.2763'     # Начальное значение — 0.2763 метра (по умолчанию для расчёта скорости)
                                 # Используется в "Treadmill Speed Motor" для расчёта скорости по импульсам
 
@@ -412,77 +412,77 @@ globals:
   # Указывает, движется ли беговая дорожка на основе импульсов
   - id: treadmill_running
     type: bool
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: 'false'      # Начальное значение — false (дорожка остановлена)
                                 # Используется в "Treadmill Speed Motor" для определения движения по импульсам
 
   # Хранит текущую дистанцию, пройденную на беговой дорожке в километрах
   - id: current_distance_km
     type: float
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0.0'        # Начальное значение — 0.0 (дистанция не пройдена)
                                 # Используется в "Treadmill Distance" для расчёта дистанции и сброса на старте
 
   # Хранит флаги состояния беговой дорожки для передачи через BLE
   - id: treadmill_flags
     type: uint16_t
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0x0028'     # Начальное значение — 0x0028 (специфическое значение для протокола BLE)
                                 # Используется в скрипте "send_treadmill_data" для передачи статуса через BLE
 
   # Хранит время в секундах, в течение которого импульсы не поступают
   - id: run_stopped_timer
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0
                                 # Используется в "Treadmill Speed Motor" для определения остановки движения
 
   # Указывает, подключён ли BLE-клиент к серверу беговой дорожки
   - id: ble_client_connected
     type: bool
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: 'false'      # Начальное значение — false (не подключён)
                                 # Используется для управления отправкой данных через BLE и отображения статуса
 
   # Хранит оставшееся время основной тренировки в секундах
   - id: remaining_run_time
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0 (тренировка не начата)
                                 # Используется в скриптах "start_manual", "start_program", "run_program" для отслеживания времени
 
   # Хранит текущую фазу интервальной тренировки ("high" или "low")
   - id: interval_phase
     type: std::string
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '"high"'     # Начальное значение — "high" (высокая интенсивность)
                                 # Используется в скрипте "interval_training" для переключения фаз HIIT
 
   # Хранит время текущей фазы интервальной тренировки в секундах
   - id: interval_time
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0
                                 # Используется в скрипте "interval_training" для отслеживания длительности фазы
 
   # Хранит оставшееся время разминки в секундах
   - id: remaining_warm_up_time
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0 (разминка не начата)
                                 # Используется в скриптах "start_program", "warm_up" для управления разминкой
 
   # Хранит оставшееся время заминки в секундах
   - id: remaining_cool_down_time
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no          
     initial_value: '0'          # Начальное значение — 0 (заминка не начата)
                                 # Используется в скриптах "run_program", "cool_down" для управления заминкой
 
   # Хранит общее время разминки в секундах (счетчик для логики)
   - id: warm_up_time
     type: int
-    restore_value: no           # Не сохраняем значение после перезагрузки
+    restore_value: no           
     initial_value: '0'          # Начальное значение — 0
                                 # Используется в скрипте "warm_up" для отслеживания времени ожидания пульса
 
@@ -493,19 +493,17 @@ script:
     then:
       - lambda: |-
           id(motor_running) = true;                                         // Включаем мотор беговой дорожки
-          id(manual_stop) = false;                                          // Сбрасываем флаг ручной остановки для корректного запуска
-          if (id(target_speed) == 0) {                                      // Если целевая скорость не установлена (0), задаём начальную скорость 1 км/ч (10 во внутреннем формате)
+          id(manual_stop) = false;                                          // Сбрасываем флаг ручной остановки
+          if (id(target_speed) == 0) {                                      // Если целевая скорость не установлена, задаём 1 км/ч
             id(target_speed) = 10;
             id(target_speed_goal) = 10;
           }
-          id(set_speed).publish_state(id(target_speed) / 10.0);             // Обновляем ползунок скорости в интерфейсе (переводим из внутреннего формата в км/ч)
-          //char buffer[13];                                                  // Формируем команду для отправки через UART (например, "[SETSPD:010]" для 1 км/ч)
-          //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));  
-          //id(uart_bus)->write_str(buffer);                                  // Отправляем команду через UART
-          id(remaining_warm_up_time) = 0;                                   // Устанавливаем время разминки в 0, так как это ручной режим без разминки
-          float run_time = id(set_run_time).state;                          // Получаем заданное пользователем время основной тренировки
-          id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;      // Устанавливаем оставшееся время тренировки в секундах (переводим минуты в секунды)
-          id(remaining_cool_down_time) = 0;                                 // Устанавливаем время заминки в 0, так как в ручном режиме заминка не предусмотрена
+          id(set_speed).publish_state(id(target_speed) / 10.0);             // Обновляем ползунок скорости
+          id(remaining_warm_up_time) = 0;                                   // Без разминки
+          float run_time = id(set_run_time).state;                          // Получаем заданное время тренировки
+          id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;      // Устанавливаем время в секундах
+          id(remaining_cool_down_time) = 0;                                 // Без заминки
+          id(program_status).publish_state("works");                        // Обновляем статус
 
 # Скрипт запускает программу тренировки, начиная с разминки, устанавливая начальную скорость и задавая время разминки и основной части.
   - id: start_program
@@ -1271,6 +1269,7 @@ binary_sensor:
       mode: INPUT_PULLUP
       inverted: true
     name: "Speed Up Button"
+    entity_category: diagnostic
     on_press:
       - button.press: speed_up_button
     filters:
@@ -1283,6 +1282,7 @@ binary_sensor:
       mode: INPUT_PULLUP
       inverted: true
     name: "Speed Down Button"
+    entity_category: diagnostic
     on_press:
       - button.press: speed_down_button
     filters:
@@ -1307,7 +1307,7 @@ text_sensor:
     icon: "mdi:information"
 
   - platform: template
-    name: "Program Status"
+    name: "Status"
     id: program_status
     icon: "mdi:run"
     # Убираем update_interval, пусть обновляется только через publish_state
@@ -1386,7 +1386,7 @@ select:
       - "3"
       - "4"
       - "5"
-    initial_option: "2"
+    initial_option: "1"
     optimistic: true
     on_value:
       - script.execute: update_heart_rate_zones
@@ -1497,11 +1497,11 @@ number:
           if (target > 120) target = 120;               // Максимальная скорость 12 км/ч
           id(target_speed) = target;                    // Записываем в глобальную переменную
           id(target_speed_goal) = target;               // Синхронизируем целевую скорость
-          if (id(motor_running)) {                      // Если мотор работает
-            char buffer[13];                            
-            snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
-            id(uart_bus)->write_str(buffer);            // Отправляем команду
-          }
+          //if (id(motor_running)) {                      // Если мотор работает
+            //char buffer[13];                            
+            //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
+            //id(uart_bus)->write_str(buffer);            // Отправляем команду
+          //}
 
 # Ползунок наклона
   - platform: template
