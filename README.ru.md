@@ -49,15 +49,12 @@
 - **Восстановление**: удержание зоны 1 для лёгкого бега.
   
 ### Интерфейс в Hassio
-## Screenshots
 <table>
   <tr>
     <td><img src="image/int2.png" alt="Screenshot 1" width="300"/></td>
     <td><img src="image/int.png" alt="Screenshot 2" width="300"/></td>
   </tr>
 </table>
-- **[Управление](image/int2.png)**
-- **[Сенсоры](image/int.png)**
 
 ## Планы развития
 - Поддержка стандарта FTMS для совместимости с Kinomap и iFit.
