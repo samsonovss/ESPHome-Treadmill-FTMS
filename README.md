@@ -59,6 +59,7 @@ A heart rate monitor connects via BLE, providing pulse data. Real-time intellige
 - ESPHome component for seamless ecosystem integration.
 - Distance sensor (for button-free speed control).
 - MQTT data transmission (for integration beyond Home Assistant).
+- Web interface for control without Home Assistant integration.
 
 ## Authors
 Created by [@samsonovss](https://t.me/samsonovss) in collaboration with Grok, an AI developed by xAI.
