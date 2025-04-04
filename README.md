@@ -25,7 +25,7 @@ A heart rate monitor connects via BLE, providing pulse data. Real-time intellige
 ## Features
 ### Core Functions
 - **Zwift Support**: Full integration with the popular platform.
-![ESPHome Treadmill Zwift](image/zwift.gif)
+![ESPHome Treadmill Zwift](image/Zwift.gif)
 - **Heart Rate Monitor**: Connection and zone calculation based on age and gender.
 - **Real Data**: Incline in percentages and speed calibration.
 - **Button Control**: Speed and incline adjustment via GPIO (with feedback).
