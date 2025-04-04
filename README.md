@@ -1,7 +1,6 @@
 # ESPHomeTreadmill
 
-Описание на русском:
-- [Русский (README.ru.md)](README.ru.md)
+**[Русская версия / Russian version](README.ru.md)**
 
 ## About the Project
 Turn your old treadmill into a smart training companion! ESPHomeTreadmill is an onboard computer based on the ESP32 S3 with ESPHome firmware, adding support for Zwift, intelligent heart rate-based programs, and UART control. It’s perfect for treadmills with PSA(xx) series boards but flexible enough to adapt to any UART-enabled treadmill. Minimal cost, maximum potential!
