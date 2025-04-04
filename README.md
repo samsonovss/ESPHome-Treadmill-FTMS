@@ -1,4 +1,4 @@
-# ESPHomeTreadmill
+# ESPHome Treadmill with Zwift and Future FTMS Support
 
 **[Русская версия / Russian version](README.ru.md)**
 
@@ -61,3 +61,9 @@ A heart rate monitor connects via BLE, providing pulse data. Real-time intellige
 
 ## Authors
 Created by [@samsonovss](https://t.me/samsonovss) in collaboration with Grok, an AI developed by xAI.
+
+## Support the Project
+If you’d like to support this project and help me keep it growing, consider buying me a coffee! You can send a donation via cryptocurrency:  
+- **USDT (TRC-20)**: `TYourWalletAddressHere1234567890`  
+
+Every little bit helps — thank you!
