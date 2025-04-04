@@ -2,5 +2,5 @@
 
 Choose your language / Выберите язык:
 
-- [English (README.en.md)](README.en.md)
-- [Русский (README.ru.md)](README.ru.md)
+- [English (README.en.md)](readme/README.en.md)
+- [Русский (README.ru.md)](readme/README.ru.md)
