@@ -50,6 +50,10 @@ A heart rate monitor connects via BLE, providing pulse data. Real-time intellige
 - **Interval**: Switches between Zones 1 and 4 with auto-speed tuning.
 - **Recovery**: Keeps Zone 1 for light running.
 
+### Hassio Interface
+- **[Control](image/int2.png)**
+- **[Sensors](image/int.png)**
+
 ## Future Plans
 - FTMS standard support for Kinomap and iFit compatibility.
 - Interactive elevation maps and new training programs.
