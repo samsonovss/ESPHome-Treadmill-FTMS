@@ -79,6 +79,7 @@
   <tr>
     <td><img src="image/int2.png" alt="Screenshot 1" width="300"/></td>
     <td><img src="image/int.png" alt="Screenshot 2" width="300"/></td>
+    <td><img src="image/graphhassio.jpg" alt="Screenshot 3" width="300"/></td>
   </tr>
 </table>
   
