@@ -86,11 +86,11 @@
 - Настройка UART для связи с беговой дорожкой (Используется для получения и отправки команд)
 ```uart:
   tx_pin: GPIO17    # Передача данных (TX) на GPIO17
-  rx_pin: GPIO18    # Приём данных (RX) на GPIO18
+  rx_pin: GPIO18    # Приём данных (RX) на GPIO18```
 
-  - Настройка Bluetooth Low Energy (BLE) для подключения пульсометра
-    ble_client:
-      - mac_address: "XX:XX:XX:XX:XX:XX"  - Замените на MAC-адрес вашего пульсометра```
+- Настройка Bluetooth Low Energy (BLE) для подключения пульсометра
+```ble_client:
+  - mac_address: "XX:XX:XX:XX:XX:XX"  - Замените на MAC-адрес вашего пульсометра```
 
 ## Планы развития
 - Поддержка стандарта FTMS для совместимости с Kinomap и iFit.
