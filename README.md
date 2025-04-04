@@ -62,8 +62,12 @@ A heart rate monitor connects via BLE, providing pulse data. Real-time intellige
 ## Authors
 Created by [@samsonovss](https://t.me/samsonovss) in collaboration with Grok, an AI developed by xAI.
 
-## Support the Project
-If you’d like to support this project and help me keep it growing, consider buying me a coffee! You can send a donation via cryptocurrency:  
-- **USDT (TRC-20)**: `TYourWalletAddressHere1234567890`  
+### ☕ Support the Project  
+If you’d like to support this project and help me keep it growing, consider buying me a coffee!  
 
-Every little bit helps — thank you!
+💰 **Crypto Donations:**  
+- **BTC**: `bc1q3cza0kasutzes4hfddxuclmd9ghn5v7zw2nr5c`  
+- **ETH (ERC-20, USDT, USDC, etc.)**: `0x5dd5a346Dd64dfE938a60D7b24b633b1ACE01719`  
+
+Thank you for your support! 🚀  
+
