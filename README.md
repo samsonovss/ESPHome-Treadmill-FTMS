@@ -82,6 +82,19 @@ A heart rate monitor connects via BLE, providing pulse data. Real-time intellige
   </tr>
 </table>
 
+## ESPHome Setup
+The file (config.yaml) configures the ESP32 S3 to control the treadmill and connect the heart rate monitor.
+- UART configuration for communicating with the treadmill (used to send and receive commands)
+```yaml
+uart:
+  tx_pin: GPIO17    # Передача данных (TX) на GPIO17
+  rx_pin: GPIO18    # Приём данных (RX) на GPIO18
+
+# Bluetooth Low Energy (BLE) configuration for connecting the heart rate monitor
+ble_client:
+  - mac_address: "XX:XX:XX:XX:XX:XX"  # Replace with your heart rate monitor's MAC address
+```
+
 ## Future Plans
 - FTMS standard support for Kinomap and iFit compatibility.
 - Interactive elevation maps and new training programs.
