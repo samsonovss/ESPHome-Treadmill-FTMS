@@ -65,6 +65,6 @@ Created by [@samsonovss](https://t.me/samsonovss) in collaboration with Grok, an
 ## Support the Project
 If you’d like to support this project and help me keep it growing, consider buying me a coffee! You can send a donation via cryptocurrency:
 - **BTC**: `bc1q3cza0kasutzes4hfddxuclmd9ghn5v7zw2nr5c`  
-- **ETH (ERC-20, USDT, USDC, etc.)**: `0x5dd5a346Dd64dfE938a60D7b24b633b1ACE01719`  
+- **USDT (TRC-20)**: `0x5dd5a346Dd64dfE938a60D7b24b633b1ACE01719`  
 Every little bit helps — thank you! 
 
