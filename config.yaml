@@ -1225,8 +1225,8 @@ ble_client:
           state: "Подключен"
 
 esp32_ble_server:
-  model: KICKR RUN 36B6
-  manufacturer: "Wahoo KICKR RUN"
+  model:  Treadmill Controller
+  manufacturer: "ESP32-S3"
   firmware_version: "1.0.0"
   manufacturer_data: [0xFF, 0xFF, 0x4B, 0x49, 0x43, 0x4B, 0x52, 0x20, 0x52, 0x55, 0x4E, 0x20, 0x33, 0x36, 0x42, 0x36]
   on_connect:
