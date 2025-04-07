@@ -75,13 +75,7 @@
 - **Восстановление**: удержание зоны 1 для лёгкого бега.
   
 ### Интерфейс в Hassio
-<table>
-  <tr>
-    <td><img src="image/int2.png" alt="Screenshot 1" width="300"/></td>
-    <td><img src="image/int.png" alt="Screenshot 2" width="300"/></td>
-    <td><img src="image/graphhassio.jpg" alt="Screenshot 3" width="300"/></td>
-  </tr>
-</table>
+![Hassio Interface](image/hassio.png)
   
 ## Настройка ESPHome
 Файл (config.yaml) настраивает ESP32 S3 для управления беговой дорожкой и подключения пульсометра.
