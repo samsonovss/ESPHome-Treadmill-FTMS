@@ -1,4 +1,9 @@
-# ESPHome Treadmill with FTMS Support (Zwift, Kinomap for Android, FitShow, Kinni)
+# Transform Your Treadmill with ESPHome FTMS via ESP32-S3 BLE
+### Supported Apps
+- Zwift 
+- Kinomap (Android)
+- FitShow
+- Kinni
 
 **[Русская версия / Russian version](README.ru.md)**
 
