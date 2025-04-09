@@ -1,5 +1,6 @@
 # Transform Your Treadmill with FTMS on ESPHome via ESP32-S3 BLE
-### Supported Apps
+
+### Supported FTMS Apps
 - :white_check_mark: Zwift
 - :white_check_mark: Kinomap (Android)
 - :x: Kinomap (iOS)
