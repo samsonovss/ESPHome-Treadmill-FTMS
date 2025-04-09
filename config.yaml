@@ -41,7 +41,7 @@ esp32:
 
 # Enable logging
 logger:
-  level: NONE
+  level: INFO
 
 # Enable Home Assistant API
 api:
@@ -298,11 +298,11 @@ globals:
                                 # Используется для отслеживания времени отправки команд наклона (ограничение в 25 секунд)
 
   # Указывает, активно ли управление наклоном в данный момент
-  - id: incline_active
-    type: bool
-    restore_value: no           # Не сохраняем значение после перезагрузки
-    initial_value: 'false'      # Начальное значение — false (наклон не активен)
-                                # Используется для управления интервалом отправки команд наклона через UART
+  # - id: incline_active
+  #   type: bool
+  #   restore_value: no           # Не сохраняем значение после перезагрузки
+  #   initial_value: 'false'      # Начальное значение — false (наклон не активен)
+  #                               # Используется для управления интервалом отправки команд наклона через UART
 
   # Хранит время загрузки устройства в миллисекундах
   - id: boot_time
@@ -424,11 +424,11 @@ globals:
                                 # Используется в "Treadmill Distance" для расчёта дистанции и сброса на старте
 
   # Хранит флаги состояния беговой дорожки для передачи через BLE
-  - id: treadmill_flags
-    type: uint16_t
-    restore_value: no           # Не сохраняем значение после перезагрузки
-    initial_value: '0x0028'     # Начальное значение — 0x0028 (специфическое значение для протокола BLE)
-                                # Используется в скрипте "send_treadmill_data" для передачи статуса через BLE
+  # - id: treadmill_flags
+  #   type: uint16_t
+  #   restore_value: no           # Не сохраняем значение после перезагрузки
+  #   initial_value: '0x0028'     # Начальное значение — 0x0028 (специфическое значение для протокола BLE)
+  #                               # Используется в скрипте "send_treadmill_data" для передачи статуса через BLE
 
   # Хранит время в секундах, в течение которого импульсы не поступают
   - id: run_stopped_timer
@@ -609,38 +609,57 @@ script:
   - id: cool_down
     then:
       - lambda: |- 
-          id(remaining_cool_down_time)--;                                   // Уменьшаем время заминки на 1 секунду
-          if (id(remaining_cool_down_time) % 12 == 0 && id(target_speed) > 6) { // Каждые 12 секунд снижаем скорость, если она выше 0.6 км/ч
-            id(target_speed) -= 1;                                          // Уменьшаем скорость на 0.1 км/ч
-            id(target_speed_goal) = id(target_speed);                       // Синхронизируем целевую скорость
-            id(set_speed).publish_state(id(target_speed) / 10.0);           // Обновляем ползунок
-            //char buffer[13];                                                // Формируем команду для UART
-            //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
-            //id(uart_bus)->write_str(buffer);                                // Отправляем команду через UART
+          id(remaining_cool_down_time)--;                                   // Уменьшаем время заминки
+
+          float heart_rate = id(heart_rate_sensor).state;                   // Получаем текущий пульс
+          float zone_1_max = id(max_heart_rate) * 0.6;                      // Верхняя граница зоны 1
+          float current_speed_kph = id(target_speed) / 10.0;                // Текущая скорость в км/ч
+
+          // Рассчитываем шаг снижения скорости
+          float total_cool_down_seconds = id(set_cool_down_time).state * 60;
+          float target_min_speed = 2.0;
+          float speed_range = (current_speed_kph - target_min_speed);
+          float time_fraction = id(remaining_cool_down_time) / total_cool_down_seconds;
+
+          float target_speed_kph = target_min_speed + (speed_range * time_fraction);
+          if (target_speed_kph < target_min_speed) target_speed_kph = target_min_speed;
+
+          if (!isnan(heart_rate) && heart_rate > zone_1_max && current_speed_kph > target_min_speed) {
+            target_speed_kph += 0.5;
+            if (target_speed_kph > current_speed_kph) target_speed_kph = current_speed_kph;
           }
-          if (id(remaining_cool_down_time) <= 0) {                          // Завершаем заминку, если время истекло
-            id(motor_running) = false;                                      // Выключаем мотор
-            id(target_speed) = 0;                                           // Сбрасываем скорость
-            id(target_speed_goal) = 0;                                      // Сбрасываем целевую скорость
-            id(set_speed).publish_state(0.0);                               // Обновляем ползунок
-            id(treadmill_speed_sensor_uart).publish_state(0.0);             // Сбрасываем датчик скорости
-            //char buffer[13];                                                // Формируем команду остановки
-            //snprintf(buffer, sizeof(buffer), "[SETSPD:000]");
-            //id(uart_bus)->write_str(buffer);                                // Отправляем команду через UART
-            id(program_status).publish_state("Cool-down: Завершён");        // Обновляем статус
-            id(set_cool_down_time).publish_state(0.0);                      // Сбрасываем ползунок заминки
-            id(stop_program).execute();                                     // Вызываем полный сброс
+
+          int new_target_speed = (int)(target_speed_kph * 10);
+          if (new_target_speed < 20) new_target_speed = 20;                 // Ограничение на 2.0 км/ч
+          id(target_speed_goal) = new_target_speed;
+
+          if (id(target_speed) != id(target_speed_goal)) {
+            id(smooth_speed).execute();
           }
-          if (id(remaining_cool_down_time) > 0 && id(remaining_cool_down_time) % 10 == 0) { // Обновляем статус каждые 10 секунд
-            int remaining_minutes = id(remaining_cool_down_time) / 60;      // Вычисляем минуты
-            int remaining_seconds = id(remaining_cool_down_time) % 60;      // Вычисляем секунды
-            char buffer[50];                                                // Формируем строку статуса
+
+          if (id(remaining_cool_down_time) % 10 == 0) {
+            int remaining_minutes = id(remaining_cool_down_time) / 60;
+            int remaining_seconds = id(remaining_cool_down_time) % 60;
+            char buffer[50];
             snprintf(buffer, sizeof(buffer), "Cool-down: In progress (%d:%02d)", remaining_minutes, remaining_seconds);
-            id(program_status).publish_state(buffer);                       // Обновляем статус
+            id(program_status).publish_state(buffer);
+            id(set_speed).publish_state(id(target_speed) / 10.0);
           }
-          if (id(remaining_cool_down_time) % 60 == 0) {                     // Обновляем ползунок каждую минуту
-            int remaining_minutes = id(remaining_cool_down_time) / 60;      // Вычисляем минуты
-            id(set_cool_down_time).publish_state((float)remaining_minutes); // Обновляем ползунок
+
+          // Завершение заминки
+          if (id(remaining_cool_down_time) <= 0) {
+            id(motor_running) = false;                                      // Выключаем мотор
+            id(target_speed) = 0;                                           // Сбрасываем скорость в 0
+            id(target_speed_goal) = 0;
+            char buffer[13];
+            snprintf(buffer, sizeof(buffer), "[SETSPD:000]");               // Явно отправляем остановку
+            id(uart_bus)->write_str(buffer);
+            ESP_LOGI("treadmill", "Cool-down finished, stopping: %s", buffer);
+            id(program_status).publish_state("Cool-down: Завершён");
+            id(set_cool_down_time).publish_state(0.0);
+            id(set_speed).publish_state(0.0);                               // Ползунок в 0
+            id(treadmill_speed_sensor_uart).publish_state(0.0);
+            id(stop_program).execute();                                     // Завершаем программу
           }
 
 # Скрипт реализует интервальную тренировку, чередуя высокую и низкую интенсивность на основе пульса.
@@ -774,9 +793,9 @@ script:
           id(set_speed).publish_state(0.0);                                 // Обновляем ползунок скорости
           id(set_incline).publish_state(0.0);                               // Сбрасываем наклон
           id(treadmill_speed_sensor_uart).publish_state(0.0);               // Сбрасываем датчик скорости
-          //char buffer[13];                                                  // Формируем команду остановки
-          //snprintf(buffer, sizeof(buffer), "[SETSPD:000]");
-          //id(uart_bus)->write_str(buffer);                                  // Отправляем команду через UART
+          char buffer[13];                                                  // Формируем команду остановки
+          snprintf(buffer, sizeof(buffer), "[SETSPD:000]");
+          id(uart_bus)->write_str(buffer);                                  // Отправляем команду через UART
           id(remaining_run_time) = 0;                                       // Сбрасываем время тренировки
           id(set_run_time).publish_state(0.0);                              // Обновляем ползунок тренировки
           id(remaining_warm_up_time) = 0;                                   // Сбрасываем время разминки
@@ -787,25 +806,207 @@ script:
           id(interval_time) = 0;                                            // Сбрасываем счетчик интервалов
           id(program_status).publish_state("Idle");                         // Устанавливаем статус "Idle"
           id(manual_stop) = false;                                          // Сбрасываем флаг ручной остановки
+          id(treadmill_incline_feedback_sensor).publish_state(0.0);         // Сбрасываем Скорость обратной связи
 
 # Скрипт отправляет данные о скорости и наклоне беговой дорожки через BLE.
+#в этом коде коректно передает, скорость, наклон, дистанция, не передается время
+  # - id: send_treadmill_data
+  #   then:
+  #     - lambda: |-
+  #         float speed_kph = id(treadmill_speed_sensor_uart).state;      // Скорость в км/ч
+  #         float incline = id(treadmill_incline_sensor_uart).state;      // Наклон в %
+  #         float distance_km = id(treadmill_distance_km).state;          // Дистанция в км
+  #         float time_min = id(treadmill_time_min).state;                // Время в минутах
+
+  #         // Проверка на NAN
+  #         if (isnan(speed_kph) || isnan(incline) || isnan(distance_km) || isnan(time_min)) {
+  #           ESP_LOGE("treadmill", "Одно из значений равно NAN");
+  #           return;
+  #         }
+
+  #         uint16_t inst_speed = (uint16_t)(speed_kph * 100);           // 0.01 км/ч (2 байта)
+  #         int16_t inst_incline = (int16_t)(incline * 10);              // 0.1% (2 байта, знаковое)
+  #         uint32_t total_distance = (uint32_t)(distance_km * 1000);    // Метры (3 байта)
+  #         uint16_t elapsed_time = (uint16_t)(time_min * 60);           // Секунды (2 байта)
+
+  #         uint16_t flags = 0x100C;  // 0x1000 (Elapsed Time) + 0x0008 (Inclination) + 0x0004 (Total Distance)
+
+  #         std::vector<uint8_t> treadmillData;
+
+  #         // Flags (2 байта)
+  #         treadmillData.push_back(flags & 0xFF);
+  #         treadmillData.push_back((flags >> 8) & 0xFF);
+
+  #         // Instantaneous Speed (2 байта)
+  #         treadmillData.push_back(inst_speed & 0xFF);
+  #         treadmillData.push_back((inst_speed >> 8) & 0xFF);
+
+  #         // Total Distance (3 байта)
+  #         treadmillData.push_back(total_distance & 0xFF);
+  #         treadmillData.push_back((total_distance >> 8) & 0xFF);
+  #         treadmillData.push_back((total_distance >> 16) & 0xFF);
+
+  #         // Inclination and Ramp Angle Setting (2 байта)
+  #         treadmillData.push_back(inst_incline & 0xFF);
+  #         treadmillData.push_back((inst_incline >> 8) & 0xFF);
+
+  #         // Elapsed Time (2 байта)
+  #         treadmillData.push_back(elapsed_time & 0xFF);
+  #         treadmillData.push_back((elapsed_time >> 8) & 0xFF);
+
+  #         id(treadmill_data_char).set_value(treadmillData);
+  #         id(treadmill_data_char).notify();
+
+  # - id: send_treadmill_data
+  #   then:
+  #     - lambda: |-
+  #         float speed_kph = id(treadmill_speed_sensor_uart).state;      // Скорость в км/ч
+  #         float incline = id(treadmill_incline_sensor_uart).state;      // Наклон в %
+  #         float distance_km = id(treadmill_distance_km).state;          // Дистанция в км
+  #         float time_min = id(treadmill_time_min).state;      // 10 минут для теста
+
+  #         // Проверка на NAN
+  #         if (isnan(speed_kph) || isnan(incline) || isnan(distance_km) || isnan(time_min)) {
+  #           ESP_LOGE("treadmill", "Одно из значений равно NAN");
+  #           return;
+  #         }
+
+  #         uint16_t inst_speed = (uint16_t)(speed_kph * 100);           // 0.01 км/ч (2 байта)
+  #         int16_t inst_incline = (int16_t)(incline * 10);              // 0.1% (2 байта, знаковое)
+  #         uint32_t total_distance = (uint32_t)(distance_km * 1000);    // Метры (3 байта)
+  #         uint16_t elapsed_time = (uint16_t)(time_min * 60);  // Время в секундах, 2 байта
+
+  #         // Логирование для отладки
+  #         ESP_LOGD("treadmill", "Speed: %u, Distance: %u, Incline: %d, Time: %u", inst_speed, total_distance, inst_incline, elapsed_time);
+
+  #         // Флаги для каждого параметра
+  #         uint16_t flags = 0x0000; // Базовые флаги
+  #         if (inst_speed >= 0) flags |= 0x0000; // Speed присутствует (бит 0 = 0)
+  #         if (total_distance > 0) flags |= 0x0004; // Distance (бит 2)
+  #         if (inst_incline != 0) flags |= 0x0008; // Incline (бит 3)
+  #         if (elapsed_time > 0) flags |= 0x0400; // Elapsed Time (бит 11)
+
+
+  #         std::vector<uint8_t> treadmillData;
+  #         treadmillData.push_back(flags & 0xFF);          // Младший байт флага
+  #         treadmillData.push_back((flags >> 8) & 0xFF);  // Старший байт флага
+
+  #         // Добавляем параметры в порядке FTMS
+  #         // Instantaneous Speed (если бит 0 = 0)
+  #         if (!(flags & 0x0001)) { // Бит 0 = 0 означает Speed присутствует
+  #           treadmillData.push_back(inst_speed & 0xFF);
+  #           treadmillData.push_back((inst_speed >> 8) & 0xFF);
+  #         }
+
+  #         // Total Distance (если бит 2 = 1)
+  #         if (flags & 0x0004) {
+  #           treadmillData.push_back(total_distance & 0xFF);
+  #           treadmillData.push_back((total_distance >> 8) & 0xFF);
+  #           treadmillData.push_back((total_distance >> 16) & 0xFF);
+  #         }
+
+  #         // Inclination (если бит 3 = 1)
+  #         if (flags & 0x0008) {
+  #           treadmillData.push_back(inst_incline & 0xFF);
+  #           treadmillData.push_back((inst_incline >> 8) & 0xFF);
+  #         }
+
+  #         // Elapsed Time (если бит 14 = 1)
+  #         if (flags & 0x0400) {
+  #           // Elapsed Time (2 байта)
+  #           treadmillData.push_back(elapsed_time & 0xFF);
+  #           treadmillData.push_back((elapsed_time >> 8) & 0xFF);
+  #         }
+
+  #         // Логирование байтов
+  #         for (auto byte : treadmillData) {
+  #           ESP_LOGD("treadmill", "Byte: 0x%02X", byte);
+  #         }
+
+  #         id(treadmill_data_char).set_value(treadmillData);
+  #         id(treadmill_data_char).notify();
+
+
   - id: send_treadmill_data
     then:
       - lambda: |-
-          float speed_kph = id(treadmill_speed_sensor_uart).state;          // Получаем текущую скорость с датчика
-          float incline = id(treadmill_incline_sensor_uart).state;          // Получаем текущий наклон с датчика
-          uint16_t inst_speed = (uint16_t)(speed_kph * 100);                // Преобразуем скорость в сотые для передачи
-          int16_t inst_incline = (int16_t)(incline * 10);                   // Преобразуем наклон в десятые для передачи
-          uint16_t flags = id(treadmill_flags);                             // Получаем флаги состояния дорожки
-          std::vector<uint8_t> treadmillData(6, 0);                         // Формируем массив данных для BLE
-          treadmillData[0] = (uint8_t)(flags & 0xFF);                       // Младший байт флагов
-          treadmillData[1] = (uint8_t)(flags >> 8);                         // Старший байт флагов
-          treadmillData[2] = (uint8_t)(inst_speed & 0xFF);                  // Младший байт скорости
-          treadmillData[3] = (uint8_t)(inst_speed >> 8);                    // Старший байт скорости
-          treadmillData[4] = (uint8_t)(inst_incline & 0xFF);                // Младший байт наклона
-          treadmillData[5] = (uint8_t)(inst_incline >> 8);                  // Старший байт наклона
-          id(treadmill_data_char).set_value(treadmillData);                 // Устанавливаем данные в характеристику BLE
-          id(treadmill_data_char).notify();                                 // Отправляем уведомление через BLE
+          float speed_kph = id(treadmill_speed_sensor_uart).state;
+          float incline = id(treadmill_incline_sensor_uart).state;
+          float distance_km = id(treadmill_distance_km).state;
+          float time_min = id(treadmill_time_min).state;
+
+          if (isnan(speed_kph) || isnan(incline) || isnan(distance_km) || isnan(time_min)) {
+            ESP_LOGE("treadmill", "Одно из значений равно NAN");
+            return;
+          }
+
+          uint16_t inst_speed = (uint16_t)(speed_kph * 100);             // 0.01 км/ч, 2 байта
+          int16_t inst_incline = (int16_t)(incline * 10);                  // 0.1%, 2 байта
+          uint32_t total_distance = (uint32_t)(distance_km * 1000);        // метры, 3 байта
+          uint16_t elapsed_time = (uint16_t)(time_min * 60);               // секунды, 2 байта
+
+          ESP_LOGD("treadmill", "Speed: %u, Distance: %u, Incline: %d, Time: %u",
+                  inst_speed, total_distance, inst_incline, elapsed_time);
+
+          // Формируем флаги:
+          // Speed всегда передаётся (бит 0 = 0)
+          // Если дистанция > 0, устанавливаем флаг 0x0004 (бит 2)
+          // Если наклон требуется, устанавливаем флаг 0x0008 (бит 3) – при этом будут переданы 4 байта: 2 для наклона и 2 для Ramp Angle
+          // Если время > 0, устанавливаем флаг 0x0400 (бит 10)
+          uint16_t flags = 0x0000;
+          if (total_distance > 0) flags |= 0x0004; // Total Distance Present
+          // Всегда включаем наклон, если нужно поддерживать возможность его регулировки:
+          flags |= 0x0008; // Incline and Ramp Angle Setting Present
+          if (elapsed_time > 0)   flags |= 0x0400; // Elapsed Time Present
+
+
+          std::vector<uint8_t> treadmillData;
+          // Флаги (2 байта, Little Endian)
+          treadmillData.push_back(flags & 0xFF);
+          treadmillData.push_back((flags >> 8) & 0xFF);
+
+          // 1. Instantaneous Speed (2 байта)
+          treadmillData.push_back(inst_speed & 0xFF);
+          treadmillData.push_back((inst_speed >> 8) & 0xFF);
+
+          // 2. Total Distance (3 байта)
+          if (flags & 0x0004) {
+            treadmillData.push_back(total_distance & 0xFF);
+            treadmillData.push_back((total_distance >> 8) & 0xFF);
+            treadmillData.push_back((total_distance >> 16) & 0xFF);
+          } else {
+            treadmillData.push_back(0x00);
+            treadmillData.push_back(0x00);
+            treadmillData.push_back(0x00);
+          }
+
+          // 3. Inclination (2 байта) – всегда, поскольку мы включили флаг
+          treadmillData.push_back(inst_incline & 0xFF);
+          treadmillData.push_back((inst_incline >> 8) & 0xFF);
+
+          // 4. Ramp Angle Setting (2 байта) – заглушка, если не используется
+          treadmillData.push_back(0x00);
+          treadmillData.push_back(0x00);
+
+          // 5. Elapsed Time (2 байта)
+          if (flags & 0x0400) {
+            treadmillData.push_back(elapsed_time & 0xFF);
+            treadmillData.push_back((elapsed_time >> 8) & 0xFF);
+          } else {
+            treadmillData.push_back(0x00);
+            treadmillData.push_back(0x00);
+          }
+
+
+          // Логируем байты
+          for (size_t i = 0; i < treadmillData.size(); ++i) {
+            ESP_LOGD("treadmill", "Byte %2d: 0x%02X", i, treadmillData[i]);
+          }
+
+          id(treadmill_data_char).set_value(treadmillData);
+          id(treadmill_data_char).notify();
+
+
 
 # Скрипт обновляет зоны пульса на основе возраста и пола пользователя, отображая информацию в интерфейсе.
   - id: update_heart_rate_zones
@@ -826,59 +1027,38 @@ script:
                    id(target_heart_rate_min), id(target_heart_rate_max));
           id(selected_data).publish_state(buffer);                          // Обновляем текстовый сенсор в интерфейсе
 
-
 interval:
-  # Интервал отправляет команды скорости каждые 500 мс, если мотор работает и скорость достигнута
   - interval: 500ms
     then:
       - if:
           condition:
-            # Проверяем, что мотор работает и текущая скорость равна целевой
-            lambda: 'return id(motor_running) && id(target_speed) == id(target_speed_goal);' 
+            lambda: 'return id(motor_running);'
           then:
+            # Управление скоростью
             - lambda: |-
-                char buffer[13];                                                        // Создаём буфер для команды UART (например, "[SETSPD:010]")
-                snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));    // Формируем команду с текущей скоростью (внутренний формат: 1 км/ч = 10)
-                id(uart_bus)->write_str(buffer);                                        // Отправляем команду через UART для поддержания скорости
+                char speed_buffer[13];
+                snprintf(speed_buffer, sizeof(speed_buffer), "[SETSPD:%03d]", id(target_speed));
+                id(uart_bus)->write_str(speed_buffer);
+                ESP_LOGI("treadmill", "Speed sent: %s", speed_buffer);
 
-  # Интервал управляет наклоном беговой дорожки, отправляя команды каждую секунду при активном моторе
-  - interval: 1s
+
+  - interval: 700ms
     then:
-      - if:
-          condition:
-            # Выполняется только если мотор работает
-            lambda: 'return id(motor_running);'                                 
-          then:
-            - if:
-                condition:
-                  # Проверяем, прошло ли менее 10 секунд с момента загрузки
-                  lambda: 'return (millis() - id(boot_time)) < 10000;'
-                then:
-                  - lambda: |-
-                      char buffer[13];                                            // Создаём буфер для команды UART
-                      snprintf(buffer, sizeof(buffer), "[SETINC:000]");           // Формируем команду для установки наклона в 0
-                      id(uart_bus)->write_str(buffer);                            // Отправляем команду через UART для фиксации наклона в 0 при старте
-                      //ESP_LOGI("treadmill", "Boot interval: Sent [SETINC:000], Elapsed: %lu ms", millis() - id(boot_time)); 
-                else:
-                  - if:
-                      condition:
-                        # Проверяем, активен ли наклон и прошло ли менее 25 секунд с последней команды
-                        lambda: 'return id(incline_active) && (millis() - id(incline_set_time)) < 25000;' 
-                      then:
-                        - lambda: |-
-                            char buffer[13];                                                            // Создаём буфер для команды UART
-                            snprintf(buffer, sizeof(buffer), "[SETINC:%03d]", id(target_incline_goal)); // Формируем команду с целевым наклоном (1% = 30 единиц)
-                            id(uart_bus)->write_str(buffer);                                            // Отправляем команду через UART для установки наклона
-                            //ESP_LOGI("treadmill", "Incline command sent: %s, Goal: %d, Elapsed: %lu ms", buffer, id(target_incline_goal), millis() - id(incline_set_time)); 
-                      else:
-                        - if:
-                            condition:
-                              # Проверяем, активен ли наклон после истечения 25 секунд
-                              lambda: 'return id(incline_active);'
-                            then:
-                              - lambda: |-
-                                  id(incline_active) = false;                                         // Отключаем флаг активности наклона после 25 секунд
-                                  //ESP_LOGI("treadmill", "Incline sending stopped after 25s"); 
+      # Управление наклоном
+      - lambda: |-
+          char incline_buffer[13];
+          // Если двигатель работает, отправляем текущую цель наклона
+          if (id(motor_running)) {
+            snprintf(incline_buffer, sizeof(incline_buffer), "[SETINC:%03d]", id(target_incline_goal));
+            id(uart_bus)->write_str(incline_buffer);
+            //ESP_LOGI("treadmill", "Incline sent (running): %s", incline_buffer);
+          }
+          // Если двигатель выключен, но наклон ещё не 0, возвращаем в 0
+          else if (id(treadmill_incline_feedback_sensor).state > 0) {
+            snprintf(incline_buffer, sizeof(incline_buffer), "[SETINC:000]");
+            id(uart_bus)->write_str(incline_buffer);
+            //ESP_LOGI("treadmill", "Incline sent (reset to 0): %s", incline_buffer);
+          }
 
   # Интервал запускает интервальную тренировку (HIIT) каждую секунду при выполнении условий
   - interval: 1s
@@ -896,12 +1076,8 @@ interval:
     then:
       - if:
           condition:
-            # Проверяем, что мотор работает, включён авторежим и разминка завершена
-            lambda: 'return id(motor_running) && id(auto_mode) && !id(warm_up_active);' 
+            lambda: 'return id(motor_running) && id(auto_mode) && !id(warm_up_active) && id(remaining_cool_down_time) <= 0;'
           then:
-            - lambda: |-
-                //ESP_LOGI("treadmill", "Adjust Speed Interval: AutoMode=%d, WarmUpActive=%d", id(auto_mode), id(warm_up_active)); 
-            # Выполняем скрипт регулировки скорости на основе пульса
             - script.execute: adjust_speed_by_pulse
 
   # Интервал плавно изменяет скорость каждые 2 секунды, если текущая скорость отличается от целевой
@@ -909,16 +1085,9 @@ interval:
     then:
       - if:
           condition:
-            lambda: |-
-              // Проверяем, что мотор работает, скорость не равна целевой и разминка завершена
-              bool should_run = id(motor_running) && id(target_speed) != id(target_speed_goal) && !id(warm_up_active); 
-              //ESP_LOGI("treadmill", "Smooth Speed Check: MotorRunning=%d, TargetSpeed=%d, SpeedGoal=%d, WarmUpActive=%d, ShouldRun=%d", 
-                       //id(motor_running), id(target_speed), id(target_speed_goal), id(warm_up_active), should_run);
-              // Возвращаем результат проверки
-              return should_run;                                            
+            lambda: 'return id(motor_running) && id(target_speed) != id(target_speed_goal) && !id(warm_up_active) && id(remaining_cool_down_time) <= 0;'
           then:
-            # Выполняем скрипт плавного изменения скорости
-            - script.execute: smooth_speed                                    
+            - script.execute: smooth_speed                             
 
   # Интервал управляет разминкой каждую секунду, обновляя время и вызывая логику разминки
   - interval: 1s
@@ -965,6 +1134,7 @@ interval:
 button:
   - platform: template
     name: "Start Treadmill"
+    id: start_treadmill_button
     on_press:
       - if:
           condition:
@@ -986,14 +1156,13 @@ button:
     id: speed_up_button
     on_press:
       - lambda: |-
-          if (id(target_speed) < 120) {
+          if (id(motor_running) && id(target_speed) < 120) {
             id(target_speed) += 1;
             id(target_speed_goal) = id(target_speed);
-            id(motor_running) = true;
             id(set_speed).publish_state(id(target_speed) / 10.0);
-            char buffer[13];
-            snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
-            id(uart_bus)->write_str(buffer);
+            //char buffer[13];
+            //snprintf BUFFER, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
+            //id(uart_bus)->write_str(buffer);
           }
 
   - platform: template
@@ -1002,14 +1171,43 @@ button:
     id: speed_down_button
     on_press:
       - lambda: |-
-          if (id(target_speed) > 6) {
+          if (id(motor_running) && id(target_speed) > 6) {
             id(target_speed) -= 1;
             id(target_speed_goal) = id(target_speed);
-            id(motor_running) = true;
             id(set_speed).publish_state(id(target_speed) / 10.0);
-            char buffer[13];
-            snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
-            id(uart_bus)->write_str(buffer);
+            //char buffer[13];
+            //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
+            //id(uart_bus)->write_str(buffer);
+          }
+
+  - platform: template
+    name: "Incline +1"
+    internal: true
+    id: incline_up_button
+    on_press:
+      - lambda: |-
+          if (id(motor_running)) {
+            float current_incline = id(set_incline).state;
+            float new_incline = current_incline + 1.0;
+            if (new_incline <= 15.0) {
+              id(set_incline).publish_state(new_incline);
+              ESP_LOGI("treadmill", "Incline increased to %.1f%%", new_incline);
+            }
+          }
+
+  - platform: template
+    name: "Incline -1"
+    internal: true
+    id: incline_down_button
+    on_press:
+      - lambda: |-
+          if (id(motor_running)) {
+            float current_incline = id(set_incline).state;
+            float new_incline = current_incline - 1.0;
+            if (new_incline >= 0.0) {
+              id(set_incline).publish_state(new_incline);
+              ESP_LOGI("treadmill", "Incline decreased to %.1f%%", new_incline);
+            }
           }
 
 # Сенсоры
@@ -1019,7 +1217,8 @@ sensor:
     id: treadmill_speed_feedback_sensor
     unit_of_measurement: "km/h"
     accuracy_decimals: 1
-    #update_interval: 500ms
+    update_interval: 1.2s
+    entity_category: diagnostic
     icon: "mdi:run"
     lambda: |-
       return id(treadmill_speed_feedback) / 10.0;
@@ -1029,10 +1228,12 @@ sensor:
     id: treadmill_incline_feedback_sensor
     unit_of_measurement: "%"
     accuracy_decimals: 1
-    #update_interval: 500ms
+    entity_category: diagnostic
+    update_interval: 1.1s
     icon: "mdi:angle-acute"
     lambda: |-
       return id(treadmill_incline_feedback) / 10.0;
+
 
 
   - platform: template
@@ -1092,6 +1293,7 @@ sensor:
     accuracy_decimals: 2
     update_interval: 1s
     icon: "mdi:map-marker-distance"
+
 
   - platform: template
     name: "Treadmill Time"
@@ -1203,11 +1405,11 @@ sensor:
     icon: "mdi:battery"
 
 # BLE
-esp32_ble_tracker:
-  scan_parameters:
-    interval: 1100ms
-    window: 300ms
-    active: false
+# esp32_ble_tracker:
+#   scan_parameters:
+#     interval: 1100ms
+#     window: 300ms
+#     active: false
 
 ble_client:
   - mac_address: "C9:5A:91:C1:92:58"
@@ -1228,7 +1430,6 @@ esp32_ble_server:
   model:  Treadmill Controller
   manufacturer: "ESP32-S3"
   firmware_version: "1.0.0"
-  manufacturer_data: [0xFF, 0xFF, 0x4B, 0x49, 0x43, 0x4B, 0x52, 0x20, 0x52, 0x55, 0x4E, 0x20, 0x33, 0x36, 0x42, 0x36]
   on_connect:
     - globals.set:
         id: ble_client_connected
@@ -1252,9 +1453,191 @@ esp32_ble_server:
           notify: true
           read: true
           value: !lambda 'return id(treadmill_data_char).get_value();'
-    - uuid: "0000180D-0000-1000-8000-00805F9B34FB"
-      advertise: true
-      characteristics:
+        # Characteristic: Fitness Machine Feature
+        - uuid: "00002ACC-0000-1000-8000-00805F9B34FB"
+          id: ftms_feature_char
+          read: true
+          value: !lambda |-
+            uint32_t features = 0x108C;
+            std::vector<uint8_t> data;
+            data.push_back(features & 0xFF);
+            data.push_back((features >> 8) & 0xFF);
+            data.push_back((features >> 16) & 0xFF);
+            data.push_back((features >> 24) & 0xFF);
+            return data;
+
+        # Characteristic: Fitness Machine Status (заглушка)
+        - uuid: "00002ADA-0000-1000-8000-00805F9B34FB"
+          id: ftms_status_char
+          notify: true
+          read: true
+          value: !lambda |-
+            return std::vector<uint8_t>{0x00};  // General status, idle
+
+        # Characteristic: Supported Speed Range (заглушка)
+        - uuid: "00002AD4-0000-1000-8000-00805F9B34FB"
+          id: supported_speed_range
+          read: true
+          value: !lambda |-
+            // min: 0.0 км/ч (0), max: 20.0 км/ч (2000), increment: 0.1 км/ч (10)
+            return std::vector<uint8_t>{0x00, 0x00, 0xD0, 0x07, 0x0A, 0x00};
+
+        # Characteristic: Supported Inclination Range (заглушка)
+        - uuid: "00002AD5-0000-1000-8000-00805F9B34FB"
+          id: supported_incline_range
+          read: true
+          value: !lambda |-
+            // min: -10.0% (-100), max: 15.0% (150), increment: 0.1% (1)
+            return std::vector<uint8_t>{0x9C, 0xFF, 0x96, 0x00, 0x01, 0x00};
+
+        # Characteristic: Supported Resistance Level Range (заглушка)
+        - uuid: "00002AD6-0000-1000-8000-00805F9B34FB"
+          id: supported_resistance_range
+          read: true
+          value: !lambda |-
+            // min: 0, max: 100, increment: 1
+            return std::vector<uint8_t>{0x00, 0x00, 0x64, 0x00, 0x01, 0x00};
+        # Characteristic: Fitness Machine Control Point
+        # Custom FTMS Control (только для команды Старт)
+        - uuid: "00002AD9-0000-1000-8000-00805F9B34FB"
+          id: ftms_control_point_char
+          write: true
+          on_write:
+            then:
+              - lambda: |-
+                  auto &data = x;
+                  if (data.empty()) return;
+
+                  uint8_t op_code = data[0];
+                  ESP_LOGI("FTMS", "Получена команда: 0x%02X", op_code);
+
+                  ESP_LOGI("FTMS", "Получен RAW-запрос (всего %d байт):", data.size());
+                  for (size_t i = 0; i < data.size(); ++i) {
+                    ESP_LOGI("FTMS", "  Byte[%d]: 0x%02X", i, data[i]);
+                  }
+
+
+                  if (op_code == 0x02 && data.size() >= 3) {
+                      std::string hex_data;
+                      for (size_t i = 0; i < data.size(); ++i) {
+                          char buf[4];
+                          snprintf(buf, sizeof(buf), "%02X ", data[i]);
+                          hex_data += buf;
+                      }
+                      ESP_LOGI("FTMS", "Полученные данные для скорости: %s", hex_data.c_str());
+
+                      uint16_t speed_val = data[1] | (data[2] << 8);
+                      float requested_kmh = speed_val / 100.0f;
+                      float current_kmh = id(treadmill_speed_sensor_uart).state;
+
+                      ESP_LOGI("FTMS", "Получена команда на скорость: %.2f км/ч", requested_kmh);
+
+                      if (fabs(requested_kmh - current_kmh) < 0.2f) {
+                          // Обнаружено нажатие "+/-1 км/ч"
+                          float new_speed = current_kmh + 1.0f;
+
+                          // Если текущая скорость уже минимальна, не уменьшаем
+                          if (current_kmh <= 1.0f) {
+                              ESP_LOGI("FTMS", "Минимальная скорость достигнута (%.2f км/ч), команда проигнорирована", current_kmh);
+                              return;
+                          }
+
+                          // Корректируем диапазон
+                          if (new_speed < 1.0f) new_speed = 1.0f;
+                          if (new_speed > 12.0f) new_speed = 12.0f;
+
+                          ESP_LOGI("FTMS", "Команда +/-1 км/ч. Новая скорость: %.2f км/ч", new_speed);
+                          id(set_speed).publish_state(new_speed);
+                      } else {
+                          float final_speed = requested_kmh;
+                          if (final_speed < 1.0f && final_speed != 0.0f) {
+                              ESP_LOGI("FTMS", "Получена слишком низкая скорость %.2f км/ч. Игнорируем", final_speed);
+                              return;
+                          }
+                          if (final_speed > 12.0f) final_speed = 12.0f;
+                          ESP_LOGI("FTMS", "Абсолютная установка скорости: %.2f км/ч", final_speed);
+                          id(set_speed).publish_state(final_speed);
+                      }
+
+
+
+                  } else if (op_code == 0x03 && data.size() >= 3) {
+                        std::string hex_data;
+                        for (size_t i = 0; i < data.size(); ++i) {
+                            char buf[4];
+                            snprintf(buf, sizeof(buf), "%02X ", data[i]);
+                            hex_data += buf;
+                        }
+                        ESP_LOGI("FTMS", "Полученные данные для наклона: %s", hex_data.c_str());
+
+                        uint16_t incline_val = data[1] | (data[2] << 8);
+                        float requested_incline = incline_val / 10.0f;
+                        float current_incline = id(treadmill_incline_sensor_uart).state;
+
+                        ESP_LOGI("FTMS", "Получена команда на наклон: %.2f%%", requested_incline);
+                        
+                        if (fabs(requested_incline - current_incline) < 0.2f) {
+                            float new_incline = current_incline + 0.1f;
+                            if (new_incline > 15.0f) new_incline = 15.0f;
+                            ESP_LOGI("FTMS", "Команда +1наклона. Новый наклон: %.2f%%", new_incline);
+                            id(set_incline).publish_state(new_incline);
+                        } else {
+                            if (requested_incline > 15.0f) requested_incline = 15.0f;
+                            ESP_LOGI("FTMS", "Абсолютная установка наклона: %.2f%%", requested_incline);
+                            id(set_incline).publish_state(requested_incline);
+                        }
+                    
+
+
+                  } else if (op_code == 0x07) {
+                    ESP_LOGI("FTMS", "Старт — вызов start_manual");
+                    id(start_manual).execute();
+
+                    // Ответ Control Point'у
+                    std::vector<uint8_t> response = {0x80, 0x07, 0x01};
+                    id(ftms_control_point_char).set_value(response);
+                    id(ftms_control_point_char).notify();
+
+                    ESP_LOGI("FTMS", "Отправлен ответ: 0x80 0x07 0x01");
+
+                  } else if (op_code == 0x08) {
+                    ESP_LOGI("FTMS", "Стоп — вызов stop_program");
+                    id(stop_program).execute();
+
+                    // Ответ Control Point'у
+                    std::vector<uint8_t> response = {0x80, 0x08, 0x01};
+                    id(ftms_control_point_char).set_value(response);
+                    id(ftms_control_point_char).notify();
+
+                    ESP_LOGI("FTMS", "Отправлен ответ: 0x80 0x08 0x01");
+
+                  } else if (op_code == 0x00) {
+                    ESP_LOGI("FTMS", "Получен Request Control");
+
+                    // Сформируем корректный ответ:
+                    // [0x80, 0x00, 0x01] = Response Code, Request Control, Success
+                    std::vector<uint8_t> response{0x80, 0x00, 0x01};
+
+                    // Отправляем ответ
+                    id(ftms_control_point_char).set_value(response);
+                    id(ftms_control_point_char).notify();
+
+                    ESP_LOGI("FTMS", "Ответ отправлен: 0x80 0x00 0x01");
+
+                  } else {
+                    ESP_LOGW("FTMS", "Неизвестная команда: 0x%02X (данных: %d)", op_code, data.size());
+                    std::string hex;
+                    for (uint8_t b : data) {
+                      char buf[4];
+                      snprintf(buf, sizeof(buf), "%02X ", b);
+                      hex += buf;
+                    }
+                    ESP_LOGW("FTMS", "Полные данные: %s", hex.c_str());
+                  }
+
+    # - uuid: "0000180D-0000-1000-8000-00805F9B34FB"
+    #   advertise: true
+    #   characteristics:
         - uuid: "00002A37-0000-1000-8000-00805F9B34FB"
           id: heart_rate_data
           notify: true
@@ -1268,6 +1651,51 @@ esp32_ble_server:
             hr_data[0] = 0x06;
             hr_data[1] = heart_rate;
             return hr_data;
+
+# esp32_ble_server:
+#   model:  Treadmill Controller
+#   manufacturer: "ESP32-S3"
+#   firmware_version: "1.0.0"
+#   #manufacturer_data: [0xFF, 0xFF, 0x4B, 0x49, 0x43, 0x4B, 0x52, 0x20, 0x52, 0x55, 0x4E, 0x20, 0x33, 0x36, 0x42, 0x36]
+#   on_connect:
+#     - globals.set:
+#         id: ble_client_connected
+#         value: 'true'
+#     - text_sensor.template.publish:
+#         id: ble_server_status
+#         state: "Подключен"
+#   on_disconnect:
+#     - globals.set:
+#         id: ble_client_connected
+#         value: 'false'
+#     - text_sensor.template.publish:
+#         id: ble_server_status
+#         state: "Отключен"
+#   services:
+#     - uuid: "00001826-0000-1000-8000-00805F9B34FB"
+#       advertise: true
+#       characteristics:
+#         - uuid: "00002ACD-0000-1000-8000-00805F9B34FB"
+#           id: treadmill_data_char
+#           notify: true
+#           read: true
+#           value: !lambda 'return id(treadmill_data_char).get_value();'
+#     - uuid: "0000180D-0000-1000-8000-00805F9B34FB"
+#       advertise: true
+#       characteristics:
+#         - uuid: "00002A37-0000-1000-8000-00805F9B34FB"
+#           id: heart_rate_data
+#           notify: true
+#           read: true
+#           value: !lambda |-
+#             if (isnan(id(heart_rate_sensor).state)) {
+#               return std::vector<uint8_t>{};
+#             }
+#             uint8_t heart_rate = (uint8_t)(id(heart_rate_sensor).state);
+#             std::vector<uint8_t> hr_data(2, 0);
+#             hr_data[0] = 0x06;
+#             hr_data[1] = heart_rate;
+#             return hr_data;
 
 # Бинарные сенсоры
 binary_sensor:
@@ -1318,6 +1746,32 @@ binary_sensor:
       - delayed_on: 50ms
       - delayed_off: 50ms
 
+  - platform: gpio
+    pin:
+      number: 20
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Incline Up Button"
+    entity_category: diagnostic
+    on_press:
+      - button.press: incline_up_button
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+
+  - platform: gpio
+    pin:
+      number: 21
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Incline Down Button"
+    entity_category: diagnostic
+    on_press:
+      - button.press: incline_down_button
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+      
 # Текстовые сенсоры
 text_sensor:
   - platform: template
@@ -1532,23 +1986,42 @@ number:
             //id(uart_bus)->write_str(buffer);            // Отправляем команду
           //}
 
-# Ползунок наклона
+# # Ползунок наклона для 0-5% реальный
+#   - platform: template
+#     name: "Set Incline"
+#     id: set_incline
+#     min_value: 0.0
+#     max_value: 5.0  # Реальный наклон до 5%
+#     step: 0.5       # Шаг 0.1%
+#     unit_of_measurement: "%"
+#     icon: "mdi:angle-acute"
+#     optimistic: true
+#     on_value:
+#       - lambda: |-
+#           float incline = x;  // Реальный процент (0–5.0)
+#           int incline_value = (int)(incline * 30);  // 1% = 30 единиц, 5% = 150 единиц
+#           id(target_incline_goal) = incline_value;
+#           id(target_incline) = incline_value; //******************тест установил для теста отправки в сенсор, удалить позже
+#           id(incline_set_time) = millis();
+#           id(incline_active) = true;
+#           ESP_LOGI("treadmill", "Set Incline updated: %.1f%, Goal set to %d", incline, incline_value);
+
+# Ползунок наклона для 0-15% 
   - platform: template
     name: "Set Incline"
     id: set_incline
     min_value: 0.0
-    max_value: 5.0  # Реальный наклон до 5%
-    step: 0.5       # Шаг 0.1%
+    max_value: 15.0
+    step: 1.0
     unit_of_measurement: "%"
     icon: "mdi:angle-acute"
     optimistic: true
     on_value:
       - lambda: |-
-          float incline = x;  // Реальный процент (0–5.0)
-          int incline_value = (int)(incline * 30);  // 1% = 30 единиц, 5% = 150 единиц
+          float incline = x;  // Реальный процент (0–15.0)
+          int incline_value = (int)(incline * 10);  // 1% = 10 единиц
           id(target_incline_goal) = incline_value;
-          id(incline_set_time) = millis();
-          id(incline_active) = true;
+          id(target_incline) = incline_value; // Тест, удалить позже
           ESP_LOGI("treadmill", "Set Incline updated: %.1f%, Goal set to %d", incline, incline_value);
 
   - platform: template
