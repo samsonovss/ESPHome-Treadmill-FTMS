@@ -1,4 +1,4 @@
-# ESPHome для беговой дорожки с поддержкой FTMS (Zwift, Kinomap для Android, FitShow, Kinni) — FTMS добавлен 9 апреля 2025
+# ESPHome для беговой дорожки с поддержкой FTMS (Zwift, Kinomap для Android, FitShow, Kinni)
 
 **[English version](README.md)**
 
@@ -102,6 +102,9 @@ ble_client:
 - Интеграция датчика расстояния для управления скоростью без кнопок.
 - Передача данных через MQTT для интеграции вне Home Assistant.
 - Создание веб-интерфейса для управления без Home Assistant.
+
+## История изменений
+- 9 апреля 2025: Начальная поддержка FTMS для Kinomap (Android), FitShow и Kinni.
 
 ## Авторы
 Создано [@samsonovss](https://t.me/samsonovss) при поддержке Grok, ИИ от xAI.
