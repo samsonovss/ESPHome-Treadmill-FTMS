@@ -1,28 +1,28 @@
-# ESPHome Treadmill with Zwift and FTMS Support (ZWift, Kinomap(android), FitShow, Kinni)
+# ESPHome Treadmill with FTMS Support (Zwift, Kinomap for Android, FitShow, Kinni) - FTMS Added April 9, 2025
 
 **[Русская версия / Russian version](README.ru.md)**
 
 ## About the Project
-Turn your old treadmill into a smart training companion! ESPHomeTreadmill is an onboard computer based on the ESP32 S3 with ESPHome firmware, adding support for Zwift, intelligent heart rate-based programs, and UART control. It’s perfect for treadmills with PSA(xx) series boards but flexible enough to adapt to any UART-enabled treadmill. Minimal cost, maximum potential!
+Transform your old treadmill into a smart training companion! ESPHomeTreadmill is an onboard computer based on the ESP32-S3 with ESPHome firmware. It adds support for Zwift, Kinomap, FitShow, and Kinni, along with intelligent heart rate-based programs and UART control. Designed for treadmills with PSA(xx) series boards, it’s flexible enough to adapt to any UART-enabled treadmill. Minimal cost, maximum potential!
 
 ## How It Works
-The project leverages the ESP32 S3 to communicate with the treadmill’s board (e.g., PSA(xx)) via UART. Commands like `[SETSPD:010]` (1 km/h) or `[SETINC:000]` (0%) were discovered by analyzing traffic with a UART logger. The microcontroller processes this data, converts it into real speed and incline values, and transmits them via Bluetooth Low Energy (BLE) to apps like Zwift or stores them locally for analysis in Grafana.
+The project uses the ESP32-S3 to communicate with the treadmill’s board (e.g., PSA(xx)) via UART. Commands like `[SETSPD:010]` (1 km/h) or `[SETINC:000]` (0%) were reverse-engineered by analyzing traffic with a UART logger. The microcontroller processes this data, converts it into real speed and incline values, and transmits them via Bluetooth Low Energy (BLE) to apps like Zwift or logs them locally for analysis in Grafana.
 
-A heart rate monitor connects via BLE, providing pulse data. Real-time intelligent algorithms analyze the heart rate and smoothly adjust the treadmill’s settings to maintain the target training zone. For example, if your pulse drifts outside the goal, the speed adjusts automatically, delivering a personalized and effective workout.
+A heart rate monitor connects via BLE to provide pulse data. Real-time intelligent algorithms analyze the heart rate and smoothly adjust the treadmill’s settings to maintain your target training zone. For example, if your pulse drifts outside the goal, the speed adjusts automatically for a personalized and effective workout.
 
 ### Advantages
-- **Flexibility**: Works with any UART-supporting treadmill.
-- **Modernity**: Built on the powerful ESP32 S3 microcontroller.
-- **Affordability**: Requires minimal components.
+- **Flexibility**: Compatible with any UART-supporting treadmill.
+- **Modernity**: Powered by the robust ESP32-S3 microcontroller.
+- **Affordability**: Requires minimal hardware components.
 
 ## Recommended Hardware
-- **ESP32 S3** (highly recommended for performance and BLE support).
+- **ESP32-S3** (highly recommended for performance and BLE support).
 - **LM2596S**: Voltage converter from 12V to 5V (non-isolated).
 - **2-channel level shifter**: To match 5V (PSA(xx)) and 3.3V (ESP32 S3).
 - **Treadmill**: Ideally with a **[PSA(xx) board](image/PSA(XX)H.jpg)**, but any UART-capable model (RX-TX) will do.
  ![Treadmill Screenshot](image/PSA(XX)H.jpg)
 ## Connection
-- ESP32 S3:
+- **ESP32-S3**:
   - GPIO17 (TX): Transmits data to RX (Pin 5) on PSA(xx) through a level shifter.
   - GPIO18 (RX): Receives data from TX (Pin 4) on PSA(xx) through a level shifter.
   - GND: Common ground with the level shifter (3.3V side).
@@ -45,14 +45,16 @@ A heart rate monitor connects via BLE, providing pulse data. Real-time intellige
   - Input 12V: Receives power from Pin 1 (12V) of PSA(xx).
   - Output 5V: Provides power to the Vcc (HV) side of the level shifter.
   - GND: Common ground with PSA(xx) and the level shifter.
+ 
 ## Features
 ### Core Functions
 - **Zwift Support**: Full integration with the popular platform.
-![ESPHome Treadmill Zwift](image/Zwift.gif)
-- **Heart Rate Monitor**: Connection and zone calculation based on age and gender.
-- **Real Data**: Incline in percentages and speed calibration.
-- **Button Control**: Speed and incline adjustment via GPIO (with feedback).
-- **Manual Mode**: Training without a heart rate monitor.
+  ![ESPHome Treadmill Zwift](image/Zwift.gif)
+- **FTMS Support**: Added April 9, 2025, enabling compatibility with Kinomap, FitShow, and Kinni.
+- **Heart Rate Monitor**: Connects via BLE with zone calculation based on age and gender.
+- **Real Data**: Accurate incline percentages and speed calibration.
+- **Button Control**: Adjust speed and incline via GPIO with feedback.
+- **Manual Mode**: Train without a heart rate monitor.
 - **Local Storage**: Save runs and visualize them in Grafana.
 
 ### Smart Adjustment
@@ -71,8 +73,8 @@ A heart rate monitor connects via BLE, providing pulse data. Real-time intellige
 ### Training Programs
 - **Custom Zone**: Maintains a set pulse zone via speed adjustments.
 - **Fat Burning**: Zone 2 with smooth speed and incline control.
-- **Interval**: Switches between Zones 1 and 4 with auto-speed tuning.
-- **Recovery**: Keeps Zone 1 for light running.
+- **HIIT**: Switches between Zones 1 and 4 with auto-speed tuning.
+- **Recovery run**: Keeps Zone 1 for light running.
 
 ### Hassio Interface
 ![Hassio Interface](image/hassio.png)
@@ -82,8 +84,8 @@ The file (config.yaml) configures the ESP32 S3 to control the treadmill and conn
 - UART configuration for communicating with the treadmill (used to send and receive commands)
 ```yaml
 uart:
-  tx_pin: GPIO17    # Передача данных (TX) на GPIO17
-  rx_pin: GPIO18    # Приём данных (RX) на GPIO18
+  tx_pin: GPIO17    # Transmit data (TX) on GPIO17
+  rx_pin: GPIO18    # Receive data (RX) on GPIO18
 
 # Bluetooth Low Energy (BLE) configuration for connecting the heart rate monitor
 ble_client:
@@ -91,15 +93,14 @@ ble_client:
 ```
 
 ## Future Plans
-- FTMS standard support for Kinomap and iFit compatibility.
-- Interactive elevation maps and new training programs.
-- Display with a user-friendly interface.
-- Auto-incline support in Zwift.
-- All-in-one board design for easier assembly.
-- ESPHome component for seamless ecosystem integration.
-- Distance sensor (for button-free speed control).
-- MQTT data transmission (for integration beyond Home Assistant).
-- Web interface for control without Home Assistant integration.
+- Add interactive elevation maps and new training programs.
+- Develop a display with a user-friendly interface.
+- Enable auto-incline support in Zwift.
+- Design an all-in-one board for easier assembly.
+- Create an ESPHome component for seamless ecosystem integration.
+- Integrate a distance sensor for button-free speed control.
+- Implement MQTT data transmission for broader integration.
+- Build a web interface for control without Home Assistant.
 
 ## Authors
 Created by [@samsonovss](https://t.me/samsonovss) in collaboration with Grok, an AI developed by xAI.
