@@ -1,4 +1,10 @@
-# ESPHome для беговой дорожки с поддержкой FTMS (Zwift, Kinomap для Android, FitShow, Kinni)
+# Преобразуйте свою беговую дорожку с ESPHome FTMS через ESP32-S3 BLE
+
+### Поддерживаемые приложения
+- Zwift
+- Kinomap (Android)
+- FitShow
+- Kinni
 
 **[English version](README.md)**
 
