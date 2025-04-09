@@ -1,4 +1,4 @@
-# ESPHome Treadmill with Zwift and Future FTMS Support
+# ESPHome Treadmill with Zwift and FTMS Support (ZWift, Kinomap(android), FitShow, Kinni)
 
 **[Русская версия / Russian version](README.ru.md)**
 
