@@ -103,12 +103,12 @@ ble_client:
 - Build a web interface for control without Home Assistant.
 
 ## Authors
-Created by [@samsonovss](https://t.me/samsonovss) in collaboration with Grok, an AI developed by xAI.
+Created by [@samsonovss](https://t.me/samsonovss) with assistance from Grok, an AI developed by xAI.
 
 ## Support the Project
-If you’d like to support this project and help me keep it growing, consider buying me a coffee! You can send a donation via cryptocurrency:
+If you’d like to support this project and help it grow, consider buying me a coffee! Donations can be sent via cryptocurrency:
 - **BTC**: `bc1q3cza0kasutzes4hfddxuclmd9ghn5v7zw2nr5c`  
 - **USDT (TRC-20)**: `0x5dd5a346Dd64dfE938a60D7b24b633b1ACE01719`
   
-Any support matters — thank you!
+Every bit helps — thank you!
 
