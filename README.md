@@ -1,4 +1,4 @@
-# ESPHome Treadmill with FTMS Support (Zwift, Kinomap for Android, FitShow, Kinni) - FTMS Added April 9, 2025
+# ESPHome Treadmill with FTMS Support (Zwift, Kinomap for Android, FitShow, Kinni)
 
 **[Русская версия / Russian version](README.ru.md)**
 
@@ -101,6 +101,9 @@ ble_client:
 - Integrate a distance sensor for button-free speed control.
 - Implement MQTT data transmission for broader integration.
 - Build a web interface for control without Home Assistant.
+
+## Changelog
+- April 9, 2025: Initial FTMS support added for Kinomap (Android), FitShow, and Kinni.
 
 ## Authors
 Created by [@samsonovss](https://t.me/samsonovss) with assistance from Grok, an AI developed by xAI.
