@@ -34,7 +34,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
   - GPIO18 (RX): Receives data from TX (Pin 4) on PSA(xx) through a level shifter.
   - GND: Common ground with the level shifter (3.3V side).
   - 3.3V: Power supply for the Low Voltage (LV) side of the level shifter.
-- ESP32 S3 (Power Supply Connections):
+- **ESP32-S3** (Power Supply Connections):
   - LV (Low Voltage): 3.3V side connected to the ESP32.
   - HV (High Voltage): 5V side connected to PSA(xx).
   - GND (LV): Ground from the ESP32.
