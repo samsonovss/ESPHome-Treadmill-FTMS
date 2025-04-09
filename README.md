@@ -75,10 +75,10 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Smooth Reduction**: Lowers speed until pulse returns to Zone 1.
 - **Customizable Time**: Mirrors the warm-up logic.
 
-### Training Programs
+### Heart Rate-Based Training Programs
 - **Custom Zone**: Maintains a set pulse zone via speed adjustments.
 - **Fat Burning**: Zone 2 with smooth speed and incline control.
-- **HIIT**: Switches between Zones 1 and 4 with auto-speed tuning.
+- **HIIT**: Switches between Zones 1 and 4 based on heart rate with auto-speed tuning.
 - **Recovery run**: Keeps Zone 1 for light running.
 
 ### Hassio Interface
