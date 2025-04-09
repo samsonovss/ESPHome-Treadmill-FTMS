@@ -10,7 +10,7 @@
 **[Русская версия / Russian version](README.ru.md)**
 
 ## About the Project
-Transform your old treadmill into a smart training companion! ESPHomeTreadmill is an onboard computer based on the ESP32-S3 with ESPHome firmware. It adds support for Zwift, Kinomap, FitShow, and Kinni, along with intelligent heart rate-based programs and UART control. Designed for treadmills with PSA(xx) series boards, it’s flexible enough to adapt to any UART-enabled treadmill. Minimal cost, maximum potential!
+Transform your old treadmill into a smart training companion! Using ESP32-S3 and ESPHome firmware, you can add FTMS support for fitness apps via BLE, plus smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled treadmill. Minimal cost, maximum potential!
 
 ## How It Works
 The project uses the ESP32-S3 to communicate with the treadmill’s board (e.g., PSA(xx)) via UART. Commands like `[SETSPD:010]` (1 km/h) or `[SETINC:000]` (0%) were reverse-engineered by analyzing traffic with a UART logger. The microcontroller processes this data, converts it into real speed and incline values, and transmits them via Bluetooth Low Energy (BLE) to apps like Zwift or logs them locally for analysis in Grafana.
