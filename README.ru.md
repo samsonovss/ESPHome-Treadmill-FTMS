@@ -1,10 +1,10 @@
 # Превратите беговую дорожку в умную с FTMS на ESPHome и ESP32-S3 BLE
 
 ### Поддерживаемые приложения
-- Zwift
-- Kinomap (Android)
-- FitShow
-- Kinni
+- :white_check_mark: Zwift
+- :white_check_mark: Kinomap (Android)
+- :white_check_mark: FitShow
+- :white_check_mark: Kinni
 
 **[English version](README.md)**
 
