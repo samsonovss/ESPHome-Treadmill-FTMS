@@ -2,8 +2,7 @@
 
 ### Supported FTMS Apps
 - :white_check_mark: Zwift
-- :white_check_mark: Kinomap (Android)
-- :x: Kinomap (iOS)
+- :white_check_mark: Kinomap (Android/iOS)
 - :white_check_mark: FitShow
 - :white_check_mark: Kinni
 
@@ -111,6 +110,7 @@ ble_client:
 - Build a web interface for control without Home Assistant.
 
 ## Changelog
+- April 12, 2025: Added full FTMS support for Kinomap on iOS using shortened UUIDs.
 - April 9, 2025: Initial FTMS support added for Kinomap (Android), FitShow, and Kinni.
 
 ## Authors
