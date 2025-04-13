@@ -100,14 +100,14 @@ ble_client:
 
 ## Future Plans
 - :white_check_mark:Expanding FTMS support for Kinomap compatibility on iOS.
-- :x:Add interactive elevation maps and new training programs.
-- :x:Develop a display with a user-friendly interface.
-- Enable auto-incline support in Zwift.
-- Design an all-in-one board for easier assembly.
-- Create an ESPHome component for seamless ecosystem integration.
-- Integrate a distance sensor for button-free speed control.
-- Implement MQTT data transmission for broader integration.
-- Build a web interface for control without Home Assistant.
+- :hourglass_flowing_sand:Add interactive elevation maps and new training programs.
+- :hourglass_flowing_sand:Develop a display with a user-friendly interface.
+- :hourglass_flowing_sand:Enable auto-incline support in Zwift.
+- :hourglass_flowing_sand:Design an all-in-one board for easier assembly.
+- :hourglass_flowing_sand:Create an ESPHome component for seamless ecosystem integration.
+- :hourglass_flowing_sand:Integrate a distance sensor for button-free speed control.
+- :hourglass_flowing_sand:Implement MQTT data transmission for broader integration.
+- :hourglass_flowing_sand:Build a web interface for control without Home Assistant.
 
 ## Changelog
 - April 12, 2025:
