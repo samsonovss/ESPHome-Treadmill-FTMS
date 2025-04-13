@@ -2011,23 +2011,3 @@ number:
     initial_value: 5  # По умолчанию 5 минут
 
 
-  # - platform: template
-  #   name: "UART Baud Rate"
-  #   id: uart_baud_rate
-  #   min_value: 1000
-  #   max_value: 115200
-  #   step: 100
-  #   initial_value: 5000
-  #   optimistic: true
-  #   restore_value: yes
-  #   entity_category: config
-  #   icon: "mdi:swap-horizontal"
-  #   on_value:
-  #     - lambda: |-
-  #         id(uart_bus).flush();  // Очищаем буфер перед сменой скорости
-  #         uint32_t new_baud_rate = (uint32_t)x;  // Преобразуем значение ползунка в uint32_t
-  #         ESP_LOGD("UART", "Changing baud rate from %i to %i", id(uart_bus).get_baud_rate(), new_baud_rate);
-  #         if (id(uart_bus).get_baud_rate() != new_baud_rate) {
-  #           id(uart_bus).set_baud_rate(new_baud_rate);
-  #           id(uart_bus).load_settings();
-  #         }
