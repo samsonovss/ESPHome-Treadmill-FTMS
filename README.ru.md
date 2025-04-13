@@ -2,8 +2,7 @@
 
 ### Поддерживаемые приложения FTMS
 - :white_check_mark: Zwift
-- :white_check_mark: Kinomap (Android)
-- :x: Kinomap (iOS)
+- :white_check_mark: Kinomap (Android/iOS)
 - :white_check_mark: FitShow
 - :white_check_mark: Kinni
 
@@ -111,6 +110,9 @@ ble_client:
 - Создание веб-интерфейса для управления без Home Assistant.
 
 ## История изменений
+- 12 апреля 2025 года:
+  - Добавлена поддержка FTMS для Kinomap на iOS с использованием сокращённых UUID.
+  - Добавлена поддержка статусов FTMS (Training Status / Fitness Machine Status)
 - 9 апреля 2025: Начальная поддержка FTMS для Kinomap (Android), FitShow и Kinni.
 
 ## Авторы
