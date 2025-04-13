@@ -100,8 +100,8 @@ ble_client:
 
 ## Future Plans
 - :white_check_mark:Expanding FTMS support for Kinomap compatibility on iOS.
-- Add interactive elevation maps and new training programs.
-- Develop a display with a user-friendly interface.
+- :x:Add interactive elevation maps and new training programs.
+- :x:Develop a display with a user-friendly interface.
 - Enable auto-incline support in Zwift.
 - Design an all-in-one board for easier assembly.
 - Create an ESPHome component for seamless ecosystem integration.
