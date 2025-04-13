@@ -83,7 +83,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Recovery run**: Keeps Zone 1 for light running.
 
 ### Hassio Interface
-![Hassio Interface](image/hassio.png)
+![Hassio Interface](image/hassio.jpg)
 
 ## ESPHome Setup
 The file (config.yaml) configures the ESP32 S3 to control the treadmill and connect the heart rate monitor.
