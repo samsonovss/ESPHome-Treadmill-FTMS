@@ -110,7 +110,9 @@ ble_client:
 - Build a web interface for control without Home Assistant.
 
 ## Changelog
-- April 12, 2025: Added full FTMS support for Kinomap on iOS using shortened UUIDs.
+- April 12, 2025:
+  - Added full FTMS support for Kinomap on iOS using shortened UUIDs.
+  - Added support for FTMS statuses (Training Status / Fitness Machine Status).
 - April 9, 2025: Initial FTMS support added for Kinomap (Android), FitShow, and Kinni.
 
 ## Authors
