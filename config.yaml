@@ -165,7 +165,96 @@ uart:
                 ESP_LOGD("UART", "Не найдено команд в формате [КОМАНДА:ЗНАЧЕНИЕ]: %s", message);
               }
             }
+# выводит сообщения дебага, c фильтрацией
+# uart:
+#   - id: uart_bus
+#     tx_pin: 
+#       number: GPIO17
+#       inverted: false
+#     rx_pin: 
+#       number: GPIO18
+#       mode: 
+#         input: true
+#         pullup: true
+#       inverted: false
+#     baud_rate: 4900
+#     data_bits: 8
+#     parity: NONE
+#     stop_bits: 1
+#     rx_buffer_size: 512
+#     debug:
+#       direction: RX
+#       dummy_receiver: false  # Отключаем dummy_receiver
+#       after:
+#         timeout: 100ms  # Оставляем увеличенный таймаут
+#         bytes: 12  # Исправляем на 12 байт, чтобы вместить [SETSPD:XXX]
+#       sequence:
+#         - lambda: |-
+#             std::vector<uint8_t> filtered_bytes;
+#             filtered_bytes.reserve(30); // Ограничить размер
+#             for (auto byte : bytes) {
+#               if (byte != 0x00) {
+#                 filtered_bytes.push_back(byte);
+#               }
+#             }
+#             if (!filtered_bytes.empty()) {
+#               // Преобразуем байты в строку
+#               std::string message(filtered_bytes.begin(), filtered_bytes.end());
+#               UARTDebug::log_string(direction, filtered_bytes);  // Логируем для отладки
 
+#               // Парсинг скорости [SETSPD:XXX]
+#               size_t spd_pos = message.find("[SETSPD:");
+#               if (spd_pos != std::string::npos) {
+#                 std::string spd_str = message.substr(spd_pos + 8, 3);
+#                 int speed = std::stoi(spd_str);
+#                 id(treadmill_speed_feedback) = speed;
+#                 ESP_LOGD("UART", "Скорость обратной связи обновлена: %d", speed);
+#               }
+
+#               // Парсинг наклона [SETINC:XXX]
+#               size_t inc_pos = message.find("[SETINC:");
+#               if (inc_pos != std::string::npos) {
+#                 std::string inc_str = message.substr(inc_pos + 8, 3);
+#                 int incline = std::stoi(inc_str);
+#                 id(treadmill_incline_feedback) = incline;
+#                 ESP_LOGD("UART", "Наклон обратной связи обновлен: %d", incline);
+#               }
+#             }
+
+# выводит все сообщения дебага, без фильтра шума с 0x000
+# uart:
+#   - id: uart_bus
+#     tx_pin: 
+#       number: GPIO17
+#       inverted: false
+#     rx_pin: 
+#       number: GPIO18
+#       mode: 
+#         input: true
+#         pullup: true
+#       inverted: false
+#     baud_rate: 5000
+#     data_bits: 8
+#     parity: NONE
+#     stop_bits: 1
+#     rx_buffer_size: 1024
+#     debug:
+#       direction: RX
+#       dummy_receiver: false  # Отключаем dummy_receiver
+#       after:
+#         timeout: 100ms  # Оставляем увеличенный таймаут
+#         bytes: 30  # Исправляем на 12 байт, чтобы вместить [SETSPD:XXX]
+#       sequence:
+#         - lambda: |-
+#             std::vector<uint8_t> filtered_bytes;
+#             for (auto byte : bytes) {
+#               if (byte != 0x00) {
+#                 filtered_bytes.push_back(byte);
+#               }
+#             }
+#             if (!filtered_bytes.empty()) {
+#               UARTDebug::log_string(direction, filtered_bytes);
+#             }
 
 time:
   - platform: sntp
@@ -200,6 +289,13 @@ globals:
     restore_value: no           # Не сохраняем значение после перезагрузки
     initial_value: '0'          # Начальное значение — 0
                                 # Используется для отслеживания времени отправки команд наклона (ограничение в 25 секунд)
+
+  # Указывает, активно ли управление наклоном в данный момент
+  # - id: incline_active
+  #   type: bool
+  #   restore_value: no           # Не сохраняем значение после перезагрузки
+  #   initial_value: 'false'      # Начальное значение — false (наклон не активен)
+  #                               # Используется для управления интервалом отправки команд наклона через UART
 
   # Хранит время загрузки устройства в миллисекундах
   - id: boot_time
@@ -320,13 +416,6 @@ globals:
     initial_value: '0.0'        # Начальное значение — 0.0 (дистанция не пройдена)
                                 # Используется в "Treadmill Distance" для расчёта дистанции и сброса на старте
 
-  # Хранит флаги состояния беговой дорожки для передачи через BLE
-  # - id: treadmill_flags
-  #   type: uint16_t
-  #   restore_value: no           # Не сохраняем значение после перезагрузки
-  #   initial_value: '0x0028'     # Начальное значение — 0x0028 (специфическое значение для протокола BLE)
-  #                               # Используется в скрипте "send_treadmill_data" для передачи статуса через BLE
-
   # Хранит время в секундах, в течение которого импульсы не поступают
   - id: run_stopped_timer
     type: int
@@ -383,59 +472,162 @@ globals:
     initial_value: '0'          # Начальное значение — 0
                                 # Используется в скрипте "warm_up" для отслеживания времени ожидания пульса
 
+
+  - id: ftms_status_to_string
+    type: std::function<std::string(uint8_t)>
+    restore_value: no
+    initial_value: |-
+      [](uint8_t code) -> std::string {
+        switch (code) {
+          case 0x01: return "Reset";
+          case 0x02: return "Stopped or Paused";
+          case 0x03: return "Stopped by Safety Key";
+          case 0x04: return "Started or Resumed";
+          case 0x05: return "Target Speed Changed";
+          case 0x06: return "Target Incline Changed";
+          case 0x07: return "Target Resistance Level Changed";
+          case 0x08: return "Target Power Changed";
+          case 0x09: return "Target Heart Rate Changed";
+          case 0x0A: return "Targeted Expended Energy Changed";
+          case 0x0B: return "Targeted Number of Steps Changed";
+          case 0x0C: return "Targeted Number of Strides Changed";
+          case 0x0D: return "Targeted Distance Changed";
+          case 0x0E: return "Targeted Training Time Changed";
+          case 0xFF: return "Control Permission Lost";
+          default: return "Unknown (" + std::to_string(code) + ")";
+        }
+      }
+  - id: training_status_to_string
+    type: std::function<std::string(uint8_t)>
+    restore_value: no
+    initial_value: |-
+      [](uint8_t code) -> std::string {
+        switch (code) {
+          case 0x00: return "Other";
+          case 0x01: return "Idle";
+          case 0x02: return "Warming Up";
+          case 0x03: return "Low Intensity Interval";
+          case 0x04: return "High Intensity Interval";
+          case 0x05: return "Recovery Interval";
+          case 0x06: return "Isometric";
+          case 0x07: return "Heart Rate Control";
+          case 0x08: return "Fitness Test";
+          case 0x09: return "Speed Outside of Control Region - Low";
+          case 0x0A: return "Speed Outside of Control Region - High";
+          case 0x0B: return "Cool Down";
+          case 0x0C: return "Watt Control";
+          case 0x0D: return "Manual Mode";
+          case 0x0E: return "Pre-Workout";
+          case 0x0F: return "Post-Workout";
+          default: return "Unknown (" + std::to_string(code) + ")";
+        }
+      }
+
+  - id: last_ftms_status
+    type: std::vector<uint8_t>
+    restore_value: no
+    initial_value: '{0x02, 0x01}'  # Stopped or Paused by User
+  - id: last_training_status
+    type: std::vector<uint8_t>
+    restore_value: no
+    initial_value: '{0x00, 0x01}'  # Idle, без строки
+
 # Скрипты
 script:
-# Скрипт запускает беговую дорожку в ручном режиме с начальной скоростью 1 км/ч (если скорость не задана) и без этапов разминки и заминки.
+  # Скрипт запускает беговую дорожку в ручном режиме
   - id: start_manual
+    mode: restart  # Позволяет прерывать предыдущий вызов
     then:
       - lambda: |-
-          id(motor_running) = true;                                         // Включаем мотор беговой дорожки
-          id(manual_stop) = false;                                          // Сбрасываем флаг ручной остановки
-          if (id(target_speed) == 0) {                                      // Если целевая скорость не установлена, задаём 1 км/ч
+          id(motor_running) = true;
+          id(manual_stop) = false;
+          if (id(target_speed) == 0) {
             id(target_speed) = 10;
             id(target_speed_goal) = 10;
           }
-          id(set_speed).publish_state(id(target_speed) / 10.0);             // Обновляем ползунок скорости
-          id(remaining_warm_up_time) = 0;                                   // Без разминки
-          float run_time = id(set_run_time).state;                          // Получаем заданное время тренировки
-          id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;      // Устанавливаем время в секундах
-          id(remaining_cool_down_time) = 0;                                 // Без заминки
-          id(program_status).publish_state("works");                        // Обновляем статус
 
-# Скрипт запускает программу тренировки, начиная с разминки, устанавливая начальную скорость и задавая время разминки и основной части.
+          id(set_speed).publish_state(id(target_speed) / 10.0);
+          id(remaining_warm_up_time) = 0;
+          float run_time = id(set_run_time).state;
+          id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;
+          id(remaining_cool_down_time) = 0;
+          id(program_status).publish_state("Manual Mode");
+
+          // Fitness Machine Status: Started or Resumed (0x04)
+          std::vector<uint8_t> status = {0x04};
+          id(ftms_status_char).set_value(status);
+          id(ftms_status_char).notify();
+          id(last_ftms_status) = status;
+          id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x04));
+          ESP_LOGI("FTMS", "Отправлено уведомление: Started or Resumed (0x04)");
+
+          // Training Status: Manual Mode (0x0D)
+          std::vector<uint8_t> training_status = {0x00, 0x0D};  // Flags: без строки, Status: Manual Mode
+          id(training_status_char).set_value(training_status);
+          id(training_status_char).notify();
+          id(last_training_status) = training_status;
+          id(training_status_sensor).publish_state(id(training_status_to_string)(0x0D));  // Используем training_status_sensor
+          ESP_LOGI("FTMS", "Отправлено уведомление: Manual Mode (0x0D)");
+
+# Скрипт запускает программу тренировки
   - id: start_program
     then:
-      - lambda: |- 
-          id(motor_running) = true;                                         // Включаем мотор беговой дорожки
-          id(manual_stop) = false;                                          // Сбрасываем флаг ручной остановки
-          id(target_speed) = 10;                                            // Устанавливаем начальную скорость 1 км/ч
-          id(target_speed_goal) = 10;                                       // Устанавливаем целевую скорость 1 км/ч
-          id(set_speed).publish_state(id(target_speed) / 10.0);             // Обновляем ползунок скорости
-          
-          float wu_time = id(set_warm_up_time).state;                       // Получаем заданное время разминки
-          if (wu_time > 0) {                                                // Если разминка больше 0 минут
-            id(warm_up_active) = true;                                      // Активируем разминку
-            id(remaining_warm_up_time) = wu_time * 60;                      // Устанавливаем время разминки в секундах
-            id(program_status).publish_state("Warm-up: In progress");       // Обновляем статус
-          } else {                                                          // Если разминка 0 минут
-            id(warm_up_active) = false;                                     // Отключаем разминку
-            id(remaining_warm_up_time) = 0;                                 // Сбрасываем время разминки
-            std::string program = id(program_select).state;                 // Получаем название программы
-            float run_time = id(set_run_time).state;                        // Получаем время основной тренировки
-            id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;    // Устанавливаем время тренировки
-            if (program != "None" && id(remaining_run_time) > 0) {          // Если программа выбрана и есть время
-              int remaining_minutes = id(remaining_run_time) / 60;          // Вычисляем минуты
-              int remaining_seconds = id(remaining_run_time) % 60;          // Вычисляем секунды
-              char buffer[50];                                              // Формируем статус
+      - lambda: |-
+          id(motor_running) = true;
+          id(manual_stop) = false;
+          id(target_speed) = 10;
+          id(target_speed_goal) = 10;
+          id(set_speed).publish_state(id(target_speed) / 10.0);
+
+          float wu_time = id(set_warm_up_time).state;
+          if (wu_time > 0) {
+            id(warm_up_active) = true;
+            id(remaining_warm_up_time) = wu_time * 60;
+            id(program_status).publish_state("Warm-up: In progress");
+
+            // Training Status: Warming Up (0x02)
+            std::vector<uint8_t> training_status = {0x01, 0x02};  // Flags: String present, Status: Warming Up
+            id(training_status_char).set_value(training_status);
+            id(training_status_char).notify();
+            id(last_training_status) = training_status;
+            id(training_status_sensor).publish_state(id(training_status_to_string)(0x02));  // Используем training_status_sensor
+            ESP_LOGI("FTMS", "Отправлено уведомление: Warming Up (0x02)");
+          } else {
+            id(warm_up_active) = false;
+            id(remaining_warm_up_time) = 0;
+            std::string program = id(program_select).state;
+            float run_time = id(set_run_time).state;
+            id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;
+            if (program != "None" && id(remaining_run_time) > 0) {
+              int remaining_minutes = id(remaining_run_time) / 60;
+              int remaining_seconds = id(remaining_run_time) % 60;
+              char buffer[50];
               snprintf(buffer, sizeof(buffer), "%s: In progress (%d:%02d)", program.c_str(), remaining_minutes, remaining_seconds);
-              id(program_status).publish_state(buffer);                     // Обновляем статус
+              id(program_status).publish_state(buffer);
+
+              // Training Status: Other (0x00)
+              std::vector<uint8_t> training_status = {0x01, 0x00};  // Flags: String present, Status: Other
+              id(training_status_char).set_value(training_status);
+              id(training_status_char).notify();
+              id(last_training_status) = training_status;
+              id(training_status_sensor).publish_state(id(training_status_to_string)(0x00));  // Используем training_status_sensor
+              ESP_LOGI("FTMS", "Отправлено уведомление: Other (0x00)");
             } else {
-              id(program_status).publish_state("works");                    // Если нет времени, просто "работает"
+              id(program_status).publish_state("Program Mode: No duration set");
             }
           }
-          
-          id(remaining_cool_down_time) = 0;                                 // Устанавливаем время заминки в 0
-          id(warm_up_time) = 0;                                             // Сбрасываем счетчик времени разминки
+
+          id(remaining_cool_down_time) = 0;
+          id(warm_up_time) = 0;
+
+          // Fitness Machine Status: Started or Resumed (0x04)
+          std::vector<uint8_t> status = {0x04};
+          id(ftms_status_char).set_value(status);
+          id(ftms_status_char).notify();
+          id(last_ftms_status) = status;
+          id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x04));
+          ESP_LOGI("FTMS", "Отправлено уведомление: Started or Resumed (0x04)");
+
 
 # Скрипт управляет процессом разминки, увеличивая скорость до достижения зоны 1 пульса, переходя к основной программе или останавливаясь при ошибке.
   - id: warm_up
@@ -678,152 +870,53 @@ script:
             }
           }
 
-# Скрипт полностью останавливает программу, сбрасывая все параметры и переводя дорожку в состояние покоя.
+# Скрипт остановки
   - id: stop_program
     then:
       - lambda: |-
-          id(motor_running) = false;                                        // Выключаем мотор
-          id(auto_mode) = false;                                            // Отключаем автоматический режим
-          id(warm_up_active) = false;                                       // Отключаем разминку
-          id(target_speed) = 0;                                             // Сбрасываем текущую скорость
-          id(target_speed_goal) = 0;                                        // Сбрасываем целевую скорость
-          id(set_speed).publish_state(0.0);                                 // Обновляем ползунок скорости
-          id(set_incline).publish_state(0.0);                               // Сбрасываем наклон
-          id(treadmill_speed_sensor_uart).publish_state(0.0);               // Сбрасываем датчик скорости
-          char buffer[13];                                                  // Формируем команду остановки
+          id(motor_running) = false;
+          id(auto_mode) = false;
+          id(warm_up_active) = false;
+          id(target_speed) = 0;
+          id(target_speed_goal) = 0;
+          id(set_speed).publish_state(0.0);
+          id(set_incline).publish_state(0.0);
+          id(treadmill_speed_sensor_uart).publish_state(0.0);
+          char buffer[13];
           snprintf(buffer, sizeof(buffer), "[SETSPD:000]");
-          id(uart_bus)->write_str(buffer);                                  // Отправляем команду через UART
-          id(remaining_run_time) = 0;                                       // Сбрасываем время тренировки
-          id(set_run_time).publish_state(0.0);                              // Обновляем ползунок тренировки
-          id(remaining_warm_up_time) = 0;                                   // Сбрасываем время разминки
-          id(set_warm_up_time).publish_state(0.0);                          // Обновляем ползунок разминки
-          id(remaining_cool_down_time) = 0;                                 // Сбрасываем время заминки
-          id(set_cool_down_time).publish_state(0.0);                        // Обновляем ползунок заминки
-          id(warm_up_time) = 0;                                             // Сбрасываем счетчик разминки
-          id(interval_time) = 0;                                            // Сбрасываем счетчик интервалов
-          id(program_status).publish_state("Idle");                         // Устанавливаем статус "Idle"
-          id(manual_stop) = false;                                          // Сбрасываем флаг ручной остановки
-          id(treadmill_incline_feedback_sensor).publish_state(0.0);         // Сбрасываем Скорость обратной связи
+          id(uart_bus)->write_str(buffer);
+          id(remaining_run_time) = 0;
+          id(set_run_time).publish_state(0.0);
+          id(remaining_warm_up_time) = 0;
+          id(set_warm_up_time).publish_state(0.0);
+          id(remaining_cool_down_time) = 0;
+          id(set_cool_down_time).publish_state(0.0);
+          id(warm_up_time) = 0;
+          id(interval_time) = 0;
+          id(program_status).publish_state("Idle");
+          id(manual_stop) = false;
+          id(treadmill_incline_feedback_sensor).publish_state(0.0);
+
+          // Сбрасываем программу на "None"
+          id(program_select).publish_state("None");
+
+          // Fitness Machine Status: Stopped or Paused (0x02)
+          std::vector<uint8_t> status = {0x02, 0x01};  // Parameter: Stopped by User
+          id(ftms_status_char).set_value(status);
+          id(ftms_status_char).notify();
+          id(last_ftms_status) = status;
+          id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x02));
+          ESP_LOGI("FTMS", "Отправлено уведомление: Stopped or Paused (0x02)");
+
+          // Training Status: Idle (0x01)
+          std::vector<uint8_t> training_status = {0x01, 0x01};  // Flags: String present, Status: Idle
+          id(training_status_char).set_value(training_status);
+          id(training_status_char).notify();
+          id(last_training_status) = training_status;
+          id(training_status_sensor).publish_state(id(training_status_to_string)(0x01));
+          ESP_LOGI("FTMS", "Отправлено уведомление: Idle (0x01)");
 
 # Скрипт отправляет данные о скорости и наклоне беговой дорожки через BLE.
-#в этом коде коректно передает, скорость, наклон, дистанция, не передается время
-  # - id: send_treadmill_data
-  #   then:
-  #     - lambda: |-
-  #         float speed_kph = id(treadmill_speed_sensor_uart).state;      // Скорость в км/ч
-  #         float incline = id(treadmill_incline_sensor_uart).state;      // Наклон в %
-  #         float distance_km = id(treadmill_distance_km).state;          // Дистанция в км
-  #         float time_min = id(treadmill_time_min).state;                // Время в минутах
-
-  #         // Проверка на NAN
-  #         if (isnan(speed_kph) || isnan(incline) || isnan(distance_km) || isnan(time_min)) {
-  #           ESP_LOGE("treadmill", "Одно из значений равно NAN");
-  #           return;
-  #         }
-
-  #         uint16_t inst_speed = (uint16_t)(speed_kph * 100);           // 0.01 км/ч (2 байта)
-  #         int16_t inst_incline = (int16_t)(incline * 10);              // 0.1% (2 байта, знаковое)
-  #         uint32_t total_distance = (uint32_t)(distance_km * 1000);    // Метры (3 байта)
-  #         uint16_t elapsed_time = (uint16_t)(time_min * 60);           // Секунды (2 байта)
-
-  #         uint16_t flags = 0x100C;  // 0x1000 (Elapsed Time) + 0x0008 (Inclination) + 0x0004 (Total Distance)
-
-  #         std::vector<uint8_t> treadmillData;
-
-  #         // Flags (2 байта)
-  #         treadmillData.push_back(flags & 0xFF);
-  #         treadmillData.push_back((flags >> 8) & 0xFF);
-
-  #         // Instantaneous Speed (2 байта)
-  #         treadmillData.push_back(inst_speed & 0xFF);
-  #         treadmillData.push_back((inst_speed >> 8) & 0xFF);
-
-  #         // Total Distance (3 байта)
-  #         treadmillData.push_back(total_distance & 0xFF);
-  #         treadmillData.push_back((total_distance >> 8) & 0xFF);
-  #         treadmillData.push_back((total_distance >> 16) & 0xFF);
-
-  #         // Inclination and Ramp Angle Setting (2 байта)
-  #         treadmillData.push_back(inst_incline & 0xFF);
-  #         treadmillData.push_back((inst_incline >> 8) & 0xFF);
-
-  #         // Elapsed Time (2 байта)
-  #         treadmillData.push_back(elapsed_time & 0xFF);
-  #         treadmillData.push_back((elapsed_time >> 8) & 0xFF);
-
-  #         id(treadmill_data_char).set_value(treadmillData);
-  #         id(treadmill_data_char).notify();
-
-  # - id: send_treadmill_data
-  #   then:
-  #     - lambda: |-
-  #         float speed_kph = id(treadmill_speed_sensor_uart).state;      // Скорость в км/ч
-  #         float incline = id(treadmill_incline_sensor_uart).state;      // Наклон в %
-  #         float distance_km = id(treadmill_distance_km).state;          // Дистанция в км
-  #         float time_min = id(treadmill_time_min).state;      // 10 минут для теста
-
-  #         // Проверка на NAN
-  #         if (isnan(speed_kph) || isnan(incline) || isnan(distance_km) || isnan(time_min)) {
-  #           ESP_LOGE("treadmill", "Одно из значений равно NAN");
-  #           return;
-  #         }
-
-  #         uint16_t inst_speed = (uint16_t)(speed_kph * 100);           // 0.01 км/ч (2 байта)
-  #         int16_t inst_incline = (int16_t)(incline * 10);              // 0.1% (2 байта, знаковое)
-  #         uint32_t total_distance = (uint32_t)(distance_km * 1000);    // Метры (3 байта)
-  #         uint16_t elapsed_time = (uint16_t)(time_min * 60);  // Время в секундах, 2 байта
-
-  #         // Логирование для отладки
-  #         ESP_LOGD("treadmill", "Speed: %u, Distance: %u, Incline: %d, Time: %u", inst_speed, total_distance, inst_incline, elapsed_time);
-
-  #         // Флаги для каждого параметра
-  #         uint16_t flags = 0x0000; // Базовые флаги
-  #         if (inst_speed >= 0) flags |= 0x0000; // Speed присутствует (бит 0 = 0)
-  #         if (total_distance > 0) flags |= 0x0004; // Distance (бит 2)
-  #         if (inst_incline != 0) flags |= 0x0008; // Incline (бит 3)
-  #         if (elapsed_time > 0) flags |= 0x0400; // Elapsed Time (бит 11)
-
-
-  #         std::vector<uint8_t> treadmillData;
-  #         treadmillData.push_back(flags & 0xFF);          // Младший байт флага
-  #         treadmillData.push_back((flags >> 8) & 0xFF);  // Старший байт флага
-
-  #         // Добавляем параметры в порядке FTMS
-  #         // Instantaneous Speed (если бит 0 = 0)
-  #         if (!(flags & 0x0001)) { // Бит 0 = 0 означает Speed присутствует
-  #           treadmillData.push_back(inst_speed & 0xFF);
-  #           treadmillData.push_back((inst_speed >> 8) & 0xFF);
-  #         }
-
-  #         // Total Distance (если бит 2 = 1)
-  #         if (flags & 0x0004) {
-  #           treadmillData.push_back(total_distance & 0xFF);
-  #           treadmillData.push_back((total_distance >> 8) & 0xFF);
-  #           treadmillData.push_back((total_distance >> 16) & 0xFF);
-  #         }
-
-  #         // Inclination (если бит 3 = 1)
-  #         if (flags & 0x0008) {
-  #           treadmillData.push_back(inst_incline & 0xFF);
-  #           treadmillData.push_back((inst_incline >> 8) & 0xFF);
-  #         }
-
-  #         // Elapsed Time (если бит 14 = 1)
-  #         if (flags & 0x0400) {
-  #           // Elapsed Time (2 байта)
-  #           treadmillData.push_back(elapsed_time & 0xFF);
-  #           treadmillData.push_back((elapsed_time >> 8) & 0xFF);
-  #         }
-
-  #         // Логирование байтов
-  #         for (auto byte : treadmillData) {
-  #           ESP_LOGD("treadmill", "Byte: 0x%02X", byte);
-  #         }
-
-  #         id(treadmill_data_char).set_value(treadmillData);
-  #         id(treadmill_data_char).notify();
-
-
   - id: send_treadmill_data
     then:
       - lambda: |-
@@ -894,7 +987,6 @@ script:
             treadmillData.push_back(0x00);
           }
 
-
           // Логируем байты
           for (size_t i = 0; i < treadmillData.size(); ++i) {
             ESP_LOGD("treadmill", "Byte %2d: 0x%02X", i, treadmillData[i]);
@@ -919,10 +1011,28 @@ script:
           id(target_heart_rate_min) = id(max_heart_rate) * (0.5 + (zone - 1) * 0.1); // Вычисляем нижнюю границу зоны
           id(target_heart_rate_max) = id(max_heart_rate) * (0.6 + (zone - 1) * 0.1); // Вычисляем верхнюю границу зоны
           char buffer[100];                                                 // Формируем строку с информацией
-          snprintf(buffer, sizeof(buffer), "Пол: %s, Возраст: %.0f, Зона: %d, Пульс: %.0f-%.0f bpm",
+          snprintf(buffer, sizeof(buffer), "Gender: %s, Age: %.0f, Zone: %d, Heart Rate: %.0f-%.0f bpm",
                    id(gender_select).state.c_str(), age, zone,
                    id(target_heart_rate_min), id(target_heart_rate_max));
           id(selected_data).publish_state(buffer);                          // Обновляем текстовый сенсор в интерфейсе
+
+#Скрипт для возврата сенсора к текущему режиму
+  - id: restore_status_sensor
+    then:
+      - delay: 2s
+      - lambda: |-
+          if (id(motor_running)) {
+            if (id(program_select).state != "None") {
+              id(training_status_sensor).publish_state(id(training_status_to_string)(0x00));  // Other (Program Mode)
+              ESP_LOGI("FTMS", "Сенсор возвращён к Other (0x00)");
+            } else {
+              id(training_status_sensor).publish_state(id(training_status_to_string)(0x0D));  // Manual Mode
+              ESP_LOGI("FTMS", "Сенсор возвращён к Manual Mode (0x0D)");
+            }
+          } else {
+            id(training_status_sensor).publish_state(id(training_status_to_string)(0x01));  // Idle
+            ESP_LOGI("FTMS", "Сенсор возвращён к Idle (0x01)");
+          }
 
 interval:
   - interval: 500ms
@@ -1324,7 +1434,7 @@ ble_client:
           state: "Подключен"
 
 esp32_ble_server:
-  model:  Treadmill Controller
+  model: Treadmill Controller
   manufacturer: "ESP32-S3"
   firmware_version: "1.0.0"
   on_connect:
@@ -1342,16 +1452,15 @@ esp32_ble_server:
         id: ble_server_status
         state: "Отключен"
   services:
-    - uuid: "00001826-0000-1000-8000-00805F9B34FB"
+    - uuid: "1826"  # FTMS
       advertise: true
       characteristics:
-        - uuid: "00002ACD-0000-1000-8000-00805F9B34FB"
+        - uuid: "2ACD"  # Treadmill Data
           id: treadmill_data_char
           notify: true
           read: true
           value: !lambda 'return id(treadmill_data_char).get_value();'
-        # Characteristic: Fitness Machine Feature
-        - uuid: "00002ACC-0000-1000-8000-00805F9B34FB"
+        - uuid: "2ACC"  # Fitness Machine Feature
           id: ftms_feature_char
           read: true
           value: !lambda |-
@@ -1367,153 +1476,123 @@ esp32_ble_server:
             data.push_back((target_features >> 16) & 0xFF); // 0x00
             data.push_back((target_features >> 24) & 0xFF); // 0x00
             return data;
-
-        # Characteristic: Fitness Machine Status (заглушка)
-        - uuid: "00002ADA-0000-1000-8000-00805F9B34FB"
+        - uuid: "2ADA"  # Fitness Machine Status
           id: ftms_status_char
           notify: true
           read: true
           value: !lambda |-
-            return std::vector<uint8_t>{0x00};  // General status, idle
-
-        # Characteristic: Supported Speed Range (заглушка)
-        - uuid: "00002AD4-0000-1000-8000-00805F9B34FB"
+            return id(last_ftms_status);
+        - uuid: "2AD3"  # Training Status
+          id: training_status_char
+          notify: true
+          read: true
+          value: !lambda |-
+            return id(last_training_status);
+        - uuid: "2AD4"  # Supported Speed Range
           id: supported_speed_range
           read: true
           value: !lambda |-
-            // min: 0.0 км/ч (0), max: 18.0 км/ч (1800), increment: 0.1 км/ч (10)
-            return std::vector<uint8_t>{0x00, 0x00, 0x08, 0x07, 0x0A, 0x00};
-
-        # Characteristic: Supported Inclination Range (заглушка)
-        - uuid: "00002AD5-0000-1000-8000-00805F9B34FB"
+            // min: 0.0 км/ч (0), max: 12.0 км/ч (1200), increment: 0.1 км/ч (10)
+            return std::vector<uint8_t>{0x00, 0x00, 0xB0, 0x04, 0x0A, 0x00};
+        - uuid: "2AD5"  # Supported Inclination Range
           id: supported_incline_range
           read: true
           value: !lambda |-
             // min: 0.0% (0), max: 15.0% (150), increment: 1.0% (10)
             return std::vector<uint8_t>{0x00, 0x00, 0x96, 0x00, 0x0A, 0x00};
-
-
-        # Characteristic: Fitness Machine Control Point
-        - uuid: "00002AD9-0000-1000-8000-00805F9B34FB"
+        - uuid: "2AD9"  # Fitness Machine Control Point
           id: ftms_control_point_char
           write: true
           on_write:
             then:
               - lambda: |-
-                  auto &data = x;
-                  if (data.empty()) return;
+                  if (x.empty()) return;
+                  uint8_t op_code = x[0];
+                  ESP_LOGI("FTMS", "Команда: 0x%02X, Данные: %d байт", op_code, x.size());
 
-                  uint8_t op_code = data[0];
-                  ESP_LOGI("FTMS", "Получена команда: 0x%02X", op_code);
+                  std::string hex_data;
+                  for (size_t i = 0; i < x.size(); ++i) {
+                    char buf[4];
+                    snprintf(buf, sizeof(buf), "%02X ", x[i]);
+                    hex_data += buf;
+                  }
+                  ESP_LOGI("FTMS", "RAW: %s", hex_data.c_str());
 
-                  ESP_LOGI("FTMS", "Получен RAW-запрос (всего %d байт):", data.size());
-                  for (size_t i = 0; i < data.size(); ++i) {
-                    ESP_LOGI("FTMS", "  Byte[%d]: 0x%02X", i, data[i]);
+                  std::vector<uint8_t> response;
+
+                  if (op_code == 0x00) {  // Request Control
+                    response = {0x80, 0x00, 0x01};  // Success
+                    ESP_LOGI("FTMS", "Request Control подтверждён");
+                  } else if (op_code == 0x07) {  // Start
+                    if (id(program_select).state != "None") {
+                      id(start_program).execute();
+                      ESP_LOGI("FTMS", "Запуск программы");
+                    } else {
+                      id(start_manual).execute();
+                      ESP_LOGI("FTMS", "Запуск ручного режима");
+                    }
+                    response = {0x80, 0x07, 0x01};  // Success
+                  } else if (op_code == 0x08) {  // Stop
+                    id(stop_program).execute();
+                    response = {0x80, 0x08, 0x01};  // Success
+                    ESP_LOGI("FTMS", "Стоп выполнен");
+                  } else if (op_code == 0x02 && x.size() >= 3) {  // Set Target Speed
+                    float requested_kmh = (x[1] | (x[2] << 8)) / 100.0f;
+                    if (requested_kmh >= 0.6f && requested_kmh <= 12.0f) {
+                      id(set_speed).publish_state(requested_kmh);
+                      id(target_speed) = (int)(requested_kmh * 10);
+                      id(target_speed_goal) = id(target_speed);
+                      response = {0x80, 0x02, 0x01};  // Success
+                      std::vector<uint8_t> status = {0x05, x[1], x[2]};  // Target Speed Changed
+                      id(ftms_status_char).set_value(status);
+                      id(ftms_status_char).notify();
+                      id(last_ftms_status) = status;
+                      id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x05));
+                      ESP_LOGI("FTMS", "Скорость установлена: %.2f км/ч, уведомление: Target Speed Changed (0x05)");
+                      id(restore_status_sensor).execute();
+                    } else {
+                      response = {0x80, 0x02, 0x02};  // Invalid Parameter
+                      ESP_LOGW("FTMS", "Недопустимая скорость: %.2f км/ч", requested_kmh);
+                    }
+                  } else if (op_code == 0x03 && x.size() >= 3) {  // Set Target Incline
+                    static uint32_t last_incline_time = 0;
+                    if (millis() - last_incline_time < 500) {
+                      ESP_LOGD("FTMS", "Игнорируем частую команду наклона");
+                      return;
+                    }
+                    last_incline_time = millis();
+                    float requested_incline = (x[1] | (x[2] << 8)) / 10.0f;
+                    if (requested_incline >= 0.0f && requested_incline <= 15.0f) {
+                      id(set_incline).publish_state(requested_incline);
+                      id(target_incline_goal) = (int)(requested_incline * 10);
+                      id(target_incline) = id(target_incline_goal);
+                      response = {0x80, 0x03, 0x01};  // Success
+                      std::vector<uint8_t> status = {0x06, x[1], x[2]};  // Target Incline Changed
+                      id(ftms_status_char).set_value(status);
+                      id(ftms_status_char).notify();
+                      id(last_ftms_status) = status;
+                      id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x06));
+                      ESP_LOGI("FTMS", "Наклон установлен: %.1f%%, уведомление: Target Incline Changed (0x06)");
+                      id(restore_status_sensor).execute();
+                    } else {
+                      response = {0x80, 0x03, 0x02};  // Invalid Parameter
+                      ESP_LOGW("FTMS", "Недопустимый наклон: %.1f%%", requested_incline);
+                    }
+                  } else {
+                    response = {0x80, op_code, 0x06};  // Op Code Not Supported
+                    ESP_LOGW("FTMS", "Неизвестная команда: 0x%02X", op_code);
                   }
 
-
-                  if (op_code == 0x02 && data.size() >= 3) {
-                      std::string hex_data;
-                      for (size_t i = 0; i < data.size(); ++i) {
-                          char buf[4];
-                          snprintf(buf, sizeof(buf), "%02X ", data[i]);
-                          hex_data += buf;
-                      }
-                      ESP_LOGI("FTMS", "Полученные данные для скорости: %s", hex_data.c_str());
-
-                      uint16_t speed_val = data[1] | (data[2] << 8);
-                      float requested_kmh = speed_val / 100.0f;
-                      
-                      // Просто устанавливаем абсолютное значение
-                      if (requested_kmh != 0.0f && requested_kmh < 1.0f) {
-                        ESP_LOGI("FTMS", "Получена слишком низкая скорость %.2f км/ч. Игнорируем", requested_kmh);
-                        return;
-                      }
-                      if (requested_kmh > 12.0f) {
-                        requested_kmh = 12.0f;
-                      }
-                      ESP_LOGI("FTMS", "Абсолютная установка скорости: %.2f км/ч", requested_kmh);
-                      id(set_speed).publish_state(requested_kmh);
-
-
-
-                  } else if (op_code == 0x03 && data.size() >= 3) {
-                            std::string hex_data;
-                            for (size_t i = 0; i < data.size(); ++i) {
-                                char buf[4];
-                                snprintf(buf, sizeof(buf), "%02X ", data[i]);
-                                hex_data += buf;
-                            }
-                            ESP_LOGI("FTMS", "Полученные данные для наклона: %s", hex_data.c_str());
-
-                            uint16_t incline_val = data[1] | (data[2] << 8);
-                            float requested_incline = incline_val / 10.0f;  // абсолютное значение в процентах
-
-                            // Если полученное значение равно 0, то, возможно, это ложная команда при изменении скорости – игнорируем её,
-                            // либо сохраняем текущее значение наклона
-                            if (requested_incline == 0.0f) {
-                                ESP_LOGI("FTMS", "Нулевая команда наклона, игнорирую изменение");
-                                return;
-                            }
-
-                            if (requested_incline > 15.0f) requested_incline = 15.0f;
-                            ESP_LOGI("FTMS", "Абсолютная установка наклона: %.2f%%", requested_incline);
-                            id(set_incline).publish_state(requested_incline);
-                        
-
-                    
-
-
-                  } else if (op_code == 0x07) {
-                    ESP_LOGI("FTMS", "Старт — вызов start_manual");
-                    id(start_manual).execute();
-
-                    // Ответ Control Point'у
-                    std::vector<uint8_t> response = {0x80, 0x07, 0x01};
+                  if (!response.empty()) {
                     id(ftms_control_point_char).set_value(response);
                     id(ftms_control_point_char).notify();
-
-                    ESP_LOGI("FTMS", "Отправлен ответ: 0x80 0x07 0x01");
-
-                  } else if (op_code == 0x08) {
-                    ESP_LOGI("FTMS", "Стоп — вызов stop_program");
-                    id(stop_program).execute();
-
-                    // Ответ Control Point'у
-                    std::vector<uint8_t> response = {0x80, 0x08, 0x01};
-                    id(ftms_control_point_char).set_value(response);
-                    id(ftms_control_point_char).notify();
-
-                    ESP_LOGI("FTMS", "Отправлен ответ: 0x80 0x08 0x01");
-
-                  } else if (op_code == 0x00) {
-                    ESP_LOGI("FTMS", "Получен Request Control");
-
-                    // Сформируем корректный ответ:
-                    // [0x80, 0x00, 0x01] = Response Code, Request Control, Success
-                    std::vector<uint8_t> response{0x80, 0x00, 0x01};
-
-                    // Отправляем ответ
-                    id(ftms_control_point_char).set_value(response);
-                    id(ftms_control_point_char).notify();
-
-                    ESP_LOGI("FTMS", "Ответ отправлен: 0x80 0x00 0x01");
-
-                  } else {
-                    ESP_LOGW("FTMS", "Неизвестная команда: 0x%02X (данных: %d)", op_code, data.size());
-                    std::string hex;
-                    for (uint8_t b : data) {
-                      char buf[4];
-                      snprintf(buf, sizeof(buf), "%02X ", b);
-                      hex += buf;
-                    }
-                    ESP_LOGW("FTMS", "Полные данные: %s", hex.c_str());
+                    ESP_LOGI("FTMS", "Ответ отправлен: %s", hex_data.c_str());
                   }
 
     # - uuid: "0000180D-0000-1000-8000-00805F9B34FB"
     #   advertise: true
     #   characteristics:
-        - uuid: "00002A37-0000-1000-8000-00805F9B34FB"
+        - uuid: "2A37"
           id: heart_rate_data
           notify: true
           read: true
@@ -1526,51 +1605,6 @@ esp32_ble_server:
             hr_data[0] = 0x06;
             hr_data[1] = heart_rate;
             return hr_data;
-
-# esp32_ble_server:
-#   model:  Treadmill Controller
-#   manufacturer: "ESP32-S3"
-#   firmware_version: "1.0.0"
-#   #manufacturer_data: [0xFF, 0xFF, 0x4B, 0x49, 0x43, 0x4B, 0x52, 0x20, 0x52, 0x55, 0x4E, 0x20, 0x33, 0x36, 0x42, 0x36]
-#   on_connect:
-#     - globals.set:
-#         id: ble_client_connected
-#         value: 'true'
-#     - text_sensor.template.publish:
-#         id: ble_server_status
-#         state: "Подключен"
-#   on_disconnect:
-#     - globals.set:
-#         id: ble_client_connected
-#         value: 'false'
-#     - text_sensor.template.publish:
-#         id: ble_server_status
-#         state: "Отключен"
-#   services:
-#     - uuid: "00001826-0000-1000-8000-00805F9B34FB"
-#       advertise: true
-#       characteristics:
-#         - uuid: "00002ACD-0000-1000-8000-00805F9B34FB"
-#           id: treadmill_data_char
-#           notify: true
-#           read: true
-#           value: !lambda 'return id(treadmill_data_char).get_value();'
-#     - uuid: "0000180D-0000-1000-8000-00805F9B34FB"
-#       advertise: true
-#       characteristics:
-#         - uuid: "00002A37-0000-1000-8000-00805F9B34FB"
-#           id: heart_rate_data
-#           notify: true
-#           read: true
-#           value: !lambda |-
-#             if (isnan(id(heart_rate_sensor).state)) {
-#               return std::vector<uint8_t>{};
-#             }
-#             uint8_t heart_rate = (uint8_t)(id(heart_rate_sensor).state);
-#             std::vector<uint8_t> hr_data(2, 0);
-#             hr_data[0] = 0x06;
-#             hr_data[1] = heart_rate;
-#             return hr_data;
 
 # Бинарные сенсоры
 binary_sensor:
@@ -1672,6 +1706,18 @@ text_sensor:
     lambda: |-
       return id(program_status).state;  // Просто возвращаем текущее значение
 
+  - platform: template
+    name: "FTMS Status"
+    id: ftms_status_sensor
+    icon: "mdi:information-outline"
+    update_interval: never  # Обновляем только вручную
+
+  - platform: template
+    name: "Training Status"
+    id: training_status_sensor
+    icon: "mdi:information-outline"
+    update_interval: never
+
 select:
   - platform: template
     name: "Workout Program"
@@ -1692,7 +1738,7 @@ select:
             id(zone_select).publish_state("1");
             id(set_warm_up_time).publish_state(00.0); //время разминки
             id(set_cool_down_time).publish_state(00.0); //время заминки
-            id(stop_program).execute();
+            //id(stop_program).execute();
           } else if (program == "Fat Burn") {
             id(zone_select).publish_state("2");
             id(set_run_time).publish_state(40.0); //время тренировки 
@@ -1833,6 +1879,7 @@ number:
     on_value:
       - script.execute: update_heart_rate_zones
 
+
   - platform: template
     name: "Set Speed"
     id: set_speed
@@ -1846,20 +1893,25 @@ number:
     initial_value: 0.0
     on_value:
       - lambda: |-
-          if (id(auto_mode)) {                          // Если авторежим, игнорируем
-            return;                                     
+          if (id(auto_mode)) {
+            return;
           }
-          float speed = x;                              // Берём значение ползунка (в км/ч)
-          int target = (int)(speed * 10);               // Переводим в внутренний формат (1 км/ч = 10)
-          if (target < 6 && target != 0) target = 6;    // Минимальная скорость 0.6 км/ч
-          if (target > 120) target = 120;               // Максимальная скорость 12 км/ч
-          id(target_speed) = target;                    // Записываем в глобальную переменную
-          id(target_speed_goal) = target;               // Синхронизируем целевую скорость
-          //if (id(motor_running)) {                      // Если мотор работает
-            //char buffer[13];                            
-            //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
-            //id(uart_bus)->write_str(buffer);            // Отправляем команду
-          //}
+          float speed = x;
+          int target = (int)(speed * 100);
+          if (target < 60 && target != 0) target = 60;
+          if (target > 1200) target = 1200;
+          if (id(target_speed) != target / 10) {
+            id(target_speed) = target / 10;
+            id(target_speed_goal) = target / 10;
+            std::vector<uint8_t> status = {0x05, (uint8_t)(target & 0xFF), (uint8_t)((target >> 8) & 0xFF)};
+            id(ftms_status_char).set_value(status);
+            id(ftms_status_char).notify();
+            id(last_ftms_status) = status;  // Сохраняем {0x05, low_byte, high_byte}
+            id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x05));
+            ESP_LOGI("treadmill", "Speed updated: %.1f km/h, Target: %d", speed, target);
+            id(restore_status_sensor).execute();
+          }
+        
 
 # # Ползунок наклона для 0-5% реальный
 #   - platform: template
@@ -1893,11 +1945,19 @@ number:
     optimistic: true
     on_value:
       - lambda: |-
-          float incline = x;  // Реальный процент (0–15.0)
-          int incline_value = (int)(incline * 10);  // 1% = 10 единиц
-          id(target_incline_goal) = incline_value;
-          id(target_incline) = incline_value; // Тест, удалить позже
-          ESP_LOGI("treadmill", "Set Incline updated: %.1f%, Goal set to %d", incline, incline_value);
+          float incline = x;
+          int incline_value = (int)(incline * 10);  // Наклон в формате SINT16 (разрешение 0.1%)
+          if (id(target_incline) != incline_value) {
+            id(target_incline_goal) = incline_value;
+            id(target_incline) = incline_value;
+            std::vector<uint8_t> status = {0x06, (uint8_t)(incline_value & 0xFF), (uint8_t)((incline_value >> 8) & 0xFF)};
+            id(ftms_status_char).set_value(status);
+            id(ftms_status_char).notify();
+            id(last_ftms_status) = status;  // Сохраняем {0x06, low_byte, high_byte}
+            id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x06));
+            ESP_LOGI("treadmill", "Set Incline updated: %.1f%, Goal set to %d", incline, incline_value);
+            id(restore_status_sensor).execute();  // Возвращаем сенсор к режиму
+          }
 
   - platform: template
     name: "Set Warm-up Time"
@@ -1949,3 +2009,25 @@ number:
     optimistic: true
     restore_value: no
     initial_value: 5  # По умолчанию 5 минут
+
+
+  # - platform: template
+  #   name: "UART Baud Rate"
+  #   id: uart_baud_rate
+  #   min_value: 1000
+  #   max_value: 115200
+  #   step: 100
+  #   initial_value: 5000
+  #   optimistic: true
+  #   restore_value: yes
+  #   entity_category: config
+  #   icon: "mdi:swap-horizontal"
+  #   on_value:
+  #     - lambda: |-
+  #         id(uart_bus).flush();  // Очищаем буфер перед сменой скорости
+  #         uint32_t new_baud_rate = (uint32_t)x;  // Преобразуем значение ползунка в uint32_t
+  #         ESP_LOGD("UART", "Changing baud rate from %i to %i", id(uart_bus).get_baud_rate(), new_baud_rate);
+  #         if (id(uart_bus).get_baud_rate() != new_baud_rate) {
+  #           id(uart_bus).set_baud_rate(new_baud_rate);
+  #           id(uart_bus).load_settings();
+  #         }
