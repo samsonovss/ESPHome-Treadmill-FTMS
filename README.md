@@ -117,7 +117,7 @@ ble_client:
 - April 9, 2025: Initial FTMS support added for Kinomap (Android), FitShow, and Kinni.
 
 ## Authors
-Created by [@samsonovss](https://t.me/samsonovss) with assistance from Grok, an AI developed by xAI.
+Created by [@samsonovss](https://t.me/samsonovss) & xAI Assistant
 
 ## Support the Project
 If you’d like to support this project and help it grow, consider buying me a coffee! Donations can be sent via cryptocurrency:
