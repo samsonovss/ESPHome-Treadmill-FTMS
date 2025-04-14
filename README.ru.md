@@ -4,7 +4,7 @@
 - :white_check_mark: Zwift
 - :white_check_mark: Kinomap (Android/iOS)
 - :white_check_mark: FitShow
-- :white_check_mark: Kinni
+- :white_check_mark: Kinni (Полная поддежрка) 
 
 **[English version](README.md)**
 
