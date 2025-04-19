@@ -120,8 +120,9 @@ ble_client:
 Created by [@samsonovss](https://t.me/samsonovss) & xAI Assistant
 
 ## Support the Project
-If you’d like to support this project and help it grow, consider buying me a coffee! Donations can be sent via cryptocurrency:
-- **BTC**: `bc1q3cza0kasutzes4hfddxuclmd9ghn5v7zw2nr5c`  
+Your support helps keep this project alive and growing! If you'd like to contribute, you can make a donation using one of the following methods:
+- **PayPal**: samsonov@hotmail.com
+- **Bitcoin (BTC)**: `bc1q3cza0kasutzes4hfddxuclmd9ghn5v7zw2nr5c`  
 - **USDT (TRC-20)**: `0x5dd5a346Dd64dfE938a60D7b24b633b1ACE01719`
   
 Every bit helps — thank you!
