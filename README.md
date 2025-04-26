@@ -5,6 +5,7 @@
 - :white_check_mark: Kinomap (Android/iOS)
 - :white_check_mark: FitShow
 - :white_check_mark: Kinni (Full support)
+- :qdomyos: (Full support)
 
 **[Русская версия / Russian version](README.ru.md)**
 
