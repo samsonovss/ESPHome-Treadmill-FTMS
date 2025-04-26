@@ -4,7 +4,8 @@
 - :white_check_mark: Zwift
 - :white_check_mark: Kinomap (Android/iOS)
 - :white_check_mark: FitShow
-- :white_check_mark: Kinni (Полная поддержка) 
+- :white_check_mark: Kinni (Полная поддержка)
+- :white_check_mark: qdomyos (Full support)
 
 **[English version](README.md)**
 
