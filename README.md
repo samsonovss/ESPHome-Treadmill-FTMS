@@ -102,7 +102,7 @@ ble_client:
 
 ## Future Plans
 - :white_check_mark:Expanding FTMS support for Kinomap compatibility on iOS.
-- Add Fitness Test Program
+- Add "Fitness Test" Program
 - Add interactive elevation maps and new training programs.
 - :white_check_mark:Develop a display with a user-friendly interface.
 - Enable auto-incline support in Zwift.
