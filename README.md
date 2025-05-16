@@ -112,6 +112,11 @@ ble_client:
 - Build a web interface for control without Home Assistant.
 
 ## Changelog
+- May 17, 2025:
+  - Added Nextion display integration in YAML configuration.
+  - Added Nextion display project design created in Lunacy software.
+  - Added Nextion display firmware (HMI file) for Nextion Editor to the display.
+  - Added compiled file `treadmill.tft` for flashing to the display.
 - April 12, 2025:
   - Added full FTMS support for Kinomap on iOS using shortened UUIDs.
   - Added support for FTMS statuses (Training Status / Fitness Machine Status).
