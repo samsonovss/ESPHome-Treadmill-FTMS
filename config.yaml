@@ -16,7 +16,10 @@ esphome:
             state: "Отключено"
         - sensor.template.publish:
             id: heart_rate_sensor
-            state: !lambda 'return NAN;'
+            state: 0  # Изменено с !lambda 'return NAN;' на 0
+        - sensor.template.publish:
+            id: battery_level_sensor
+            state: 0  # Добавлено для батареи
         - globals.set:
             id: treadmill_running
             value: 'false'
@@ -33,6 +36,17 @@ esphome:
             id(last_training_status) = training_status;
             id(training_status_sensor).publish_state(id(training_status_to_string)(0x01));
             ESP_LOGI("FTMS", "Инициализация при старте: Training Status = Idle (0x01)");
+        - lambda: |-
+            // Устанавливаем начальную скорость UART на 9600
+            id(uart_0).set_baud_rate(9600);
+            id(uart_0).load_settings();
+            ESP_LOGI("UART", "Установлена начальная скорость UART: 9600");
+        - delay: 2s  # Ждём 2 секунды для стабилизации дисплея
+        - lambda: |-
+            // Переключаем скорость UART на 115200
+            id(uart_0).set_baud_rate(115200);
+            id(uart_0).load_settings();
+            ESP_LOGI("UART", "Скорость UART изменена на: 115200");
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -43,6 +57,24 @@ esp32:
 psram:
   mode: octal
   speed: 80MHz
+
+# web_server:
+#   port: 80
+#   log: false
+#   version: 2
+#   css_include: "./treadmill-webserver/webserver-v2.min.css"
+#   css_url: ""
+#   js_include: "./treadmill-webserver/webserver.js" /config/esphome/treadmill-webserver/webserver.js
+#   js_url: ""
+#   local: false
+
+# web_server:
+#   port: 80
+#   css_include: "./treadmill-webserver/webserver-v2.min.css"
+#   js_include: "./treadmill-webserver/webserver.js"
+#   css_url: ""
+#   js_url: ""
+#   local: false  # Разрешаем внешние ресурсы
 
 # Enable logging
 logger:
@@ -55,7 +87,7 @@ api:
 
 ota:
   - platform: esphome
-    password: "YourOTAPassword
+    password: "YourOTAPassword"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -69,6 +101,12 @@ wifi:
 captive_portal:
 
 uart:
+  #дисплей nextion подключение    
+  - id: uart_0
+    rx_pin: GPIO43
+    tx_pin: GPIO44
+    baud_rate: 115200
+  #подключение платы pms
   - id: uart_bus
     tx_pin: 
       number: GPIO17
@@ -580,6 +618,10 @@ script:
           id(training_status_sensor).publish_state(id(training_status_to_string)(0x0D));
           ESP_LOGI("FTMS", "Отправлено уведомление: Manual Mode (0x0D)");
 
+          if (id(mainPage).state) {
+            id(display_nextion).send_command_printf("page 1");
+          }
+
 # Скрипт запускает программу тренировки
   - id: start_program
     then:
@@ -653,6 +695,9 @@ script:
           id(remaining_cool_down_time) = 0;
           id(warm_up_time) = 0;
 
+          if (id(mainPage).state) {
+            id(display_nextion).send_command_printf("page 1");
+          }
 
 # Скрипт управляет процессом разминки, увеличивая скорость до достижения зоны 1 пульса, переходя к основной программе или останавливаясь при ошибке.
   - id: warm_up
@@ -747,31 +792,64 @@ script:
   - id: cool_down
     then:
       - lambda: |-
-          id(remaining_cool_down_time)--;
-
           float heart_rate = id(heart_rate_sensor).state;
-          float zone_1_max = id(max_heart_rate) * 0.6;
+          float zone_1_max = id(max_heart_rate) * 0.6; // Верхняя граница зоны 1 (105 уд/мин)
           float current_speed_kph = id(target_speed) / 10.0;
+          float target_min_speed = 1.0; // Минимальная скорость
+          static int speed_adjust_timer = 0; // Счётчик для интервалов снижения скорости
+          static int min_speed_timer = 0; // Счётчик времени на минимальной скорости
+          static float target_speed_kph = current_speed_kph; // Целевая скорость для плавного снижения
 
-          float total_cool_down_seconds = id(set_cool_down_time).state * 60;
-          float target_min_speed = 2.0;
-          float speed_range = (current_speed_kph - target_min_speed);
-          float time_fraction = id(remaining_cool_down_time) / total_cool_down_seconds;
+          // Увеличиваем таймер для регулировки скорости
+          speed_adjust_timer++;
 
-          float target_speed_kph = target_min_speed + (speed_range * time_fraction);
-          if (target_speed_kph < target_min_speed) target_speed_kph = target_min_speed;
+          // Проверяем пульс и регулируем скорость
+          if (speed_adjust_timer >= 15 && current_speed_kph > target_min_speed) {
+            float speed_step = 0.0; // По умолчанию не снижаем
+            if (!isnan(heart_rate)) {
+              if (heart_rate > zone_1_max + 10) {
+                // Высокий пульс (> 115 уд/мин), снижаем на 0.5 км/ч
+                speed_step = 0.5;
+              } else if (heart_rate > zone_1_max && heart_rate <= zone_1_max + 10) {
+                // Пульс близок к зоне 1 (105–115 уд/мин), снижаем на 0.1 км/ч
+                speed_step = 0.1;
+              }
+              // Пульс ≤ 105 уд/мин: не снижаем (speed_step остаётся 0.0)
+            } else {
+              // Нет данных о пульсе, снижаем на 0.5 км/ч по умолчанию
+              speed_step = 0.5;
+            }
 
-          if (!isnan(heart_rate) && heart_rate > zone_1_max && current_speed_kph > target_min_speed) {
-            target_speed_kph += 0.5;
-            if (target_speed_kph > current_speed_kph) target_speed_kph = current_speed_kph;
+            // Снижаем целевую скорость, если есть шаг
+            if (speed_step > 0.0) {
+              target_speed_kph -= speed_step;
+              if (target_speed_kph < target_min_speed) target_speed_kph = target_min_speed;
+              int new_target_speed = (int)(target_speed_kph * 10);
+              id(target_speed_goal) = new_target_speed;
+              speed_adjust_timer = 0; // Сбрасываем таймер
+            }
           }
 
-          int new_target_speed = (int)(target_speed_kph * 10);
-          if (new_target_speed < 20) new_target_speed = 20;
-          id(target_speed_goal) = new_target_speed;
+          // Если достигли минимальной скорости, начинаем отсчёт
+          if (current_speed_kph <= target_min_speed) {
+            min_speed_timer++;
+          } else {
+            min_speed_timer = 0; // Сбрасываем, если скорость выше минимальной
+          }
 
+          // Вызываем плавное изменение скорости, если нужно
           if (id(target_speed) != id(target_speed_goal)) {
             id(smooth_speed).execute();
+          }
+
+          // Обновляем статус каждые 10 секунд
+          if (id(remaining_cool_down_time) % 10 == 0) {
+            int remaining_minutes = id(remaining_cool_down_time) / 60;
+            int remaining_seconds = id(remaining_cool_down_time) % 60;
+            char buffer[50];
+            snprintf(buffer, sizeof(buffer), "Cool-down: In progress (%d:%02d)", remaining_minutes, remaining_seconds);
+            id(program_status).publish_state(buffer);
+            id(set_speed).publish_state(id(target_speed) / 10.0);
           }
 
           // Отправляем уведомление Cool Down только при первом входе
@@ -784,16 +862,9 @@ script:
             ESP_LOGI("FTMS", "Отправлено уведомление: Cool Down (0x0B)");
           }
 
-          if (id(remaining_cool_down_time) % 10 == 0) {
-            int remaining_minutes = id(remaining_cool_down_time) / 60;
-            int remaining_seconds = id(remaining_cool_down_time) % 60;
-            char buffer[50];
-            snprintf(buffer, sizeof(buffer), "Cool-down: In progress (%d:%02d)", remaining_minutes, remaining_seconds);
-            id(program_status).publish_state(buffer);
-            id(set_speed).publish_state(id(target_speed) / 10.0);
-          }
-
-          if (id(remaining_cool_down_time) <= 0) {
+          // Условие завершения заминки
+          bool pulse_ok = isnan(heart_rate) || heart_rate <= zone_1_max;
+          if (id(remaining_cool_down_time) <= 0 || (pulse_ok && min_speed_timer >= 30)) {
             id(motor_running) = false;
             id(target_speed) = 0;
             id(target_speed_goal) = 0;
@@ -948,6 +1019,7 @@ script:
               id(stop_program).execute();
             }
           }
+
 # Скрипт остановки
   - id: stop_program
     then:
@@ -1006,6 +1078,9 @@ script:
             id(last_training_status) = training_status;
             id(training_status_sensor).publish_state(id(training_status_to_string)(0x01));
             ESP_LOGI("FTMS", "Отправлено уведомление: Idle (0x01)");
+          }
+          if (id(speed).state) {
+            id(display_nextion).send_command_printf("page 0");
           }
 
 # Скрипт отправляет данные о скорости и наклоне беговой дорожки через BLE.
@@ -1211,11 +1286,17 @@ interval:
     then:
       - if:
           condition:
-            # Проверяем, что мотор работает, есть время заминки и основная тренировка завершена
             lambda: 'return id(motor_running) && id(remaining_cool_down_time) > 0 && id(remaining_run_time) <= 0;'
           then:
-            # Выполняем скрипт заминки для снижения скорости и остановки
-            - script.execute: cool_down                                     
+            - lambda: |-
+                if (id(remaining_cool_down_time) > 0) {
+                  id(remaining_cool_down_time)--; // Уменьшаем время
+                  if (id(remaining_cool_down_time) % 60 == 0) { // Каждые 60 секунд
+                    int remaining_minutes = id(remaining_cool_down_time) / 60;
+                    id(set_cool_down_time).publish_state((float)remaining_minutes); // Обновляем ползунок
+                  }
+                }
+            - script.execute: cool_down                        
 
 # Кнопки и селекторы
 button:
@@ -1252,6 +1333,19 @@ button:
             //id(uart_bus)->write_str(buffer);
           }
 
+# Действие для увеличения скорости на 0.5
+  - platform: template
+    name: "Speed +0.5"
+    internal: true
+    id: speed_up_button_large
+    on_press:
+      - lambda: |-
+          if (id(motor_running) && id(target_speed) < 120) {
+            id(target_speed) += 5;  // Увеличение на 0.5 км/ч
+            id(target_speed_goal) = id(target_speed);
+            id(set_speed).publish_state(id(target_speed) / 10.0);
+          }
+
   - platform: template
     name: "Speed -0.1"
     internal: true
@@ -1266,6 +1360,21 @@ button:
             //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
             //id(uart_bus)->write_str(buffer);
           }
+
+
+# Действие для уменьшения скорости на 0.5
+  - platform: template
+    name: "Speed -0.5"
+    internal: true
+    id: speed_down_button_large
+    on_press:
+      - lambda: |-
+          if (id(motor_running) && id(target_speed) > 6) {
+            id(target_speed) -= 5;  // Уменьшение на 0.5 км/ч
+            id(target_speed_goal) = id(target_speed);
+            id(set_speed).publish_state(id(target_speed) / 10.0);
+          }
+
 
   - platform: template
     name: "Incline +1"
@@ -1299,6 +1408,75 @@ button:
 
 # Сенсоры
 sensor:
+  - platform: nextion
+    nextion_id: display_nextion
+    id: age_sensor
+    name: "Age from Nextion"
+    component_name: n_age  # Убедитесь, что имя компонента совпадает
+    on_value:
+      then:
+        - lambda: |-
+            int new_age = x; // Значение от number_sensor
+            if (new_age >= 16 && new_age <= 100) {
+              id(age_number).publish_state(new_age); // Исправлено
+              ESP_LOGD("Settings", "Age updated to: %d", new_age);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_age);
+            }          
+
+
+  - platform: nextion
+    nextion_id: display_nextion
+    id: time_sensor
+    name: "time from Nextion"
+    component_name: n_min  # Убедитесь, что имя компонента совпадает
+    on_value:
+      then:
+        - lambda: |-
+            int new_time = x; // Значение от number_sensor
+            if (new_time >= 1 && new_time <= 999) {
+              id(set_run_time).publish_state(new_time); // Исправлено
+              ESP_LOGD("Settings", "Age updated to: %d", new_time);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_time);
+            }    
+
+  - platform: nextion
+    nextion_id: display_nextion
+    id: warm_sensor
+    name: "time warm from Nextion"
+    component_name: n_cool  # Убедитесь, что имя компонента совпадает
+    on_value:
+      then:
+        - lambda: |-
+            int new_time_warm = x; // Значение от number_sensor
+            if (new_time_warm >= 1 && new_time_warm <= 10) {
+              id(set_warm_up_time).publish_state(new_time_warm); // Исправлено
+              ESP_LOGD("Settings", "Age updated to: %d", new_time_warm);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_time_warm);
+            }    
+
+  - platform: nextion
+    nextion_id: display_nextion
+    id: cool_sensor
+    name: "time cool from Nextion"
+    component_name: n_warm  # Убедитесь, что имя компонента совпадает
+    on_value:
+      then:
+        - lambda: |-
+            int new_time_cool = x; // Значение от number_sensor
+            if (new_time_cool >= 1 && new_time_cool <= 10) {
+              id(set_cool_down_time).publish_state(new_time_cool); // Исправлено
+              ESP_LOGD("Settings", "Age updated to: %d", new_time_cool);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_time_cool);
+            }    
+
   - platform: template
     name: "Treadmill Speed Feedback"
     id: treadmill_speed_feedback_sensor
@@ -1333,6 +1511,12 @@ sensor:
     lambda: |-
       return id(motor_running) ? id(target_speed) / 10.0 : 0.0;
     on_value:
+      - lambda: |-
+          if (id(speed).state) {
+            char speed_str[10]; // Буфер для хранения строки
+            sprintf(speed_str, "%.1f", id(treadmill_speed_sensor_uart).state); // Форматирование числа с одной цифрой после запятой
+            id(display_nextion).set_component_text("t1", speed_str); // Установка строки в текстовый компонент
+          }
       - if:
           condition:
             lambda: 'return id(ble_client_connected);'
@@ -1348,7 +1532,13 @@ sensor:
     icon: "mdi:angle-acute"
     lambda: |-
       return id(target_incline) / 10.0;
-
+    on_value:
+      - lambda: |-
+          if (id(speed).state) {
+            char incline_str[10]; // Буфер для хранения строки
+            sprintf(incline_str, "%.1f", id(treadmill_incline_sensor_uart).state); // Форматирование числа с одной цифрой после запятой
+            id(display_nextion).set_component_text("t4", incline_str); // Установка строки в текстовый компонент
+          }
   - platform: template
     name: "ESP32 Free Memory"
     lambda: |-
@@ -1376,11 +1566,39 @@ sensor:
       float distance_increment_km = speed_kph / 3600.0;
       current_distance_km += distance_increment_km;
       return current_distance_km;
+    on_value:
+      - lambda: |-
+          if (id(speed).state) {
+            char distance_str[10]; // Буфер для хранения строки
+            sprintf(distance_str, "%.1f", id(treadmill_distance_km).state); // Форматирование числа с одной цифрой после запятой
+            id(display_nextion).set_component_text("t2", distance_str); // Установка строки в текстовый компонент
+          }
     unit_of_measurement: "km"
     accuracy_decimals: 2
     update_interval: 1s
     icon: "mdi:map-marker-distance"
 
+
+  # - platform: template
+  #   name: "Treadmill Time"
+  #   id: treadmill_time_min
+  #   lambda: |-
+  #     static float total_time_min = 0.0;
+  #     if (!id(motor_running)) {
+  #       total_time_min = 0.0;
+  #       return total_time_min;
+  #     }
+  #     total_time_min += 1.0 / 60.0;
+  #     return total_time_min;
+  #   on_value:
+  #     - lambda: |-
+  #         char time_str[10]; // Буфер для хранения строки
+  #         sprintf(time_str, "%.1f", id(treadmill_time_min).state); // Форматирование числа с одной цифрой после запятой
+  #         id(display_nextion).set_component_text("t3", time_str); // Установка строки в текстовый компонент
+  #   unit_of_measurement: "min"
+  #   accuracy_decimals: 2
+  #   update_interval: 1s
+  #   icon: "mdi:timer-play-outline"
 
   - platform: template
     name: "Treadmill Time"
@@ -1393,10 +1611,20 @@ sensor:
       }
       total_time_min += 1.0 / 60.0;
       return total_time_min;
+    on_value:
+      - lambda: |-
+          int minutes = static_cast<int>(id(treadmill_time_min).state); // Получаем целые минуты
+          int seconds = static_cast<int>((id(treadmill_time_min).state - minutes) * 60); // Получаем секунды
+          if (id(speed).state) {
+            char time_str[6]; // Буфер для хранения строки в формате "M:SS"
+            sprintf(time_str, "%d:%02d", minutes, seconds); // Форматирование строки
+            id(display_nextion).set_component_text("t3", time_str); // Установка строки в текстовый компонент
+          }
     unit_of_measurement: "min"
     accuracy_decimals: 2
     update_interval: 1s
     icon: "mdi:timer-play-outline"
+
 
   - platform: pulse_counter
     pin:
@@ -1444,6 +1672,125 @@ sensor:
           alpha: 0.25
           send_every: 1
 
+  # - platform: ble_client
+  #   type: characteristic
+  #   ble_client_id: fit_smart
+  #   name: "Heart Rate"
+  #   id: heart_rate_sensor
+  #   service_uuid: "180d"
+  #   characteristic_uuid: "2a37"
+  #   notify: true
+  #   update_interval: never  # Отключаем активный опрос
+  #   lambda: |-
+  #     if (!id(fit_smart).connected()) {
+  #       return 0.0;  // Изменено с NAN на 0.0
+  #     }
+  #     if (x.size() < 2) return 0.0;  // Изменено с NAN на 0.0
+  #     uint8_t flags = x[0];
+  #     uint8_t heart_rate = x[1];
+  #     if (flags & 0x01) {
+  #       heart_rate = (x[2] << 8) | x[1]; // 16-битное значение пульса, если флаг установлен
+  #     }
+
+  #     // Обновляем дисплей с текущим пульсом
+  #     if (id(speed).state) {
+  #       char heart_str[10]; // Буфер для строки
+  #       sprintf(heart_str, "%d", heart_rate); // Форматируем число пульса
+  #       id(display_nextion).set_component_text("t0", heart_str); // Устанавливаем строку на дисплей
+  #     }
+  #     return (float)heart_rate;
+
+  #   unit_of_measurement: "bpm"
+  #   icon: "mdi:heart-pulse"
+
+
+  # - platform: ble_client
+  #   type: characteristic
+  #   ble_client_id: fit_smart
+  #   name: "Heart Rate"
+  #   id: heart_rate_sensor
+  #   service_uuid: "180d"
+  #   characteristic_uuid: "2a37"
+  #   notify: true
+  #   update_interval: never
+  #   lambda: |-
+  #     static uint16_t last_heart_rate = 0;
+  #     static uint16_t last_color = 65535;
+
+  #     // Проверяем подключение BLE
+  #     if (!id(fit_smart).connected()) {
+  #       if (id(speed).state) {
+  #         id(display_nextion).set_component_text("t0", "--");
+  #         id(display_nextion).send_command_printf("t0.pco=%d", 65535); // Белый
+  #       }
+  #       return 0.0;
+  #     }
+  #     if (x.size() < 2) return 0.0;
+
+  #     // Читаем значение пульса
+  #     uint8_t flags = x[0];
+  #     uint16_t heart_rate = x[1];
+  #     if (flags & 0x01) {
+  #       heart_rate = (x[2] << 8) | x[1]; // 16-битное значение
+  #     }
+
+  #     // Определяем границы зон пульса
+  #     float max_hr = id(max_heart_rate);
+  #     float min_zone_1 = max_hr * 0.50; // 50%
+  #     float max_zone_1 = max_hr * 0.60; // 60%
+  #     float min_zone_2 = max_hr * 0.60; // 60%
+  #     float max_zone_2 = max_hr * 0.70; // 70%
+  #     float min_zone_3 = max_hr * 0.70; // 70%
+  #     float max_zone_3 = max_hr * 0.80; // 80%
+  #     float min_zone_4 = max_hr * 0.80; // 80%
+  #     float max_zone_4 = max_hr * 0.90; // 90%
+  #     float min_zone_5 = max_hr * 0.90; // 90%
+  #     float max_zone_5 = max_hr;        // 100%
+
+  #     // Определяем цвет
+  #     uint16_t color = 10597; // Белый по умолчанию
+  #     int current_zone = 0;
+  #     if (heart_rate < min_zone_1) {
+  #       color = 10597; // Белый (ниже зоны 1)
+  #       current_zone = 0;
+  #     } else if (heart_rate >= min_zone_1 && heart_rate < max_zone_1) {
+  #       color = 10597; // Белый (зона 1)
+  #       current_zone = 1;
+  #     } else if (heart_rate >= min_zone_2 && heart_rate < max_zone_2) {
+  #       color = 2016;  // Зелёный (зона 2)
+  #       current_zone = 2;
+  #     } else if (heart_rate >= min_zone_3 && heart_rate < max_zone_3) {
+  #       color = 65504; // Жёлтый (зона 3)
+  #       current_zone = 3;
+  #     } else if (heart_rate >= min_zone_4 && heart_rate < max_zone_4) {
+  #       color = 42495; // Оранжевый (зона 4)
+  #       current_zone = 4;
+  #     } else if (heart_rate >= min_zone_5) {
+  #       color = 63488; // Красный (зона 5)
+  #       current_zone = 5;
+  #     }
+
+  #     // Получаем выбранную зону для логирования
+  #     int selected_zone = atoi(id(zone_select).state.c_str());
+
+  #     // Обновляем дисплей только при изменении
+  #     if (id(speed).state && (heart_rate != last_heart_rate || color != last_color)) {
+  #       char heart_str[10];
+  #       sprintf(heart_str, "%d", heart_rate);
+  #       id(display_nextion).set_component_text("t0", heart_str);
+  #       id(display_nextion).send_command_printf("t5.bco=%d", color);
+  #       last_heart_rate = heart_rate;
+  #       last_color = color;
+
+  #       // Логируем для отладки
+  #       //ESP_LOGI("Heart Rate", "HR: %d, Current Zone: %d, Selected Zone: %d, Color: %d, Max HR: %.1f, Zone 1: %.1f-%.1f, Zone 2: %.1f-%.1f",
+  #                //heart_rate, current_zone, selected_zone, color, max_hr, min_zone_1, max_zone_1, min_zone_2, max_zone_2);
+  #     }
+  #     return (float)heart_rate;
+  #   unit_of_measurement: "bpm"
+  #   icon: "mdi:heart-pulse"
+
+
   - platform: ble_client
     type: characteristic
     ble_client_id: fit_smart
@@ -1452,20 +1799,85 @@ sensor:
     service_uuid: "180d"
     characteristic_uuid: "2a37"
     notify: true
-    update_interval: never  # Отключаем активный опрос
+    update_interval: never
     lambda: |-
+      static uint16_t last_heart_rate = 0;
+      static uint16_t last_picture_id = 7; // Серый по умолчанию
+
+      // Проверяем подключение BLE
       if (!id(fit_smart).connected()) {
-        return NAN;
+        if (id(speed).state) {
+          id(display_nextion).set_component_text("b0", "-");
+          id(display_nextion).send_command_printf("b0.pic=%d", 7); // Серый
+        }
+        return 0.0;
       }
-      if (x.size() < 2) return NAN;
+      if (x.size() < 2) return 0.0;
+
+      // Читаем значение пульса
       uint8_t flags = x[0];
-      uint8_t heart_rate = x[1];
+      uint16_t heart_rate = x[1];
       if (flags & 0x01) {
-        heart_rate = (x[2] << 8) | x[1]; // 16-битное значение пульса, если флаг установлен
+        heart_rate = (x[2] << 8) | x[1]; // 16-битное значение
+      }
+
+      // Определяем границы зон пульса
+      float max_hr = id(max_heart_rate);
+      float min_zone_1 = max_hr * 0.50; // 50%
+      float max_zone_1 = max_hr * 0.60; // 60%
+      float min_zone_2 = max_hr * 0.60; // 60%
+      float max_zone_2 = max_hr * 0.70; // 70%
+      float min_zone_3 = max_hr * 0.70; // 70%
+      float max_zone_3 = max_hr * 0.80; // 80%
+      float min_zone_4 = max_hr * 0.80; // 80%
+      float max_zone_4 = max_hr * 0.90; // 90%
+      float min_zone_5 = max_hr * 0.90; // 90%
+      float max_zone_5 = max_hr;        // 100%
+
+      // Определяем ID картинки
+      uint16_t picture_id = 7; // Серый по умолчанию
+      int current_zone = 0;
+      if (heart_rate < min_zone_1) {
+        picture_id = 7; // Серый (ниже зоны 1)
+        current_zone = 0;
+      } else if (heart_rate >= min_zone_1 && heart_rate < max_zone_1) {
+        picture_id = 2; // Голубой (зона 1)
+        current_zone = 1;
+      } else if (heart_rate >= min_zone_2 && heart_rate < max_zone_2) {
+        picture_id = 3; // Зелёный (зона 2)
+        current_zone = 2;
+      } else if (heart_rate >= min_zone_3 && heart_rate < max_zone_3) {
+        picture_id = 4; // Жёлтый (зона 3)
+        current_zone = 3;
+      } else if (heart_rate >= min_zone_4 && heart_rate < max_zone_4) {
+        picture_id = 5; // Оранжевый (зона 4)
+        current_zone = 4;
+      } else if (heart_rate >= min_zone_5) {
+        picture_id = 6; // Красный (зона 5)
+        current_zone = 5;
+      }
+
+      // Получаем выбранную зону для логирования
+      int selected_zone = atoi(id(zone_select).state.c_str());
+
+      // Обновляем дисплей только при изменении
+      if (id(speed).state && (heart_rate != last_heart_rate || picture_id != last_picture_id)) {
+        char heart_str[10];
+        sprintf(heart_str, "%d", heart_rate);
+        id(display_nextion).set_component_text("b0", heart_str);
+        id(display_nextion).send_command_printf("b0.pic=%d", picture_id);
+        last_heart_rate = heart_rate;
+        last_picture_id = picture_id;
+
+        // Логируем для отладки
+        ESP_LOGI("Heart Rate", "HR: %d, Current Zone: %d, Selected Zone: %d, Picture ID: %d, Max HR: %.1f, Zone 1: %.1f-%.1f, Zone 2: %.1f-%.1f",
+                 heart_rate, current_zone, selected_zone, picture_id, max_hr, min_zone_1, max_zone_1, min_zone_2, max_zone_2);
       }
       return (float)heart_rate;
     unit_of_measurement: "bpm"
     icon: "mdi:heart-pulse"
+
+
 
   - platform: ble_client
     type: characteristic
@@ -1478,9 +1890,9 @@ sensor:
     update_interval: never  # Отключаем активный опрос
     lambda: |-
       if (!id(fit_smart).connected()) {
-        return NAN;
+        return 0.0;  // Изменено с NAN на 0.0
       }
-      if (x.size() < 1) return NAN;
+      if (x.size() < 1) return 0.0;  // Изменено с NAN на 0.0
       uint8_t battery_level = x[0];
       return (float)battery_level;
     unit_of_measurement: "%"
@@ -1500,18 +1912,42 @@ ble_client:
       - text_sensor.template.publish:
           id: connection_status
           state: "Подключен"
-      - delay: 200ms 
+      - delay: 20ms 
       - lambda: |-
           ESP_LOGD("ble_client", "Connected to fit_smart");
           // Принудительное чтение батареи при подключении
           id(battery_level_sensor).update();
+          // Устанавливаем значение hr в 1 (подключено)
+          id(display_nextion).send_command_printf("hr=1");
+      - if:
+          condition:
+            lambda: 'return id(mainPage).state;'
+          then:
+            - lambda: |-
+                id(display_nextion).send_command_printf("p_error.pic=15");
+                id(display_nextion).send_command_printf("vis p_error,1");
+            - delay: 3000ms  # Задержка 3 секунды
+            - lambda: |-
+                id(display_nextion).send_command_printf("vis p_error,0");
+                id(display_nextion).send_command_printf("mainPage.pic=1");
     on_disconnect:
       - sensor.template.publish:
           id: heart_rate_sensor
-          state: !lambda 'return NAN;'
+          state: 0 # !lambda 'return NAN;'
+      - lambda: |-
+          if (id(speed).state) {
+            id(display_nextion).set_component_text("b0", "-"); // Устанавливаем строку на дисплей
+            id(display_nextion).send_command_printf("b0.pic=7");
+          }
+
+          // Устанавливаем значение hr в 0 отключено
+          id(display_nextion).send_command_printf("hr=0");
+          if (id(mainPage).state) {
+            id(display_nextion).send_command_printf("mainPage.pic=16"); 
+          }
       - sensor.template.publish:
           id: battery_level_sensor
-          state: !lambda 'return NAN;'
+          state: 0 # !lambda 'return NAN;'
       - text_sensor.template.publish:
           id: connection_status
           state: "Отключено"
@@ -1729,31 +2165,137 @@ binary_sensor:
     lambda: |-
       return id(treadmill_speed_sensor_uart).state > 0.0;
 
+
+
+  # Кнопка увеличения скорости
   - platform: gpio
     pin:
       number: 13
       mode: INPUT_PULLUP
       inverted: true
-    name: "Speed Up Button"
-    entity_category: diagnostic
-    on_press:
-      - button.press: speed_up_button
+    id: raw_speed_up
     filters:
-      - delayed_on: 50ms
-      - delayed_off: 50ms
+      - delayed_on: 40ms
+      - delayed_off: 40ms
+    on_state:
+      then:
+        - binary_sensor.template.publish:
+            id: speed_up_clicker
+            state: !lambda 'return x;'
+        - delay: 40ms
+        - binary_sensor.template.publish:
+            id: speed_up_clicker
+            state: !lambda 'return false;'
 
+  # Кнопка уменьшения скорости
   - platform: gpio
     pin:
       number: 14
       mode: INPUT_PULLUP
       inverted: true
-    name: "Speed Down Button"
-    entity_category: diagnostic
-    on_press:
-      - button.press: speed_down_button
+    id: raw_speed_down
     filters:
-      - delayed_on: 50ms
-      - delayed_off: 50ms
+      - delayed_on: 40ms
+      - delayed_off: 40ms
+    on_state:
+      then:
+        - binary_sensor.template.publish:
+            id: speed_down_clicker
+            state: !lambda 'return x;'
+        - delay: 40ms
+        - binary_sensor.template.publish:
+            id: speed_down_clicker
+            state: !lambda 'return false;'
+
+  # Шаблонный сенсор для обработки кликов (Speed Up)
+  - platform: template
+    id: speed_up_clicker
+    name: "Speed Up Clicker"
+    internal: true
+    on_multi_click:
+      # Одиночный клик (короткое нажатие, +0.1)
+      - timing:
+          - ON for at most 0.2s
+          - OFF for at least 0.2s
+        then:
+          - button.press: speed_up_button
+      # Удержание (более 0.5s, +0.5)
+      - timing:
+          - ON for at least 2s
+          - OFF for at least 0.5s
+        then:
+          - button.press: speed_up_button_large
+      # Двойной клик (опционально, +1.0)
+      - timing:
+          - ON for at most 0.2s
+          - OFF for at most 0.4s
+          - ON for at most 0.2s
+          - OFF for at least 0.2s
+        then:
+          - lambda: |-
+              if (id(motor_running) && id(target_speed) < 120) {
+                id(target_speed) += 10;
+                id(target_speed_goal) = id(target_speed);
+                id(set_speed).publish_state(id(target_speed) / 10.0);
+              }
+
+  # Шаблонный сенсор для обработки кликов (Speed Down)
+  - platform: template
+    id: speed_down_clicker
+    name: "Speed Down Clicker"
+    internal: true
+    on_multi_click:
+      # Одиночный клик (короткое нажатие, -0.1)
+      - timing:
+          - ON for at most 0.2s
+          - OFF for at least 0.2s
+        then:
+          - button.press: speed_down_button
+      # Удержание (более 0.5s, -0.5)
+      - timing:
+          - ON for at least 1.0s
+        then:
+          - button.press: speed_down_button_large
+      # Двойной клик (опционально, -1.0)
+      - timing:
+          - ON for at most 0.2s
+          - OFF for at most 0.4s
+          - ON for at most 0.2s
+          - OFF for at least 0.2s
+        then:
+          - lambda: |-
+              if (id(motor_running) && id(target_speed) > 6) {
+                id(target_speed) -= 10;
+                id(target_speed_goal) = id(target_speed);
+                id(set_speed).publish_state(id(target_speed) / 10.0);
+              }
+
+  # - platform: gpio
+  #   pin:
+  #     number: 13
+  #     mode: INPUT_PULLUP
+  #     inverted: true
+  #   name: "Speed Up Button"
+  #   entity_category: diagnostic
+  #   on_press:
+  #     - button.press: speed_up_button
+  #   filters:
+  #     - delayed_on: 50ms
+  #     - delayed_off: 50ms
+
+  # - platform: gpio
+  #   pin:
+  #     number: 14
+  #     mode: INPUT_PULLUP
+  #     inverted: true
+  #   name: "Speed Down Button"
+  #   entity_category: diagnostic
+  #   on_press:
+  #     - button.press: speed_down_button
+  #   filters:
+  #     - delayed_on: 50ms
+  #     - delayed_off: 50ms
+
 
   - platform: gpio
     pin:
@@ -1780,7 +2322,204 @@ binary_sensor:
     filters:
       - delayed_on: 50ms
       - delayed_off: 50ms
-      
+
+#дисплей сенсор
+  - platform: nextion
+    page_id: 0
+    component_id: 6
+    id: mainPage
+    on_press:
+      then:
+        - component.update: display_nextion
+
+  - platform: nextion
+    page_id: 1
+    component_id: 1
+    id: speed
+    on_press:
+      then:
+        - component.update: display_nextion
+
+  - platform: nextion
+    page_id: 2
+    component_id: 0
+    id: pulsezone
+    on_press:
+      then:
+        - component.update: display_nextion
+
+
+  - platform: nextion
+    page_id: 3
+    component_id: 1
+    id: age
+    on_press:
+      then:
+        - component.update: display_nextion
+        - lambda: |-
+            // Отправляем возраст
+            id(display_nextion).send_command_printf("n_age.val=%d", (int)id(age_number).state);
+            ESP_LOGD("Nextion", "Loaded age %d to n_age", (int)id(age_number).state);
+            // Отправляем пол (bt0)
+            const char* gender = id(gender_select)->state.c_str();
+            int button_val = (strcmp(gender, "Male") == 0) ? 0 : 1;
+            id(display_nextion).send_command_printf("age.bt0.val=%d", button_val);
+
+  - platform: nextion
+    page_id: 5
+    component_id: 0
+    id: Time
+    on_press:
+      then:
+        - component.update: display_nextion
+        - lambda: |-
+            // Отправляем время
+            id(display_nextion).send_command_printf("n_min.val=%d", (int)id(set_run_time).state);
+            // Отправляем время размина
+            id(display_nextion).send_command_printf("n_warm.val=%d", (int)id(set_warm_up_time).state);
+            // Отправляем время заминка
+            id(display_nextion).send_command_printf("n_cool.val=%d", (int)id(set_cool_down_time).state);
+
+
+  - platform: nextion
+    page_id: 1
+    component_id: 6
+    id: m0_stop
+    on_press:
+      then:
+        - delay: 200ms
+        - script.execute: stop_program
+        - lambda: id(m0_stop).publish_state(false);
+
+  - platform: nextion
+    page_id: 0
+    component_id: 1
+    id: m0_start_manual
+    on_press:
+      then:
+        - delay: 200ms
+        - script.execute: start_manual
+        - lambda: id(m0_start_manual).publish_state(false);
+
+  - platform: nextion
+    page_id: 5
+    component_id: 1
+    id: m0_start_program
+    on_press:
+      then:
+        - delay: 200ms
+        - script.execute: start_program
+        - lambda: id(m0_start_program).publish_state(false);
+
+  - platform: nextion
+    page_id: 0
+    component_id: 2
+    id: m1_fat_barn
+    on_press:
+      then:
+        - delay: 200ms
+        - lambda: |-
+            id(program_select).publish_state("Fat Burn");  // Выбираем программу
+            // После этого on_value триггер у program_select выполнит нужные действия, обновит zone_select, время, текст и др.
+        - delay: 200ms
+        - lambda: id(m1_fat_barn).publish_state(false);
+
+  - platform: nextion
+    page_id: 0
+    component_id: 3
+    id: m2_recovery
+    on_press:
+      then:
+        - delay: 200ms
+        - lambda: |-
+            id(program_select).publish_state("Recovery run");  // Выбираем программу
+            // После этого on_value триггер у program_select выполнит нужные действия, обновит zone_select, время, текст и др.
+        - delay: 200ms
+        - lambda: id(m2_recovery).publish_state(false);
+
+  - platform: nextion
+    page_id: 0
+    component_id: 4
+    id: m3_hiit
+    on_press:
+      then:
+        - delay: 200ms
+        - lambda: |-
+            id(program_select).publish_state("HIIT");  // Выбираем программу
+            // После этого on_value триггер у program_select выполнит нужные действия, обновит zone_select, время, текст и др.
+        - delay: 200ms
+        # - script.execute: start_program
+        - lambda: id(m3_hiit).publish_state(false);
+
+  - platform: nextion
+    page_id: 0
+    component_id: 5
+    id: m4_castom_zone
+    on_press:
+      then:
+        - delay: 200ms
+        - lambda: |-
+            id(program_select).publish_state("Custom Pulse Zone");  // Выбираем программу
+        - delay: 200ms
+        - lambda: id(m4_castom_zone).publish_state(false);
+  - platform: nextion
+    page_id: 2
+    component_id: 1
+    id: mo_zone1
+    on_press:
+      then:
+        - delay: 200ms
+        - lambda: |-
+            id(zone_select).publish_state("1");
+        - delay: 200ms
+        - lambda: id(mo_zone1).publish_state(false);
+  - platform: nextion
+    page_id: 2
+    component_id: 2
+    id: m1_zone2
+    on_press:
+      then:
+        - delay: 200ms
+        - lambda: |-
+            id(zone_select).publish_state("2");
+        - delay: 200ms
+        - lambda: id(m1_zone2).publish_state(false);
+  - platform: nextion
+    page_id: 2
+    component_id: 3
+    id: m2_zone3
+    on_press:
+      then:
+        - delay: 200ms
+        - lambda: |-
+            id(zone_select).publish_state("3");
+        - delay: 200ms
+        - lambda: id(m2_zone3).publish_state(false);
+  - platform: nextion
+    page_id: 2
+    component_id: 4
+    id: m3_zone4
+    on_press:
+      then:
+        - delay: 200ms
+        - lambda: |-
+            id(zone_select).publish_state("4");
+        - delay: 200ms
+        - lambda: id(m3_zone4).publish_state(false);
+  - platform: nextion
+    page_id: 2
+    component_id: 5
+    id: m4_zone5
+    on_press:
+      then:
+        - delay: 200ms
+        - lambda: |-
+            id(zone_select).publish_state("5");
+        - delay: 200ms
+        - lambda: id(m4_zone5).publish_state(false);
+
+
+
 # Текстовые сенсоры
 text_sensor:
   - platform: template
@@ -1797,13 +2536,19 @@ text_sensor:
     name: "Selected Data"
     id: selected_data
     icon: "mdi:information"
-
+    # on_value:
+    #   - lambda: |-
+    #       if (id(speed).state) {
+    #         id(display_nextion).set_component_text("t5", x.c_str()); // Установка строки в текстовый компонент
+    #       }
   - platform: template
     name: "Status"
     id: program_status
     icon: "mdi:monitor-dashboard"
-    # Убираем update_interval, пусть обновляется только через publish_state
     lambda: |-
+      //if (id(speed).state) {
+        //id(display_nextion).set_component_text("t5", id(program_status).state.c_str());
+      //}
       return id(program_status).state;  // Просто возвращаем текущее значение
 
   - platform: template
@@ -1835,6 +2580,12 @@ select:
     on_value:
       - lambda: |-
           std::string program = x;
+
+           // Обновляем текстовый компонент t6 с именем выбранной программы
+           //if (id(speed).state) {
+             //id(display_nextion).set_component_text("t6", program.c_str());
+           //}
+
           if (program == "None") {
             id(zone_select).publish_state("1");
             id(set_run_time).publish_state(00.0); //время тренировки 
@@ -1844,29 +2595,29 @@ select:
           } else if (program == "Fat Burn") {
             id(zone_select).publish_state("2");
             id(set_run_time).publish_state(40.0); //время тренировки 
-            id(set_warm_up_time).publish_state(05.0); //время разминки
-            id(set_cool_down_time).publish_state(05.0); //время заминки
+            id(set_warm_up_time).publish_state(03.0); //время разминки
+            id(set_cool_down_time).publish_state(03.0); //время заминки
             id(remaining_run_time) = 40 * 60;
             id(manual_stop) = false;
           } else if (program == "Recovery run") {
             id(zone_select).publish_state("1");
             id(set_run_time).publish_state(25.0);
-            id(set_warm_up_time).publish_state(05.0); //время разминки
-            id(set_cool_down_time).publish_state(05.0); //время заминки
+            id(set_warm_up_time).publish_state(03.0); //время разминки
+            id(set_cool_down_time).publish_state(03.0); //время заминки
             id(remaining_run_time) = 25 * 60;
             id(manual_stop) = false;
           } else if (program == "HIIT") {
             id(set_run_time).publish_state(30.0);
             id(remaining_run_time) = 30 * 60;
-            id(set_warm_up_time).publish_state(05.0); //время разминки
-            id(set_cool_down_time).publish_state(05.0); //время заминки
+            id(set_warm_up_time).publish_state(03.0); //время разминки
+            id(set_cool_down_time).publish_state(03.0); //время заминки
             id(interval_phase) = "high";
             id(interval_time) = 0;
             id(manual_stop) = false;
           } else if (program == "Custom Pulse Zone") {
             id(set_run_time).publish_state(30.0);
-            id(set_warm_up_time).publish_state(05.0); //время разминки
-            id(set_cool_down_time).publish_state(05.0); //время заминки
+            id(set_warm_up_time).publish_state(03.0); //время разминки
+            id(set_cool_down_time).publish_state(03.0); //время заминки
             id(manual_stop) = false;
           }
 
@@ -1881,6 +2632,11 @@ select:
     initial_option: "Male"
     optimistic: true
     on_value:
+      - lambda: |-
+          const char* gender = id(gender_select)->state.c_str();
+          int button_val = (strcmp(gender, "Male") == 0) ? 0 : 1;  // 0 для Male, 1 для Female
+          // Обновляем bt0 (Dual State Button)
+          id(display_nextion).send_command_printf("age.bt0.val=%d", button_val);
       - script.execute: update_heart_rate_zones
 
   - platform: template
@@ -1980,6 +2736,10 @@ number:
     optimistic: true
     restore_value: yes
     on_value:
+      - lambda: |-
+          //if (id(age).state) {
+          id(display_nextion).send_command_printf("age.n_age.val=%d", (int)id(age_number).state);
+          //}
       - script.execute: update_heart_rate_zones
 
 
@@ -2073,6 +2833,11 @@ number:
     optimistic: true
     restore_value: no
     initial_value: 0  # По умолчанию 5 минут
+    on_value:
+      - lambda: |-
+          //if (id(age).state) {
+          id(display_nextion).send_command_printf("Time.n_warm.val=%d", (int)id(set_warm_up_time).state);
+          //}
 
   - platform: template
     name: "Set Run Time"
@@ -2101,6 +2866,10 @@ number:
             id(remaining_run_time) = new_time_seconds;
           }
 
+          //if (id(age).state) {
+          id(display_nextion).send_command_printf("Time.n_min.val=%d", (int)id(set_run_time).state);
+          //}
+
   - platform: template
     name: "Set Cool-down Time"
     id: set_cool_down_time
@@ -2112,6 +2881,11 @@ number:
     optimistic: true
     restore_value: no
     initial_value: 0  # По умолчанию 5 минут
+    on_value:
+      - lambda: |-
+          //if (id(age).state) {
+          id(display_nextion).send_command_printf("Time.n_cool.val=%d", (int)id(set_cool_down_time).state);
+          //}
 
 
   # - platform: template
@@ -2134,3 +2908,80 @@ number:
   #           id(uart_bus).set_baud_rate(new_baud_rate);
   #           id(uart_bus).load_settings();
   #         }
+
+
+
+
+
+
+  # Switch для обработки bt0 (Dual State Button)
+switch:
+  - platform: nextion
+    id: gender_switch
+    name: "Gender Switch"
+    component_name: bt0  # Соответствует имени в Nextion
+    on_turn_on:  # bt0.val = 1 (Female)
+      - lambda: |-
+          if (id(gender_select)->state != "Female") {
+            id(gender_select).publish_state("Female");
+            ESP_LOGD("Settings", "Gender set to Female from bt0");
+            id(update_heart_rate_zones).execute();
+          }
+    on_turn_off:  # bt0.val = 0 (Male)
+      - lambda: |-
+          if (id(gender_select)->state != "Male") {
+            id(gender_select).publish_state("Male");
+            ESP_LOGD("Settings", "Gender set to Male from bt0");
+            id(update_heart_rate_zones).execute();
+          }
+
+
+
+
+
+
+  #дисплей
+  # ***************** display *****************
+display:
+  - platform: nextion
+    uart_id: uart_0
+    update_interval: 5s
+    id: display_nextion
+    lambda: |-
+        //if (id(mainPage).state) {
+
+        //}
+        //if (id(speed).state) {
+            //it.set_component_text("t5", id(selected_data).state.c_str()); // Установка строки в текстовый компонент
+        //}
+
+        if (id(speed).state) {
+          id(display_nextion).set_component_text("t5", id(program_status).state.c_str());
+        }
+
+        //скорость
+        //char speed_str[10]; // Буфер для хранения строки
+        //sprintf(speed_str, "%.1f", id(treadmill_speed_sensor_uart).state); // Форматирование числа с одной цифрой после запятой
+        //it.set_component_text("t1", speed_str); // Установка строки в текстовый компонент
+
+        //наклон
+        //char incline_str[10]; // Буфер для хранения строки
+        //sprintf(incline_str, "%.1f", id(treadmill_incline_sensor_uart).state); // Форматирование числа с одной цифрой после запятой
+        //it.set_component_text("t4", incline_str); // Установка строки в текстовый компонент
+
+        //пульс
+        //char heart_str[10]; // Буфер для хранения строки
+        //sprintf(heart_str, "%d", id(heart_rate_sensor).state); // Форматирование числа с одной цифрой после запятой
+        //it.set_component_text("t0", heart_str); // Установка строки в текстовый компонент
+
+        //дистанция
+        //char distance_str[10]; // Буфер для хранения строки
+        //sprintf(distance_str, "%.1f", id(treadmill_distance_km).state); // Форматирование числа с одной цифрой после запятой
+        //it.set_component_text("t2", distance_str); // Установка строки в текстовый компонент
+
+        //время
+        //char time_str[10]; // Буфер для хранения строки
+        //sprintf(time_str, "%.1f", id(treadmill_time_min).state); // Форматирование числа с одной цифрой после запятой
+        //it.set_component_text("t3", time_str); // Установка строки в текстовый компонент
+
+
