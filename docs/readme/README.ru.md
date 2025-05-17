@@ -123,8 +123,7 @@ ble_client:
 - 17 мая 2025:
   - Добавлена интеграция дисплея Nextion в конфигурацию YAML.
   - Добавлен проект дизайна дисплея Nextion, созданный в программе Lunacy.
-  - Добавлена прошивка дисплея Nextion (файл HMI) для Nextion Editor.
-  - Добавлен скомпилированный файл `nextion_firmware.tft` для прошивки дисплея.
+  - Добавлена проект дисплея Nextion (файл HMI) для Nextion Editor.
 - 12 апреля 2025 года:
   - Добавлена поддержка FTMS для Kinomap на iOS с использованием сокращённых UUID.
   - Добавлена поддержка статусов FTMS (Training Status / Fitness Machine Status)
