@@ -7,7 +7,7 @@
 - :white_check_mark: Kinni
 - :white_check_mark: qdomyos
 
-**[Русская версия / Russian version](README.ru.md)**
+**[Русская версия / Russian version](docs/readme/README.ru.md)**
 
 ## About the Project
 Transform your old treadmill into a smart training companion! Using ESP32-S3 and ESPHome firmware, you can add FTMS support for fitness apps via BLE, plus smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled treadmill. Minimal cost, maximum potential!
@@ -26,9 +26,9 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **ESP32-S3** (highly recommended for performance and BLE support).
 - **LM2596S**: Voltage converter from 12V to 5V (non-isolated).
 - **2-channel level shifter**: To match 5V (PSA(xx)) and 3.3V (ESP32 S3).
-- **Treadmill**: Ideally with a **[PSA(xx) board](image/PSA(XX)H.jpg)**, but any UART-capable model (RX-TX) will do.
+- **Treadmill**: Ideally with a **[PSA(xx) board](docs/readme/images/PSA(XX)H.jpg)**, but any UART-capable model (RX-TX) will do.
 - **Nextion display**: For enhanced user interface and interaction.
- ![Treadmill Screenshot](image/PSA(XX)H.jpg)
+ ![Treadmill Screenshot](docs/readme/images/PSA(XX)H.jpg)
 ## Connection
 - **ESP32-S3**:
   - GPIO17 (TX): Transmits data to RX (Pin 5) on PSA(xx) through a level shifter.
@@ -62,7 +62,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 ## Features
 ### Core Functions
 - **Zwift Support**: Full integration with the popular platform.
-  ![ESPHome Treadmill Zwift](image/Zwift.gif)
+  ![ESPHome Treadmill Zwift](docs/readme/images/Zwift.gif)
 - **FTMS Support**: Compatibility with Kinomap, FitShow, and Kinni.
 - **Heart Rate Monitor**: Connects via BLE with zone calculation based on age and gender.
 - **Real Data**: Accurate incline percentages and speed calibration.
@@ -70,7 +70,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Manual Mode**: Train without a heart rate monitor.
 - **Local Storage**: Save runs and visualize them in Grafana.
 - **Nextion Display**: Supports touch display for easy workout monitoring and treadmill control.
-  ![ESPHome Treadmill Nextion](image/nextion.gif)
+  ![ESPHome Treadmill Nextion](docs/readme/images/nextion.gif)
 
 ### Smart Adjustment
 - **Pulse Maintenance**: Speed adjusts smoothly based on the difference from the target zone:
@@ -92,7 +92,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Recovery run**: Keeps Zone 1 for light running.
 
 ### Hassio Interface
-![Hassio Interface](image/hassio.png)
+![Hassio Interface](docs/readme/images/hassio.png)
 
 ## ESPHome Setup
 The file (config.yaml) configures the ESP32 S3 to control the treadmill and connect the heart rate monitor.
