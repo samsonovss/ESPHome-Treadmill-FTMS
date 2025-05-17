@@ -1,4 +1,4 @@
-# Превратите старую беговую дорожку в умную с FTMS на ESPHome и ESP32-S3 BLE
+# Превратите старую беговую дорожку в умную с FTMS на ESPHome и ESP32-S3 BLE с дисплеем Nextion
 
 ### Поддерживаемые приложения FTMS
 - :white_check_mark: Zwift
