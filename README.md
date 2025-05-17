@@ -1,4 +1,4 @@
-# Transform Your Treadmill with FTMS on ESPHome via ESP32-S3 BLE
+# Transform Your Treadmill with FTMS on ESPHome via ESP32-S3 BLE with Nextion Display
 
 ### Supported FTMS Apps
 - :white_check_mark: Zwift
