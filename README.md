@@ -53,6 +53,11 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
   - Input 12V: Receives power from Pin 1 (12V) of PSA(xx).
   - Output 5V: Provides power to the Vcc (HV) side of the level shifter.
   - GND: Common ground with PSA(xx) and the level shifter.
+- Nextion Display:
+  - TX: Transmits data to RX (GPIO43) on ESP32-S3
+  - RX: Receives data from TX (GPIO44) on ESP32-S3
+  - GND: Ground from the LM2596S.
+  - Vcc: 5V from the LM2596S.
  
 ## Features
 ### Core Functions
