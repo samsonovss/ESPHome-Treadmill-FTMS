@@ -28,7 +28,7 @@
 - **2-канальный преобразователь уровней**: для согласования 5 В (PSA(xx)) и 3.3 В (ESP32 S3).
 - **Беговая дорожка**: идеально — с платой **[PSA(xx)](docs/readme/imagesPSA(XX)H.jpg)**, но подойдёт любая с UART (RX-TX).
 - **Дисплей Nextion**: для улучшенного пользовательского интерфейса и взаимодействия.
- ![Treadmill Screenshot](docs/readme/images/PSA(XX)H.jpg)
+ ![Treadmill Screenshot](images/PSA(XX)H.jpg)
 
 ## Подключение
 - **ESP32-S3**:
