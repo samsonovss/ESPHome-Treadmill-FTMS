@@ -38,7 +38,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 
 <details>
 <summary><b>Treadmill</b>: Ideally with a PSA(xx) board, but any UART-capable model (RX-TX) will do. (Click to expand)</summary>
-<img src="docs/readme/images/PSA(XX)H.jpg" alt="PSA(xx) board Screenshot" width="400"/>
+<img src="docs/readme/images/PSA(XX)H.jpg" alt="PSA(xx) board Screenshot"/>
 </details>
 
 ## Connection
