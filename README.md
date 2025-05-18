@@ -24,7 +24,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 
 ## Recommended Hardware
   <details>
-  <summary>▶<b>ESP32-S3</b>: Highly recommended for performance and BLE support. (Click to detail)</summary>
+  <summary><b>ESP32-S3</b>: Highly recommended for performance and BLE support. (Click to detail)</summary>
   <img src="docs/readme/images/esp32-s3.png" alt="ESP32-S Screenshot" width="400"/>
   </details>
   
