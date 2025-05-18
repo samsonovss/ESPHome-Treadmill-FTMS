@@ -104,7 +104,10 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Manual Mode**: Train without a heart rate monitor.
 - **Local Storage**: Save runs and visualize them in Grafana.
 - **Nextion Display**: Supports touch display for easy workout monitoring and treadmill control.
-  ![ESPHome Treadmill Nextion](docs/readme/images/nextion.gif)
+  <details>
+  <summary>(Click to expand nextion display example)</summary>
+  <img src="docs/readme/images/nextion.gif" alt="nextion display Screenshot"/>
+  </details>
 
 ### Smart Adjustment
 - **Pulse Maintenance**: Speed adjusts smoothly based on the difference from the target zone:
