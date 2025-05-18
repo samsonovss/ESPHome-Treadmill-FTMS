@@ -30,10 +30,12 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 <summary><b>Nextion display</b>: For enhanced user interface and interaction. (Click to expand)</summary>
 <img src="docs/readme/images/nextion_display.jpg" alt="display Screenshot" width="400"/>
 </details>
+
 <details>
 <summary><b>FC33</b>: Optical speed sensor for treadmill calibration optional. (Click to expand)</summary>
 <img src="docs/readme/images/FC-33_speed_sensor.jpg" alt="Optical speed sensor Screenshot" width="400"/>
 </details>
+
 - **Treadmill**: Ideally with a **[PSA(xx) board](docs/readme/images/PSA(XX)H.jpg)**, but any UART-capable model (RX-TX) will do.
  ![Treadmill Screenshot](docs/readme/images/PSA(XX)H.jpg)
 ## Connection
