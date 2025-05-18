@@ -30,8 +30,6 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 <summary><b>Nextion display</b>: For enhanced user interface and interaction. (Click to expand)</summary>
 <img src="docs/readme/images/nextion_display.jpg" alt="display Screenshot" width="400"/>
 </details>
-
-- **FC33**: Optical speed sensor for treadmill calibration (optional).
 <details>
 <summary><b>FC33</b>: Optical speed sensor for treadmill calibration optional. (Click to expand)</summary>
 <img src="docs/readme/images/FC-33_speed_sensor.jpg" alt="Optical speed sensor Screenshot" width="400"/>
