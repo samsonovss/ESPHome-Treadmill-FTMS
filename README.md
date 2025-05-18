@@ -55,7 +55,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 
 ## Connection
 <details>
-<summary>Click to Connection detail</summary>
+<summary>▶️ Click to Connection detail</summary>
 
 - ESP32-S3:
   - GPIO17 (TX): Transmits data to RX (Pin 5) on PSA(xx) through a level shifter.
