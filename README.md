@@ -93,7 +93,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Zwift Support**: Full integration with the popular platform.
 
   <details>
-  <summary>_Click to expand Zwift example_</summary>
+  <summary>▶️ Click to expand Zwift example</summary>
   <img src="docs/readme/images/Zwift.gif" alt="ESPHome Treadmill Zwift Screenshot"/>
   </details>
 
@@ -105,7 +105,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Local Storage**: Save runs and visualize them in Grafana.
 - **Nextion Display**: Supports touch display for easy workout monitoring and treadmill control.
   <details>
-  <summary>(Click to expand nextion display example)</summary>
+  <summary>▶️ Click to expand nextion display example</summary>
   <img src="docs/readme/images/nextion.gif" alt="nextion display Screenshot"/>
   </details>
 
