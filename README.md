@@ -27,6 +27,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **LM2596S**: Voltage converter from 12V to 5V (non-isolated).
 - **2-channel level shifter**: To match 5V (PSA(xx)) and 3.3V (ESP32 S3).
 - **Nextion display**: For enhanced user interface and interaction.
+-  ![Treadmill Screenshot](docs/readme/images/nextion_display.jpg)
 - **FC33**: Optical speed sensor for treadmill calibration (optional).
 - **Treadmill**: Ideally with a **[PSA(xx) board](docs/readme/images/PSA(XX)H.jpg)**, but any UART-capable model (RX-TX) will do.
  ![Treadmill Screenshot](docs/readme/images/PSA(XX)H.jpg)
