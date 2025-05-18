@@ -28,10 +28,14 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **2-channel level shifter**: To match 5V (PSA(xx)) and 3.3V (ESP32 S3).
 <details>
 <summary><b>Nextion display</b>: For enhanced user interface and interaction. (Click to expand)</summary>
-<img src="docs/readme/images/nextion_display.jpg" alt="Treadmill Screenshot" width="400"/>
+<img src="docs/readme/images/nextion_display.jpg" alt="display Screenshot" width="400"/>
 </details>
 
 - **FC33**: Optical speed sensor for treadmill calibration (optional).
+<details>
+<summary><b>FC33</b>: Optical speed sensor for treadmill calibration optional. (Click to expand)</summary>
+<img src="docs/readme/images/FC-33_speed_sensor.jpg" alt="Optical speed sensor Screenshot" width="400"/>
+</details>
 - **Treadmill**: Ideally with a **[PSA(xx) board](docs/readme/images/PSA(XX)H.jpg)**, but any UART-capable model (RX-TX) will do.
  ![Treadmill Screenshot](docs/readme/images/PSA(XX)H.jpg)
 ## Connection
