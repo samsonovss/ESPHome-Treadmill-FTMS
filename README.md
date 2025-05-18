@@ -36,8 +36,11 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 <img src="docs/readme/images/FC-33_speed_sensor.jpg" alt="Optical speed sensor Screenshot" width="400"/>
 </details>
 
-- **Treadmill**: Ideally with a **[PSA(xx) board](docs/readme/images/PSA(XX)H.jpg)**, but any UART-capable model (RX-TX) will do.
- ![Treadmill Screenshot](docs/readme/images/PSA(XX)H.jpg)
+<details>
+<summary><b>Treadmill</b>: Ideally with a PSA(xx) board, but any UART-capable model (RX-TX) will do. (Click to expand)</summary>
+<img src="docs/readme/images/PSA(XX)H.jpg" alt="PSA(xx) board Screenshot" width="400"/>
+</details>
+
 ## Connection
 - **ESP32-S3**:
   - GPIO17 (TX): Transmits data to RX (Pin 5) on PSA(xx) through a level shifter.
