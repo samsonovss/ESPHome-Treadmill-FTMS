@@ -28,14 +28,16 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 <img src="docs/readme/images/esp32-s3.png" alt="ESP32-S Screenshot" width="400"/>
 </details>
 
-- **LM2596S**: Voltage converter from 12V to 5V (non-isolated).
-
 <details>
 <summary><b>LM2596S</b>: Voltage converter from 12V to 5V (non-isolated). (Click to expand)</summary>
 <img src="docs/readme/images/LM2596S.jpg" alt="LM2596S Screenshot" width="400"/>
 </details>
 
-- **2-channel level shifter**: To match 5V (PSA(xx)) and 3.3V (ESP32 S3).
+<details>
+<summary><b>2-channel level shifter</b>: To match 5V (PSA(xx)) and 3.3V (ESP32 S3). (Click to expand)</summary>
+<img src="docs/readme/images/2-channel_level_shifter.webp" alt="LM2596S Screenshot" width="400"/>
+</details>
+  
 <details>
 <summary><b>Nextion display</b>: For enhanced user interface and interaction. (Click to expand)</summary>
 <img src="docs/readme/images/nextion_display.jpg" alt="display Screenshot" width="400"/>
