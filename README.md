@@ -91,7 +91,12 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 ## Features
 ### Core Functions
 - **Zwift Support**: Full integration with the popular platform.
-  ![ESPHome Treadmill Zwift](docs/readme/images/Zwift.gif)
+
+<details>
+<summary>(Click to expand Zwift example)</summary>
+<img src="docs/readme/images/Zwift.gif" alt="ESPHome Treadmill Zwift Screenshot"/>
+</details>
+
 - **FTMS Support**: Compatibility with Kinomap, FitShow, and Kinni.
 - **Heart Rate Monitor**: Connects via BLE with zone calculation based on age and gender.
 - **Real Data**: Accurate incline percentages and speed calibration.
