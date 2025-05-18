@@ -27,7 +27,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **LM2596S**: Voltage converter from 12V to 5V (non-isolated).
 - **2-channel level shifter**: To match 5V (PSA(xx)) and 3.3V (ESP32 S3).
 - **Nextion display**: For enhanced user interface and interaction.
-<details>
+- <details>
 <summary>Click to expand</summary>
 
 <img src="docs/readme/images/nextion_display.jpg" alt="Treadmill Screenshot" width="400"/>
