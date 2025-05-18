@@ -53,8 +53,9 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 <img src="docs/readme/images/PSA(XX)H.jpg" alt="PSA(xx) board Screenshot"/>
 </details>
 
+## Connection
 <details>
-<summary>Connection</summary>
+<summary>Click to expand detail</summary>
 
 - ESP32-S3:
   - GPIO17 (TX): Transmits data to RX (Pin 5) on PSA(xx) through a level shifter.
@@ -86,37 +87,6 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
   - Vcc: 5V from the LM2596S.
 
 </details>
-
-
-## Connection
-- **ESP32-S3**:
-  - GPIO17 (TX): Transmits data to RX (Pin 5) on PSA(xx) through a level shifter.
-  - GPIO18 (RX): Receives data from TX (Pin 4) on PSA(xx) through a level shifter.
-  - GND: Common ground with the level shifter (3.3V side).
-  - 3.3V: Power supply for the Low Voltage (LV) side of the level shifter.
-- **ESP32-S3** (Power Supply Connections):
-  - LV (Low Voltage): 3.3V side connected to the ESP32.
-  - HV (High Voltage): 5V side connected to PSA(xx).
-  - GND (LV): Ground from the ESP32.
-  - Vcc (LV): 3.3V from the ESP32.
-  - GND (HV): Ground from the LM2596S.
-  - Vcc (HV): 5V from the LM2596S.
-- PSA(xx) Board (6-pin):
-  - Pin 1 (12V): Supplies power to the board, feeds the input of the LM2596S, and connects to Pin 6 (SW).
-  - Pin 2: Not connected (unused).
-  - Pin 3 (GND): Common ground with the LM2596S and the level shifter.
-  - Pin 4 (TX): Transmits data to GPIO18 (RX) on the ESP32 through the level shifter.
-  - Pin 5 (RX): Receives data from GPIO17 (TX) on the ESP32 through the level shifter.
-  - Pin 6 (SW): Connected to Pin 1 (12V) to power on the treadmill.
-- PSA(xx) Board (Additional 6-pin Section):
-  - Input 12V: Receives power from Pin 1 (12V) of PSA(xx).
-  - Output 5V: Provides power to the Vcc (HV) side of the level shifter.
-  - GND: Common ground with PSA(xx) and the level shifter.
-- Nextion Display:
-  - TX: Transmits data to RX (GPIO43) on ESP32-S3
-  - RX: Receives data from TX (GPIO44) on ESP32-S3
-  - GND: Ground from the LM2596S.
-  - Vcc: 5V from the LM2596S.
  
 ## Features
 ### Core Functions
