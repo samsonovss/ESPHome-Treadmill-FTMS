@@ -93,7 +93,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Zwift Support**: Full integration with the popular platform.
 
   <details>
-  <summary style="color: blue; cursor: pointer;">Click to expand Zwift example</summary>
+  <summary>_Click to expand Zwift example_</summary>
   <img src="docs/readme/images/Zwift.gif" alt="ESPHome Treadmill Zwift Screenshot"/>
   </details>
 
