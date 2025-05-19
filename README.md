@@ -106,7 +106,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Nextion Display**: Supports touch display for easy workout monitoring and treadmill control.
   <details>
   <summary>▶️ Click to expand nextion display example</summary>
-  <img src="docs/readme/images/nextion.gif" alt="nextion display Screenshot"/>
+  <img src="docs/readme/images/nextion_desine.png" alt="nextion display Screenshot"/>
   </details>
 
 ### Smart Adjustment
