@@ -24,32 +24,32 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 
 ## Recommended Hardware
   <details>
-  <summary><b>ESP32-S3</b>: Highly recommended for performance and BLE support. (Click to detail)</summary>
+  <summary><b>ESP32-S3</b>: Highly recommended for performance and BLE support. (▶️ Click to detail)</summary>
   <img src="docs/readme/images/esp32-s3.png" alt="ESP32-S Screenshot" width="400"/>
   </details>
   
   <details>
-  <summary><b>LM2596S</b>: Voltage converter from 12V to 5V (non-isolated). (Click to detail)</summary>
+  <summary><b>LM2596S</b>: Voltage converter from 12V to 5V (non-isolated). (▶️ Click to detail)</summary>
   <img src="docs/readme/images/LM2596S.jpg" alt="LM2596S Screenshot" width="400"/>
   </details>
   
   <details>
-  <summary><b>2-channel level shifter</b>: To match 5V (PSA(xx)) and 3.3V (ESP32 S3). (Click to detail)</summary>
+  <summary><b>2-channel level shifter</b>: To match 5V (PSA(xx)) and 3.3V (ESP32 S3). (▶️ Click to detail)</summary>
   <img src="docs/readme/images/2-channel_level_shifter.webp" alt="LM2596S Screenshot" width="400"/>
   </details>
     
   <details>
-  <summary><b>Nextion display</b>: For enhanced user interface and interaction. (Click to detail)</summary>
+  <summary><b>Nextion display</b>: For enhanced user interface and interaction. (▶️ Click to detail)</summary>
   <img src="docs/readme/images/nextion_display.jpg" alt="display Screenshot" width="400"/>
   </details>
   
   <details>
-  <summary><b>FC33</b>: Optical speed sensor for treadmill calibration optional. (Click to detail)</summary>
+  <summary><b>FC33</b>: Optical speed sensor for treadmill calibration optional. (▶️ Click to detail)</summary>
   <img src="docs/readme/images/FC-33_speed_sensor.jpg" alt="Optical speed sensor Screenshot" width="400"/>
   </details>
   
   <details>
-  <summary><b>Treadmill</b>: Ideally with a PSA(xx) board, but any UART-capable model (RX-TX) will do. (Click to detail)</summary>
+  <summary><b>Treadmill</b>: Ideally with a PSA(xx) board, but any UART-capable model (RX-TX) will do. (▶️ Click to detail)</summary>
   <img src="docs/readme/images/PSA(XX)H.jpg" alt="PSA(xx) board Screenshot"/>
   </details>
 
