@@ -121,7 +121,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 
 ## Workout Results Example
 - After completing a workout, results are logged in the "Workout Summary" format. Example:
-```
+```yaml
   ===== Workout Summary =====
   User: Gender=Male, Age=41 years, Weight=78.0 kg, Max HR=181 bpm
   Duration: 58.17 min (3490 sec)
