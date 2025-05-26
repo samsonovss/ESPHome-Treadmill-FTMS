@@ -109,6 +109,23 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
   <img src="docs/readme/images/nextion_desine.png" alt="nextion display Screenshot"/>
   </details>
 
+## Workout Results Example
+- After completing a workout, results are logged in the "Workout Summary" format. Example:
+
+  ===== Workout Summary =====
+  User: Gender=Male, Age=41 years, Weight=78.0 kg, Max HR=181 bpm
+  Duration: 58.17 min (3490 sec)
+  Distance: 4.51 km
+  Calories: 257 kcal
+  Avg Speed: 4.66 km/h
+  Avg Incline: 1.40% (Real Incline: 0.47%)
+  Avg MET: 3.27
+  Avg VO2: 11.9 ml/kg/min
+  Avg Heart Rate: 114 bpm
+  Max Heart Rate: 173 bpm
+  Heart Rate Zones: Zone1=8:33, Zone2=36:03, Zone3=7:36, Zone4=0:23, Zone5=1:05
+  ===== End of Summary =====
+
 ### Smart Adjustment
 - **Pulse Maintenance**: Speed adjusts smoothly based on the difference from the target zone:
   - Difference > 20 bpm: ±0.5 km/h in 0.1 steps every 2 seconds.
