@@ -124,7 +124,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
   Avg Heart Rate: 114 bpm
   Max Heart Rate: 173 bpm
   Heart Rate Zones: Zone1=8:33, Zone2=36:03, Zone3=7:36, Zone4=0:23, Zone5=1:05
-===== End of Summary =====
+  ===== End of Summary =====
 ```
 
 ### Smart Adjustment
