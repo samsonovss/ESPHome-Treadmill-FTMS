@@ -111,8 +111,9 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 
 ## Workout Results Example
 - After completing a workout, results are logged in the "Workout Summary" format. Example:
+```
+  ===== Workout Summary ===== 
 
-  ```===== Workout Summary =====
   User: Gender=Male, Age=41 years, Weight=78.0 kg, Max HR=181 bpm
   Duration: 58.17 min (3490 sec)
   Distance: 4.51 km
@@ -124,7 +125,9 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
   Avg Heart Rate: 114 bpm
   Max Heart Rate: 173 bpm
   Heart Rate Zones: Zone1=8:33, Zone2=36:03, Zone3=7:36, Zone4=0:23, Zone5=1:05
-  ===== End of Summary =====```
+
+===== End of Summary =====
+```
 
 ### Smart Adjustment
 - **Pulse Maintenance**: Speed adjusts smoothly based on the difference from the target zone:
