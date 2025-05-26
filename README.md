@@ -1,5 +1,19 @@
 # Transform Your Treadmill with FTMS on ESPHome via ESP32-S3 BLE with Nextion Display
 
+## Table of Contents
+- [Supported FTMS Apps](#supported-ftms-apps)
+- [About the Project](#about-the-project)
+- [How It Works](#how-it-works)
+- [Recommended Hardware](#recommended-hardware)
+- [Connection](#connection)
+- [Features](#features)
+- [ESPHome Setup](#esphome-setup)
+- [Workout Results Example](#workout-results-example)
+- [Future Plans](#future-plans)
+- [Changelog](#changelog)
+- [Authors](#authors)
+- [Support the Project](#support-the-project)
+
 ### Supported FTMS Apps
 - :white_check_mark: Zwift
 - :white_check_mark: Kinomap (Android/iOS)
