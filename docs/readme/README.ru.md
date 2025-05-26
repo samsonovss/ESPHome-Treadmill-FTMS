@@ -74,6 +74,24 @@
 - **Nextion Display**: Поддержка сенсорного дисплея для удобного мониторинга тренировки и управления беговой дорожкой.
   ![ESPHome Treadmill Nextion](images/nextion_desine.png)
 
+
+## Пример результатов тренировки
+- После завершения тренировки результаты записываются в лог в формате "Workout Summary". Пример:
+```
+  ===== Workout Summary =====
+  User: Gender=Male, Age=41 years, Weight=78.0 kg, Max HR=181 bpm
+  Duration: 58.17 min (3490 sec)
+  Distance: 4.51 km
+  Calories: 257 kcal
+  Avg Speed: 4.66 km/h
+  Avg Incline: 1.40% (Real Incline: 0.47%)
+  Avg MET: 3.27
+  Avg VO2: 11.9 ml/kg/min
+  Avg Heart Rate: 114 bpm
+  Max Heart Rate: 173 bpm
+  Heart Rate Zones: Zone1=8:33, Zone2=36:03, Zone3=7:36, Zone4=0:23, Zone5=1:05
+  ===== End of Summary =====
+```
 ### Интеллектуальная регулировка
 - **Поддержание пульса**: скорость меняется плавно в зависимости от разницы с целевой зоной:
   - Разница > 20 уд/мин: ±0.5 км/ч с шагом 0.1 каждые 2 секунды.
