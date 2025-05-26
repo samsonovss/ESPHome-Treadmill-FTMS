@@ -1,16 +1,5 @@
 # Transform Your Treadmill with FTMS on ESPHome via ESP32-S3 BLE with Nextion Display
 
-## Table of Contents
-- [About the Project](#about-the-project)
-- [How It Works](#how-it-works)
-- [Recommended Hardware](#recommended-hardware)
-- [Connection](#connection)
-- [Features](#features)
-- [ESPHome Setup](#esphome-setup)
-- [Workout Results Example](#workout-results-example)
-- [Future Plans](#future-plans)
-- [Changelog](#changelog)
-
 ### Supported FTMS Apps
 - :white_check_mark: Zwift
 - :white_check_mark: Kinomap (Android/iOS)
@@ -19,6 +8,16 @@
 - :white_check_mark: qdomyos
 
 **[Русская версия / Russian version](docs/readme/README.ru.md)**
+
+## Table of Contents
+- [How It Works](#how-it-works)
+- [Recommended Hardware](#recommended-hardware)
+- [Connection](#connection)
+- [Features](#features)
+- [ESPHome Setup](#esphome-setup)
+- [Workout Results Example](#workout-results-example)
+- [Future Plans](#future-plans)
+- [Changelog](#changelog)
 
 ## About the Project
 Transform your old treadmill into a smart training companion! Using ESP32-S3 and ESPHome firmware, you can add FTMS support for fitness apps via BLE, plus smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled treadmill. Minimal cost, maximum potential!
