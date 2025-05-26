@@ -77,7 +77,7 @@
 
 ## Пример результатов тренировки
 - После завершения тренировки результаты записываются в лог в формате "Workout Summary". Пример:
-```
+```yaml
   ===== Workout Summary =====
   User: Gender=Male, Age=41 years, Weight=78.0 kg, Max HR=181 bpm
   Duration: 58.17 min (3490 sec)
