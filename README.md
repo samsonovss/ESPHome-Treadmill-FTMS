@@ -115,11 +115,11 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Local Storage**: Save runs and visualize them in Grafana.
 - **Interface**:
   <details>
-  <summary><b>**Nextion Display**: Supports touch display for easy workout monitoring and treadmill control. (▶️ Click to detail)</summary>
+  <summary><b>Nextion Display<b>: Supports touch display for easy workout monitoring and treadmill control. (▶️ Click to detail)</summary>
   <img src="docs/readme/images/nextion_desine.png" alt="nextion display Screenshot"/>
   </details>
   <details>
-  <summary><b>**Hassio Interface** (▶️ Click to detail)</summary>
+  <summary><b>**Hassio Interface</b> (▶️ Click to detail)</summary>
   <img src="docs/readme/images/hassio.png" alt="Hassio Interface Screenshot"/>
   </details>
 
