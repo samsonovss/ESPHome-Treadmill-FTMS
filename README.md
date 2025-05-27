@@ -113,17 +113,15 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Button Control**: Adjust speed and incline via GPIO with feedback.
 - **Manual Mode**: Train without a heart rate monitor.
 - **Local Storage**: Save runs and visualize them in Grafana.
-- **Interface**
-  - **Nextion Display**: Supports touch display for easy workout monitoring and treadmill control.
-    <details>
-    <summary>▶️ Click to expand nextion display example</summary>
-    <img src="docs/readme/images/nextion_desine.png" alt="nextion display Screenshot"/>
-    </details>
-  - **Hassio Interface
-    <details>
-    <summary>▶️ Click to image Hassio Interface</summary>
-    <img src="docs/readme/images/hassio.png" alt="Hassio Interface Screenshot"/>
-    </details>
+- **Interface**:
+  <details>
+  <summary><b>**Nextion Display**: Supports touch display for easy workout monitoring and treadmill control. (▶️ Click to detail)</summary>
+  <img src="docs/readme/images/nextion_desine.png" alt="nextion display Screenshot"/>
+  </details>
+  <details>
+  <summary><b>**Hassio Interface** (▶️ Click to detail)</summary>
+  <img src="docs/readme/images/hassio.png" alt="Hassio Interface Screenshot"/>
+  </details>
 
 ## Workout Results Example
 - After completing a workout, results are logged in the "Workout Summary" format. Example:
