@@ -113,11 +113,17 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Button Control**: Adjust speed and incline via GPIO with feedback.
 - **Manual Mode**: Train without a heart rate monitor.
 - **Local Storage**: Save runs and visualize them in Grafana.
-- **Nextion Display**: Supports touch display for easy workout monitoring and treadmill control.
-  <details>
-  <summary>▶️ Click to expand nextion display example</summary>
-  <img src="docs/readme/images/nextion_desine.png" alt="nextion display Screenshot"/>
-  </details>
+- **Interface**
+  - **Nextion Display**: Supports touch display for easy workout monitoring and treadmill control.
+    <details>
+    <summary>▶️ Click to expand nextion display example</summary>
+    <img src="docs/readme/images/nextion_desine.png" alt="nextion display Screenshot"/>
+    </details>
+  - **Hassio Interface
+    <details>
+    <summary>▶️ Click to image Hassio Interface</summary>
+    <img src="docs/readme/images/hassio.png" alt="Hassio Interface Screenshot"/>
+    </details>
 
 ## Workout Results Example
 - After completing a workout, results are logged in the "Workout Summary" format. Example:
@@ -159,12 +165,6 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - **Fat Burning**: Zone 2 with smooth speed and incline control.
 - **HIIT**: Switches between Zones 1 and 4 based on heart rate with auto-speed tuning.
 - **Recovery run**: Keeps Zone 1 for light running.
-
-### Hassio Interface
-<details>
-<summary>▶️ Click to image Hassio Interface</summary>
-<img src="docs/readme/images/hassio.png" alt="Hassio Interface Screenshot"/>
-</details>
 
 ## ESPHome Setup
 The file (config.yaml) configures the ESP32 S3 to control the treadmill and connect the heart rate monitor.
