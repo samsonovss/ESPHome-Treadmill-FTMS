@@ -139,16 +139,21 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 
 ### Smart Adjustment
 - **Pulse Maintenance**: Speed adjusts smoothly based on the difference from the target zone:
-  - Difference > 20 bpm: ±0.5 km/h in 0.1 steps every 2 seconds.
-  - Difference < 20 bpm: ±0.1 km/h every 20 seconds.
+  - Difference > 10 bpm: ±0.5 km/h in 0.1 steps every 2 seconds.
+  - Difference < 10 bpm: ±0.1 km/h every 20 seconds.
 
 ### Warm-Up
-- **Smart Warm-Up**: Brings pulse to Zone 1 to prepare ligaments.
-- **Customizable Time**: Waits for Zone 1, then completes based on a timer (e.g., 5 minutes).
+- **Gradual Start**: Gradual Start: Speed increases by 0.1 km/h every 10 seconds during the warm-up period. If the heart rate doesn't reach Zone 1 within the set time, the status displays a message like: "Waiting for pulse 91."
+- **Dynamic Acceleration**: If the heart rate remains below the target zone, speed increases by 0.5 km/h in a smooth progression:
+   - +0.1 km/h every 2 seconds until the full 0.5 km/h adjustment is reached, ensuring smoothness and comfort.
+   - After reaching 0.5 km/h, the system waits for 10 seconds before rechecking and potentially increasing speed again.
+- Transition to Main Program: The warm-up ends as soon as the heart rate reaches Zone 1 (e.g., 91), and the main workout program begins.
 
 ### Cool-Down
 - **Smooth Reduction**: Lowers speed until pulse returns to Zone 1.
 - **Customizable Time**: Mirrors the warm-up logic.
+
+
 
 ### Heart Rate-Based Training Programs
 - **Custom Zone**: Maintains a set pulse zone via speed adjustments.
