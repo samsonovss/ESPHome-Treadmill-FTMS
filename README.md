@@ -145,9 +145,7 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 
 ### Warm-Up
 - **Gradual Start**: Gradual Start: Speed increases by 0.1 km/h every 10 seconds during the warm-up period. If the heart rate doesn't reach Zone 1 within the set time, the status displays a message like: "Waiting for pulse 91."
-- **Dynamic Acceleration**: If the heart rate remains below Zone 1, speed increases by 0.5 km/h in a smooth progression:
-   - Adds 0.1 km/h every 2 seconds until the full 0.5 km/h adjustment is reached, ensuring a comfortable transition.
-   - After reaching 0.5 km/h, the system pauses for 10 seconds, rechecks the heart rate, and repeats the 0.5 km/h increase if needed.
+- **Dynamic Acceleration**: If the heart rate remains below Zone 1, after 10 seconds, the speed increases by 0.5 km/h with a smooth ramp-up, waits 10 seconds, and repeats the 0.5 km/h increase if necessary.
 - Transition to Main Program: The warm-up ends as soon as the heart rate reaches Zone 1, seamlessly transitioning to the main workout program.
 
 ### Cool-Down
