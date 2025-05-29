@@ -79,12 +79,12 @@ psram:
 # Enable logging
 logger:
   level: INFO
-  baud_rate: 230400
-  tx_buffer_size: 2048
-  task_log_buffer_size: 1024
-  logs:
-    WorkoutSummary: INFO
-    DEBUG: NONE
+  # baud_rate: 230400
+  # tx_buffer_size: 2048
+  # task_log_buffer_size: 1024
+  # logs:
+  #   WorkoutSummary: INFO
+  #   DEBUG: NONE
 
 # Enable Home Assistant API
 api:
@@ -1113,21 +1113,7 @@ script:
           //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
           //id(uart_bus)->write_str(buffer);
           //ESP_LOGI("DEBUG", "Speed sent: %s", buffer);
-  # - id: smooth_speed
-  #   mode: queued
-  #   then:
-  #     - lambda: |-
-  #         if (id(target_speed) < id(target_speed_goal)) {                   // Плавно увеличиваем скорость, если текущая ниже цели
-  #           id(target_speed) += 1;                                          // Увеличиваем на 0.1 км/ч
-  #           if (id(target_speed) > id(target_speed_goal)) id(target_speed) = id(target_speed_goal); // Не превышаем цель
-  #         } else if (id(target_speed) > id(target_speed_goal)) {            // Плавно уменьшаем скорость, если текущая выше цели
-  #           id(target_speed) -= 1;                                          // Уменьшаем на 0.1 км/ч
-  #           if (id(target_speed) < id(target_speed_goal)) id(target_speed) = id(target_speed_goal); // Не опускаемся ниже цели
-  #         }
-  #         id(motor_running) = true;                                         // Включаем мотор
-  #         //char buffer[13];                                                  // Формируем команду для UART
-  #         //snprintf(buffer, sizeof(buffer), "[SETSPD:%03d]", id(target_speed));
-  #         //id(uart_bus)->write_str(buffer);                                  // Отправляем команду через UART
+
 
 # Скрипт регулирует целевую скорость на основе пульса, увеличивая или уменьшая её, если пульс выходит из заданной зоны.
   - id: adjust_speed_by_pulse
@@ -1169,32 +1155,6 @@ script:
               pulse_out_of_zone_count = 0;
             }
           }
-  # - id: adjust_speed_by_pulse
-  #   mode: queued
-  #   then:
-  #     - lambda: |- 
-  #         static int pulse_out_of_zone_count = 0;                           // Счетчик секунд, когда пульс вне зоны
-  #         float heart_rate = id(heart_rate_sensor).state;                   // Получаем текущий пульс
-  #         if (isnan(heart_rate)) {                                          // Если пульс не определяется, устанавливаем минимальную скорость
-  #           id(target_speed_goal) = 10;                                     // Устанавливаем 1 км/ч
-  #           id(motor_running) = true;                                       // Включаем мотор
-  #         } else if (heart_rate >= id(target_heart_rate_min) && heart_rate <= id(target_heart_rate_max)) { // Если пульс в зоне, сбрасываем счетчик
-  #           pulse_out_of_zone_count = 0;
-  #         } else {                                                          // Если пульс вне зоны, корректируем скорость
-  #           pulse_out_of_zone_count++;                                      // Увеличиваем счетчик
-  #           if (pulse_out_of_zone_count >= 2) {                             // Ждём 2 секунды перед изменением
-  #             if (heart_rate < id(target_heart_rate_min)) {                 // Если пульс ниже зоны
-  #               if (heart_rate < (id(target_heart_rate_min) - 20) && id(target_speed_goal) < 120) { // Большая разница — увеличиваем на 0.5 км/ч
-  #                 id(target_speed_goal) += 5;
-  #               } else if (id(target_speed_goal) < 120) {                   // Малая разница — увеличиваем на 0.1 км/ч
-  #                 id(target_speed_goal) += 1;
-  #               }
-  #             } else if (heart_rate > id(target_heart_rate_max) && id(target_speed_goal) > 6) { // Если пульс выше зоны, уменьшаем на 0.5 км/ч
-  #               id(target_speed_goal) -= 5;
-  #             }
-  #             pulse_out_of_zone_count = 0;                                  // Сбрасываем счетчик
-  #           }
-  #         }
 
 # Скрипт управляет основной частью тренировки, отслеживая время и переходя к заминке по завершении.
   - id: run_program
@@ -1400,144 +1360,6 @@ script:
       - script.execute: update_info_display
       - script.execute: reset_manual_stop 
 
-  # - id: stop_program
-  #   mode: single
-  #   then:
-  #     - lambda: |-
-  #         // Получаем значения из глобальных переменных и сенсоров
-  #         float weight = id(weight_kg).state;
-  #         float last_time = id(total_time_min);
-  #         float last_distance = id(total_distance_km);
-  #         int calories = (int)id(total_calories).state;
-  #         float avg_speed = (id(speed_count) > 0) ? (id(total_speed_sum) / id(speed_count)) : 0;
-  #         float avg_incline = (id(incline_count) > 0) ? (id(total_incline_sum) / id(incline_count)) : 0;
-  #         float avg_heart_rate = (id(heart_rate_count) > 0) ? (id(total_heart_rate_sum) / id(heart_rate_count)) : 0;
-
-  #         // Сохраняем значения из глобальных переменных
-  #         id(last_time_stored) = last_time;
-  #         id(last_distance_stored) = last_distance;
-  #         id(last_calories_stored) = calories;
-  #         id(avg_speed_stored) = avg_speed;
-  #         id(avg_incline_stored) = avg_incline;
-  #         id(avg_heart_rate_stored) = avg_heart_rate;
-  #         id(max_heart_rate_stored) = id(max_heart_rate_total);
-  #         id(zone1_time_stored) = id(zone1_time);
-  #         id(zone2_time_stored) = id(zone2_time);
-  #         id(zone3_time_stored) = id(zone3_time);
-  #         id(zone4_time_stored) = id(zone4_time);
-  #         id(zone5_time_stored) = id(zone5_time);
-
-  #         // Остановка тренировки
-  #         id(motor_running) = false;
-  #         id(auto_mode) = false;
-  #         id(warm_up_active) = false;
-  #         id(target_speed) = 0;
-  #         id(target_speed_goal) = 0;
-  #         id(set_speed).publish_state(0.0);
-  #         id(set_incline).publish_state(0.0);
-  #         id(treadmill_speed_sensor_uart).publish_state(0.0);
-
-  #         // Отправляем команду [SETSPD:000] дважды с задержкой
-  #         char buffer[13];
-  #         snprintf(buffer, sizeof(buffer), "[SETSPD:000]");
-  #         for (int i = 0; i < 5; i++) {
-  #           id(uart_bus)->write_str(buffer);
-  #           ESP_LOGI("treadmill", "Stop command sent (%d): %s", i + 1, buffer);
-  #         }
-
-  #         id(remaining_run_time) = 0;
-  #         id(set_run_time).publish_state(0.0);
-  #         id(remaining_warm_up_time) = 0;
-  #         id(set_warm_up_time).publish_state(0.0);
-  #         id(remaining_cool_down_time) = 0;
-  #         id(set_cool_down_time).publish_state(0.0);
-  #         id(warm_up_time) = 0;
-  #         id(interval_time) = 0;
-  #         id(program_status).publish_state("Idle");
-  #         id(manual_stop) = false;
-  #         id(treadmill_incline_feedback_sensor).publish_state(0.0);
-  #         id(program_select).publish_state("None");
-
-  #         // Fitness Machine Status: Stopped or Paused (0x02)
-  #         if (id(last_ftms_status)[0] != 0x02) {
-  #           std::vector<uint8_t> status = {0x02, 0x01};
-  #           id(ftms_status_char).set_value(status);
-  #           id(ftms_status_char).notify();
-  #           id(last_ftms_status) = status;
-  #           id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x02));
-  #           ESP_LOGI("FTMS", "Отправлено уведомление: Stopped or Paused (0x02)");
-  #         }
-
-  #         // Training Status: Idle (0x01)
-  #         if (id(last_training_status)[1] != 0x01) {
-  #           std::vector<uint8_t> training_status = {0x00, 0x01};
-  #           id(training_status_char).set_value(training_status);
-  #           id(training_status_char).notify();
-  #           id(last_training_status) = training_status;
-  #           id(training_status_sensor).publish_state(id(training_status_to_string)(0x01));
-  #           ESP_LOGI("FTMS", "Отправлено уведомление: Idle (0x01)");
-  #         }
-
-  #         // Переключаем на страницу info
-  #         //id(display_nextion).send_command("page 7");
-
-  #         // Сбрасываем накопленные данные
-  #         id(total_time_min) = 0.0;
-  #         id(total_distance_km) = 0.0;
-  #         id(total_speed_sum) = 0.0;
-  #         id(speed_count) = 0;
-  #         id(total_incline_sum) = 0.0;
-  #         id(incline_count) = 0;
-  #         id(total_heart_rate_sum) = 0.0;
-  #         id(heart_rate_count) = 0;
-  #         id(max_heart_rate_total) = 0.0;
-  #         id(zone1_time) = 0;
-  #         id(zone2_time) = 0;
-  #         id(zone3_time) = 0;
-  #         id(zone4_time) = 0;
-  #         id(zone5_time) = 0;
-
-  #         // Получаем дополнительные параметры для лога
-  #         //const char* gender = id(gender_select).state.c_str();
-  #         //float age = id(age_number).state;
-  #         //float max_hr = id(max_heart_rate);
-  #         //float avg_met = (id(met_count) > 0) ? (id(total_met_sum) / id(met_count)) : 0;
-
-  #         // Рассчитываем VO2 (как в total_calories)
-  #         //float real_incline = avg_incline / 3.0f;
-  #         //float speed_m_per_min = avg_speed * 1000.0f / 60.0f;
-  #         //float grade = real_incline / 100.0f;
-  #         //float vo2 = 0.1f * speed_m_per_min + 1.8f * speed_m_per_min * grade + 3.5f;
-
-  #         // Форматируем время зон в минуты и секунды
-  #         //char zone1_str[10], zone2_str[10], zone3_str[10], zone4_str[10], zone5_str[10];
-  #         //snprintf(zone1_str, sizeof(zone1_str), "%d:%02d", id(zone1_time_stored) / 60, id(zone1_time_stored) % 60);
-  #         //snprintf(zone2_str, sizeof(zone2_str), "%d:%02d", id(zone2_time_stored) / 60, id(zone2_time_stored) % 60);
-  #         //snprintf(zone3_str, sizeof(zone3_str), "%d:%02d", id(zone3_time_stored) / 60, id(zone3_time_stored) % 60);
-  #         //snprintf(zone4_str, sizeof(zone4_str), "%d:%02d", id(zone4_time_stored) / 60, id(zone4_time_stored) % 60);
-  #         //snprintf(zone5_str, sizeof(zone5_str), "%d:%02d", id(zone5_time_stored) / 60, id(zone5_time_stored) % 60);
-
-  #         if (id(speed).state) {
-  #           id(display_nextion).send_command_printf("page 7");
-  #         }
-
-  #         // Полный лог в конце тренировки
-  #         //ESP_LOGI("WorkoutSummary", "===== Workout Summary =====");
-  #         //ESP_LOGI("WorkoutSummary", "User: Gender=%s, Age=%.0f years, Weight=%.1f kg, Max HR=%.0f bpm", gender, age, weight, max_hr);
-  #         //ESP_LOGI("WorkoutSummary", "Duration: %.2f min (%.0f sec)", id(last_time_stored), id(last_time_stored) * 60);
-  #         //ESP_LOGI("WorkoutSummary", "Distance: %.2f km", id(last_distance_stored));
-  #         //ESP_LOGI("WorkoutSummary", "Calories: %d kcal", id(last_calories_stored));
-  #         //ESP_LOGI("WorkoutSummary", "Avg Speed: %.2f km/h", id(avg_speed_stored));
-  #         //ESP_LOGI("WorkoutSummary", "Avg Incline: %.2f%% (Real Incline: %.2f%%)", id(avg_incline_stored), id(avg_incline_stored) / 3.0f);
-  #         //ESP_LOGI("WorkoutSummary", "Avg MET: %.2f", avg_met);
-  #         //ESP_LOGI("WorkoutSummary", "Avg VO2: %.1f ml/kg/min", vo2);
-  #         //ESP_LOGI("WorkoutSummary", "Avg Heart Rate: %.0f bpm", id(avg_heart_rate_stored));
-  #         //ESP_LOGI("WorkoutSummary", "Max Heart Rate: %.0f bpm", id(max_heart_rate_stored));
-  #         //ESP_LOGI("WorkoutSummary", "Heart Rate Zones: Zone1=%s, Zone2=%s, Zone3=%s, Zone4=%s, Zone5=%s", zone1_str, zone2_str, zone3_str, zone4_str, zone5_str);
-  #         //ESP_LOGI("WorkoutSummary", "===== End of Summary =====");
-
-  #    - script.execute: update_info_display
-      #- script.execute: log_workout_summary
 
           
 # Скрипт отправляет данные о скорости, наклоне, дистанции, времени и пульсе беговой дорожки через BLE.
@@ -1736,7 +1558,6 @@ script:
           //ESP_LOGI("DEBUG", "Zone1: %d s, Zone2: %d s, Zone3: %d s, Zone4: %d s, Zone5: %d s",
                   //zone1_time, zone2_time, zone3_time, zone4_time, zone5_time);
 
-
   - id: log_workout_summary
     then:
       - lambda: |-
@@ -1766,6 +1587,34 @@ script:
           int zone4_time = id(zone4_time_stored) < 0 ? 0 : id(zone4_time_stored);
           int zone5_time = id(zone5_time_stored) < 0 ? 0 : id(zone5_time_stored);
 
+          // Расчёт сожжённого жира
+          float total_time = id(last_time_stored) * 60; // Общее время в секундах
+          float total_calories = id(last_calories_stored);
+          float fat_calories = 0.0f;
+          if (total_time > 0) {
+            // Доли времени в каждой зоне
+            float fraction_zone1 = zone1_time / total_time;
+            float fraction_zone2 = zone2_time / total_time;
+            float fraction_zone3 = zone3_time / total_time;
+            float fraction_zone4 = zone4_time / total_time;
+            float fraction_zone5 = zone5_time / total_time;
+
+            // Калории по зонам
+            float calories_zone1 = total_calories * fraction_zone1;
+            float calories_zone2 = total_calories * fraction_zone2;
+            float calories_zone3 = total_calories * fraction_zone3;
+            float calories_zone4 = total_calories * fraction_zone4;
+            float calories_zone5 = total_calories * fraction_zone5;
+
+            // Калории из жира (проценты: 80%, 65%, 40%, 15%, 5%)
+            fat_calories += calories_zone1 * 0.80f;
+            fat_calories += calories_zone2 * 0.65f;
+            fat_calories += calories_zone3 * 0.40f;
+            fat_calories += calories_zone4 * 0.15f;
+            fat_calories += calories_zone5 * 0.05f;
+          }
+          float fat_grams = fat_calories / 9.0f; // 1 г жира = 9 ккал
+
           // Форматируем время зон
           char zone1_str[10], zone2_str[10], zone3_str[10], zone4_str[10], zone5_str[10];
           snprintf(zone1_str, sizeof(zone1_str), "%d:%02d", zone1_time / 60, zone1_time % 60);
@@ -1789,6 +1638,9 @@ script:
           combined_log += buffer;
 
           snprintf(buffer, sizeof(buffer), "  Calories: %d kcal\n", id(last_calories_stored));
+          combined_log += buffer;
+
+          snprintf(buffer, sizeof(buffer), "  Fat Burned: %.1f g\n", fat_grams);
           combined_log += buffer;
 
           snprintf(buffer, sizeof(buffer), "  Avg Speed: %.2f km/h\n", avg_speed);
@@ -1821,160 +1673,7 @@ script:
           // Очищаем для следующего использования
           combined_log.clear();
           ESP_LOGI("WorkoutSummary", "Log finished and cleared");
-  # - id: log_workout_summary
-  #   then:
-  #     - lambda: |-
-  #         // Подготовка всех строк лога
-  #         std::vector<std::string> log_lines;
 
-  #         // Получаем параметры
-  #         char buffer[256];
-  #         const char* gender = id(gender_select).state.c_str();
-  #         float age = id(age_number).state;
-  #         float weight = id(weight_kg).state;
-  #         float max_hr = id(max_heart_rate);
-  #         float avg_met = (id(met_count) > 0) ? (id(total_met_sum) / id(met_count)) : 0;
-  #         float avg_incline = id(avg_incline_stored);
-  #         float avg_speed = id(avg_speed_stored);
-
-  #         // Рассчитываем VO2
-  #         float real_incline = avg_incline / 3.0f;
-  #         float speed_m_per_min = avg_speed * 1000.0f / 60.0f;
-  #         float grade = real_incline / 100.0f;
-  #         float vo2 = 0.1f * speed_m_per_min + 1.8f * speed_m_per_min * grade + 3.5f;
-
-  #         // Проверка и коррекция зон пульса
-  #         int zone1_time = id(zone1_time_stored) < 0 ? 0 : id(zone1_time_stored);
-  #         int zone2_time = id(zone2_time_stored) < 0 ? 0 : id(zone2_time_stored);
-  #         int zone3_time = id(zone3_time_stored) < 0 ? 0 : id(zone3_time_stored);
-  #         int zone4_time = id(zone4_time_stored) < 0 ? 0 : id(zone4_time_stored);
-  #         int zone5_time = id(zone5_time_stored) < 0 ? 0 : id(zone5_time_stored);
-
-  #         // Форматируем время зон
-  #         char zone1_str[10], zone2_str[10], zone3_str[10], zone4_str[10], zone5_str[10];
-  #         snprintf(zone1_str, sizeof(zone1_str), "%d:%02d", zone1_time / 60, zone1_time % 60);
-  #         snprintf(zone2_str, sizeof(zone2_str), "%d:%02d", zone2_time / 60, zone2_time % 60);
-  #         snprintf(zone3_str, sizeof(zone3_str), "%d:%02d", zone3_time / 60, zone3_time % 60);
-  #         snprintf(zone4_str, sizeof(zone4_str), "%d:%02d", zone4_time / 60, zone4_time % 60);
-  #         snprintf(zone5_str, sizeof(zone5_str), "%d:%02d", zone5_time / 60, zone5_time % 60);
-
-  #         // Формируем строки лога
-  #         log_lines.push_back("===== Workout Summary =====");
-
-  #         snprintf(buffer, sizeof(buffer), "User: Gender=%s, Age=%.0f years, Weight=%.1f kg, Max HR=%.0f bpm", gender, age, weight, max_hr);
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Duration: %.2f min (%.0f sec)", id(last_time_stored), id(last_time_stored) * 60);
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Distance: %.2f km", id(last_distance_stored));
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Calories: %d kcal", id(last_calories_stored));
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Avg Speed: %.2f km/h", avg_speed);
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Avg Incline: %.2f%% (Real Incline: %.2f%%)", avg_incline, avg_incline / 3.0f);
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Avg MET: %.2f", avg_met);
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Avg VO2: %.1f ml/kg/min", vo2);
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Avg Heart Rate: %.0f bpm", id(avg_heart_rate_stored));
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Max Heart Rate: %.0f bpm", id(max_heart_rate_stored));
-  #         log_lines.push_back(buffer);
-
-  #         snprintf(buffer, sizeof(buffer), "Heart Rate Zones: Zone1=%s, Zone2=%s, Zone3=%s, Zone4=%s, Zone5=%s", zone1_str, zone2_str, zone3_str, zone4_str, zone5_str);
-  #         log_lines.push_back(buffer);
-
-  #         log_lines.push_back("===== End of Summary =====");
-  #         log_lines.push_back("Log completed");
-
-  #         // Сохраняем строки в глобальную переменную
-  #         id(log_lines_global) = log_lines;
-
-  #         ESP_LOGI("WorkoutSummary", "Data prepared, %d lines ready", log_lines.size());
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 0) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[0].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 1) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[1].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 2) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[2].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 3) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[3].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 4) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[4].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 5) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[5].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 6) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[6].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 7) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[7].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 8) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[8].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 9) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[9].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 10) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[10].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 11) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[11].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 12) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[12].c_str());
-  #         }
-  #     - delay: 10ms
-  #     - lambda: |-
-  #         if (id(log_lines_global).size() > 13) {
-  #           ESP_LOGI("WorkoutSummary", "%s", id(log_lines_global)[13].c_str());
-  #         }
-  #     - lambda: |-
-  #         // Очищаем глобальную переменную
-  #         id(log_lines_global).clear();
-  #         ESP_LOGI("WorkoutSummary", "Log finished and cleared");
 
 interval:
   - interval: 800ms
@@ -1998,18 +1697,6 @@ interval:
             - lambda: |-
                 //ESP_LOGI("Interval", "Interval skipped: motor_running=%d, target_speed=%d, warm_up_active=%d, remaining_cool_down_time=%d, auto_mode=%d",
                          //id(motor_running), id(target_speed), id(warm_up_active), id(remaining_cool_down_time), id(auto_mode));
-
-  # - interval: 800ms
-  #   then:
-  #     - if:
-  #         condition:
-  #           lambda: 'return id(motor_running) && id(target_speed) > 0 && (id(warm_up_active) || id(cool_down) || id(auto_mode));'
-  #         then:
-  #           - lambda: |-
-  #               char speed_buffer[13];
-  #               snprintf(speed_buffer, sizeof(speed_buffer), "[SETSPD:%03d]", id(target_speed));
-  #               id(uart_bus)->write_str(speed_buffer);
-  #               //ESP_LOGI("treadmill", "Speed sent: %s", speed_buffer);
 
 
   - interval: 700ms
@@ -2069,13 +1756,7 @@ interval:
                 else if (id(auto_mode) && !id(warm_up_active) && id(remaining_cool_down_time) <= 0) {
                   id(adjust_speed_by_pulse).execute();
                 }
-  # - interval: 10s
-  #   then:
-  #     - if:
-  #         condition:
-  #           lambda: 'return id(motor_running) && id(auto_mode) && !id(warm_up_active) && id(remaining_cool_down_time) <= 0;'
-  #         then:
-  #           - script.execute: adjust_speed_by_pulse
+
 
   # Интервал плавно изменяет скорость каждые 2 секунды, если текущая скорость отличается от целевой
 # Интервал для плавного изменения скорости
@@ -2092,43 +1773,7 @@ interval:
             - script.execute: smooth_speed
             - lambda: |-
                 //ESP_LOGI("Interval2s", "Smooth speed triggered: target_speed=%d, target_speed_goal=%d", id(target_speed), id(target_speed_goal));
-
-
-  # - interval: 2s
-  #   then:
-  #     - if:
-  #         condition:
-  #           lambda: |-
-  #             return id(motor_running) && (
-  #               (id(target_speed) != id(target_speed_goal) && !id(warm_up_active) && id(remaining_cool_down_time) <= 0) || 
-  #               (id(warm_up_active) && id(remaining_warm_up_time) <= 0)
-  #             );
-  #         then:
-  #           - lambda: |-
-  #               float heart_rate = id(heart_rate_sensor).state;
-  #               float target_heart_rate = id(target_heart_rate_min); // Целевой пульс для разминки (например, 91)
-  #               //ESP_LOGI("DEBUG", "Interval 2s: heart_rate=%.0f, target_speed=%d, target_speed_goal=%d, warm_up_active=%d, remaining_warm_up_time=%d", 
-  #                       //heart_rate, id(target_speed), id(target_speed_goal), id(warm_up_active), id(remaining_warm_up_time));
-                
-  #               // Состояние ожидания пульса после разминки
-  #               if (id(warm_up_active) && id(remaining_warm_up_time) <= 0 && !isnan(heart_rate) && heart_rate < target_heart_rate) {
-  #                 if (id(target_speed_goal) < 120) { // Не превышаем 12 км/ч
-  #                   id(target_speed_goal) += 5; // Увеличиваем на 0.5 км/ч
-  #                   //ESP_LOGI("DEBUG", "Waiting for pulse: increase speed by 0.5, target_speed_goal=%d", id(target_speed_goal));
-  #                 }
-  #               }
-                
-  #               // Вызываем smooth_speed для плавной регулировки
-  #               if (id(target_speed) != id(target_speed_goal)) {
-  #                 id(smooth_speed).execute();
-  #              }
-  # - interval: 2s
-  #   then:
-  #     - if:
-  #         condition:
-  #           lambda: 'return id(motor_running) && id(target_speed) != id(target_speed_goal) && !id(warm_up_active) && id(remaining_cool_down_time) <= 0;'
-  #         then:
-  #           - script.execute: smooth_speed                             
+                         
 
   # Интервал управляет разминкой каждую секунду, обновляя время и вызывая логику разминки
   - interval: 1s
@@ -2233,52 +1878,6 @@ interval:
             id(current_zone) = 0;
             //ESP_LOGI("Interval", "Motor not running, current_zone reset to 0");
           }
-  # - interval: 1s
-  #   then:
-  #     - lambda: |-
-  #         if (id(motor_running)) {
-  #           id(total_time_min) += 1.0 / 60.0;
-  #           float current_distance = id(treadmill_distance_km).state;
-  #           if (current_distance > 0) id(total_distance_km) = current_distance;
-
-  #           float current_speed = id(treadmill_speed_sensor_uart).state;
-  #           float current_incline = id(treadmill_incline_sensor_uart).state;
-  #           float current_heart_rate = id(heart_rate_sensor).state;
-
-  #           if (current_speed > 0) {
-  #             id(total_speed_sum) += current_speed;
-  #             id(speed_count)++;
-  #           }
-
-  #           if (current_incline >= 0) {
-  #             id(total_incline_sum) += current_incline;
-  #             id(incline_count)++;
-  #           }
-
-  #           if (current_heart_rate > 0) {
-  #             id(total_heart_rate_sum) += current_heart_rate;
-  #             id(heart_rate_count)++;
-  #             if (current_heart_rate > id(max_heart_rate_total)) id(max_heart_rate_total) = current_heart_rate;
-  #           }
-
-  #           // Расчет MET без зависимости от пульса
-  #           if (current_speed > 0 && current_incline >= 0) {
-  #             float real_incline = current_incline / 3.0f;
-  #             float speed_m_per_min = current_speed * 1000.0f / 60.0f;
-  #             float grade = real_incline / 100.0f;
-  #             float vo2 = 0.1f * speed_m_per_min + 1.8f * speed_m_per_min * grade + 3.5f;
-  #             float met = vo2 / 3.5f;
-  #             id(total_met_sum) += met;
-  #             id(met_count)++;
-  #           }
-
-  #           int zone = id(current_zone);
-  #           if (zone == 1) id(zone1_time)++;
-  #           else if (zone == 2) id(zone2_time)++;
-  #           else if (zone == 3) id(zone3_time)++;
-  #           else if (zone == 4) id(zone4_time)++;
-  #           else if (zone == 5) id(zone5_time)++;
-  #         }
 
 # Интервал для периодического обновления heart_rate_sensor Компонент number для эмуляции пульса
   - interval: 1s
@@ -2460,8 +2059,20 @@ button:
             }
           }
 
+one_wire:
+  - platform: gpio
+    pin: 7
+
 # Сенсоры
-sensor:
+sensor:  
+#температура мотора
+  - platform: dallas_temp
+    address: 0xdf3ce0f64959df28
+    name: "Motor"
+    force_update: true
+    update_interval: 30s
+
+
   - platform: template
     name: "Calories Burned"
     id: total_calories
@@ -2538,6 +2149,7 @@ sensor:
     nextion_id: display_nextion
     id: age_sensor
     name: "Age from Nextion"
+    internal: true
     component_name: n_age  # Убедитесь, что имя компонента совпадает
     on_value:
       then:
@@ -2556,6 +2168,7 @@ sensor:
     nextion_id: display_nextion
     id: weight_sensor
     name: "Weight from Nextion"
+    internal: true
     component_name: n_weight  # Убедитесь, что имя компонента совпадает
     on_value:
       then:
@@ -2573,6 +2186,7 @@ sensor:
     nextion_id: display_nextion
     id: time_sensor
     name: "time from Nextion"
+    internal: true
     component_name: n_min  # Убедитесь, что имя компонента совпадает
     on_value:
       then:
@@ -2590,6 +2204,7 @@ sensor:
     nextion_id: display_nextion
     id: warm_sensor
     name: "time warm from Nextion"
+    internal: true
     component_name: n_cool  # Убедитесь, что имя компонента совпадает
     on_value:
       then:
@@ -2607,6 +2222,7 @@ sensor:
     nextion_id: display_nextion
     id: cool_sensor
     name: "time cool from Nextion"
+    internal: true
     component_name: n_warm  # Убедитесь, что имя компонента совпадает
     on_value:
       then:
@@ -2762,6 +2378,7 @@ sensor:
       rising_edge: INCREMENT
       falling_edge: DISABLE
     internal_filter: 13us
+    entity_category: diagnostic
 
   - platform: template
     name: "Treadmill Speed Motor"
@@ -3932,6 +3549,7 @@ number:
     step: 1
     unit_of_measurement: "bpm"
     icon: "mdi:heart-pulse"
+    entity_category: diagnostic
     optimistic: true
     on_value:
       then:
@@ -4034,6 +3652,7 @@ switch:
   - platform: nextion
     id: gender_switch
     name: "Gender Switch"
+    internal: true
     component_name: bt0  # Соответствует имени в Nextion
     on_turn_on:  # bt0.val = 1 (Female)
       - lambda: |-
@@ -4054,6 +3673,7 @@ switch:
   - platform: template
     name: "Emulate Heart Rate"
     id: emulate_heart_rate_switch
+    entity_category: diagnostic
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     icon: "mdi:heart-pulse"
