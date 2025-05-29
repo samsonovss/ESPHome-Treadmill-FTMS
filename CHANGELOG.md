@@ -1,3 +1,5 @@
+- May 29, 2025:
+  - Added calculation of burned fat (in grams) to Workout Summary log.
 - May 27, 2025:
   - Added MET and VO2 calculations with support for interval training, enabling more accurate analysis of energy expenditure and aerobic capacity.
   - Implemented workout results display on the Nextion screen after completion, showing duration, distance, calories, average speed, incline, MET, VO2, heart rate, and time in heart rate zones.
