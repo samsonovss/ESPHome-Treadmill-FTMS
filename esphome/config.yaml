@@ -89,11 +89,11 @@ logger:
 # Enable Home Assistant API
 api:
   encryption:
-    key: "YourAPIKey"
+    key: "nR8nIE5pccP+sy5PfH9pf3mfOcqiTAk7Ox6Q1ily1EI="
 
 ota:
   - platform: esphome
-    password: "YourOTAPassword"
+    password: "5283ff3a339cbd8f5c5eba074ad730cb"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -102,7 +102,7 @@ wifi:
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Treadmill Fallback Hotspot"
-    password: "YourFallbackPassword"
+    password: "1YLAT5mbrJu6"
 
 captive_portal:
 
@@ -690,9 +690,28 @@ globals:
     type: int
     initial_value: '0'
 
-
   - id: log_lines_global
     type: std::vector<std::string>
+
+  - id: fat_grams_stored
+    type: float
+    initial_value: '0.0'  # Хранит количество сожжённого жира в граммах
+
+  - id: incline_profile_map_russia_ufa3_4km 
+    type: float[114]
+    restore_value: no
+    initial_value: "{20, 10, 20, 0, 0, 0, 0, 10, 50, 60, 0, 0, 0, 40, 60, 50, 130, 90, 0, 0, 0, 0, 0, 0, 0, 10, 20, 10, 20, 20, 20, 0, 0, 0, 0, 20, 40, 60, 70, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 60, 60, 60, 60, 30, 10, 10, 10, 0, 0, 90, 100, 0, 0, 0, 0, 40, 20, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 110, 140, 60, 0, 0, 30, 60, 40, 20, 20, 50, 40, 0, 0, 0, 0, 10, 30, 0, 0, 0, 0, 0, 30, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0}"
+
+  - id: incline_profile_map_sipailovo_circle_4_37km
+    type: float[146]
+    restore_value: no
+    initial_value: "{0, 40, 50, 0, 0, 0, 0, 0, 0, 70, 150, 100, 70, 40, 0, 0, 0, 0, 60, 70, 80, 80, 0, 0, 0, 0, 0, 0, 50, 100, 110, 70, 50, 20, 0, 0, 70, 90, 140, 0, 0, 0, 0, 0, 40, 80, 80, 20, 20, 0, 0, 0, 0, 0, 0, 80, 30, 0, 0, 90, 100, 0, 0, 0, 40, 100, 90, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 20, 20, 0, 0, 0, 0, 70, 10, 0, 0, 40, 70, 0, 10, 0, 0, 30, 0, 0, 0, 0, 0, 90, 80, 40, 0, 20, 40, 80, 50, 40, 0, 0, 30, 70, 70, 40, 0, 0, 10, 0, 0, 0, 0, 120, 60, 0, 0, 0, 0, 0, 0, 120, 150, 150, 30, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 0, 10}"
+
+  - id: incline_profile_map_sipailovo_Kashkadan_1_72km
+    type: float[58]
+    restore_value: no
+    initial_value: "{30, 0, 0, 60, 0, 0, 0, 70, 150, 150, 150, 80, 70, 10, 70, 20, 50, 10, 0, 20, 50, 80, 30, 0, 0, 0, 0, 0, 0, 20, 10, 0, 50, 0, 0, 30, 60, 0, 0, 0, 0, 30, 100, 0, 0, 0, 0, 0, 0, 50, 60, 0, 0, 0, 0, 100, 30, 0}"
+
 
 # Скрипты
 script:
@@ -743,6 +762,15 @@ script:
             id(display_nextion).send_command_printf("page 1");
           }
           if (id(pulsezone).state) {
+            id(display_nextion).send_command_printf("page 1");
+          }
+          if (id(avgsummary).state) {
+            id(display_nextion).send_command_printf("page 1");
+          }
+          if (id(map_page).state) {
+            id(display_nextion).send_command_printf("page 1");
+          }
+          if (id(page_map_select).state) {
             id(display_nextion).send_command_printf("page 1");
           }
 
@@ -856,6 +884,9 @@ script:
           if (id(pulsezone).state) {
             id(display_nextion).send_command_printf("page 1");
           }
+          if (id(avgsummary).state) {
+            id(display_nextion).send_command_printf("page 1");
+          }
 
 # Скрипт управляет процессом разминки, увеличивая скорость до достижения зоны 1 пульса, переходя к основной программе или останавливаясь при ошибке.
   - id: warm_up
@@ -964,7 +995,7 @@ script:
           }
 
           // Обновление статуса дисплея
-          char buffer[20];
+          char buffer[32];
           if (id(remaining_warm_up_time) > 0) {
             int remaining_minutes = id(remaining_warm_up_time) / 60;
             int remaining_seconds = id(remaining_warm_up_time) % 60;
@@ -973,7 +1004,7 @@ script:
             if (isnan(heart_rate)) {
               snprintf(buffer, sizeof(buffer), "Warm-up: Wait pulse");
             } else {
-              snprintf(buffer, sizeof(buffer), "Warm-up: Need %.0f", zone_1_min);
+              snprintf(buffer, sizeof(buffer), "Warm-up: Need %.0f bpm", zone_1_min);
             }
           }
           if (warm_up_time % 10 == 0) {
@@ -1297,6 +1328,7 @@ script:
           id(manual_stop) = true;
           id(treadmill_incline_feedback_sensor).publish_state(0.0);
           id(program_select).publish_state("None");
+          id(map_select).publish_state("None");
 
           // Сброс накопленных данных
           id(total_time_min) = 0.0;
@@ -1351,8 +1383,8 @@ script:
       - delay: 10ms
       - lambda: |-
           if (id(speed).state) {
-            id(display_nextion).send_command_printf("page 7");
-            ESP_LOGI("treadmill", "Nextion switched to page 7");
+            id(display_nextion).send_command_printf("page 8");
+            ESP_LOGI("treadmill", "Nextion switched to page 8");
           }
       - delay: 10ms
       - script.execute: log_workout_summary
@@ -1459,24 +1491,28 @@ script:
 
           id(selected_data).publish_state(buffer);                          // Обновляем текстовый сенсор в интерфейсе
 
-
   - id: update_info_display
     then:
       - lambda: |-
           // Подготовка всех данных заранее
-          float last_time = id(last_time_stored);
-          float last_distance = id(last_distance_stored);
-          int calories = id(last_calories_stored);
-          float avg_speed = id(avg_speed_stored);
-          float avg_incline = id(avg_incline_stored);
-          float avg_heart_rate = id(avg_heart_rate_stored);
-          float max_heart_rate = id(max_heart_rate_stored);
-          int zone1_time = id(zone1_time_stored);
-          int zone2_time = id(zone2_time_stored);
-          int zone3_time = id(zone3_time_stored);
-          int zone4_time = id(zone4_time_stored);
-          int zone5_time = id(zone5_time_stored);
+          float last_time = id(last_time_stored); // Продолжительность в минутах
+          float last_distance = id(last_distance_stored); // Дистанция в км
+          int calories = id(last_calories_stored); // Калории в ккал
+          float avg_speed = id(avg_speed_stored); // Средняя скорость в км/ч
+          float avg_incline = id(avg_incline_stored); // Средний наклон в %
+          float avg_heart_rate = id(avg_heart_rate_stored); // Средний пульс
+          float max_heart_rate = id(max_heart_rate_stored); // Максимальный пульс
+          float fat_grams = id(fat_grams_stored); // Сожжённый жир в граммах
+          int zone1_time = id(zone1_time_stored) < 0 ? 0 : id(zone1_time_stored); // Время в зоне 1
+          int zone2_time = id(zone2_time_stored) < 0 ? 0 : id(zone2_time_stored); // Время в зоне 2
+          int zone3_time = id(zone3_time_stored) < 0 ? 0 : id(zone3_time_stored); // Время в зоне 3
+          int zone4_time = id(zone4_time_stored) < 0 ? 0 : id(zone4_time_stored); // Время в зоне 4
+          int zone5_time = id(zone5_time_stored) < 0 ? 0 : id(zone5_time_stored); // Время в зоне 5
+          const char* gender = id(gender_select).state.c_str(); // Пол
+          float age = id(age_number).state; // Возраст
+          float weight = id(weight_kg).state; // Вес
 
+          // --- Данные для вкладки info ---
           // Вычисляем проценты для зон
           int total_zone_time = zone1_time + zone2_time + zone3_time + zone4_time + zone5_time;
           int percent_zone1 = total_zone_time > 0 ? (zone1_time * 100) / total_zone_time : 0;
@@ -1485,7 +1521,7 @@ script:
           int percent_zone4 = total_zone_time > 0 ? (zone4_time * 100) / total_zone_time : 0;
           int percent_zone5 = total_zone_time > 0 ? (zone5_time * 100) / total_zone_time : 0;
 
-          // Вычисляем времена для зон
+          // Форматируем времена для зон
           char t0_txt[10], t1_txt[10], t2_txt[10], t3_txt[10], t4_txt[10];
           snprintf(t0_txt, sizeof(t0_txt), "%d:%02d", zone1_time / 60, zone1_time % 60);
           snprintf(t1_txt, sizeof(t1_txt), "%d:%02d", zone2_time / 60, zone2_time % 60);
@@ -1499,64 +1535,89 @@ script:
           char t5_txt[10];
           snprintf(t5_txt, sizeof(t5_txt), "%02d:%02d", total_minutes, total_seconds);
 
-          // Форматируем остальные значения
+          // Форматируем остальные значения для info
           char t6_txt[10], t7_txt[10], t8_txt[10], t9_txt[10];
           snprintf(t6_txt, sizeof(t6_txt), "%.2f", last_distance);
           snprintf(t7_txt, sizeof(t7_txt), "%d", calories);
-          snprintf(t8_txt, sizeof(t8_txt), "%.0f bpm", avg_heart_rate);
-          snprintf(t9_txt, sizeof(t9_txt), "%.0f bpm", max_heart_rate);
+          snprintf(t8_txt, sizeof(t8_txt), "%.0f", avg_heart_rate);
+          snprintf(t9_txt, sizeof(t9_txt), "%.0f", max_heart_rate);
 
-          // Отправка всех данных
+          // --- Данные для вкладки avgsummary ---
+          // Вычисляем MET и VO2
+          float avg_met = (id(met_count) > 0) ? (id(total_met_sum) / id(met_count)) : 0;
+          float real_incline = avg_incline / 3.0f;
+          float speed_m_per_min = avg_speed * 1000.0f / 60.0f;
+          float grade = real_incline / 100.0f;
+          float vo2 = 0.1f * speed_m_per_min + 1.8f * speed_m_per_min * grade + 3.5f;
+
+          // Форматируем данные для avgsummary
+          char duration_txt[10], distance_txt[10], speed_txt[10], incline_txt[10], met_txt[10], vo2_txt[10], calories_txt[10], fat_txt[10], user_txt[20];
+          snprintf(duration_txt, sizeof(duration_txt), "%d:%02d", total_minutes, total_seconds);
+          snprintf(distance_txt, sizeof(distance_txt), "%.2f", last_distance);
+          snprintf(speed_txt, sizeof(speed_txt), "%.1f", avg_speed);
+          snprintf(incline_txt, sizeof(incline_txt), "%.1f", avg_incline);
+          snprintf(met_txt, sizeof(met_txt), "%.2f", avg_met);
+          snprintf(vo2_txt, sizeof(vo2_txt), "%.1f", vo2);
+          snprintf(calories_txt, sizeof(calories_txt), "%d", calories);
+          snprintf(fat_txt, sizeof(fat_txt), "%.1f", fat_grams);
+          snprintf(user_txt, sizeof(user_txt), "%s %.0f, %.0fkg", gender, age, weight);
+
+          // --- Отправка данных на вкладку info ---
           id(display_nextion).send_command_printf("info.j0.val=%d", percent_zone1);
-          //ESP_LOGI("Nextion", "Sent to info.j0.val: %d", percent_zone1);
-
           id(display_nextion).send_command_printf("info.j1.val=%d", percent_zone2);
-          //ESP_LOGI("Nextion", "Sent to info.j1.val: %d", percent_zone2);
-
           id(display_nextion).send_command_printf("info.j2.val=%d", percent_zone3);
-          //ESP_LOGI("Nextion", "Sent to info.j2.val: %d", percent_zone3);
-
           id(display_nextion).send_command_printf("info.j3.val=%d", percent_zone4);
-          //ESP_LOGI("Nextion", "Sent to info.j3.val: %d", percent_zone4);
-
           id(display_nextion).send_command_printf("info.j4.val=%d", percent_zone5);
-          //ESP_LOGI("Nextion", "Sent to info.j4.val: %d", percent_zone5);
 
           id(display_nextion).send_command_printf("info.t0.txt=\"%s\"", t0_txt);
-          //ESP_LOGI("Nextion", "Sent to info.t0.txt: \"%s\"", t0_txt);
-
           id(display_nextion).send_command_printf("info.t1.txt=\"%s\"", t1_txt);
-          //ESP_LOGI("Nextion", "Sent to info.t1.txt: \"%s\"", t1_txt);
-
           id(display_nextion).send_command_printf("info.t2.txt=\"%s\"", t2_txt);
-          //ESP_LOGI("Nextion", "Sent to info.t2.txt: \"%s\"", t2_txt);
-
           id(display_nextion).send_command_printf("info.t3.txt=\"%s\"", t3_txt);
-          //ESP_LOGI("Nextion", "Sent to info.t3.txt: \"%s\"", t3_txt);
-
           id(display_nextion).send_command_printf("info.t4.txt=\"%s\"", t4_txt);
-          //ESP_LOGI("Nextion", "Sent to info.t4.txt: \"%s\"", t4_txt);
-
           id(display_nextion).send_command_printf("info.t5.txt=\"%s\"", t5_txt);
-          //ESP_LOGI("Nextion", "Sent total time: info.t5.txt=\"%s\"", t5_txt);
-
           id(display_nextion).send_command_printf("info.t6.txt=\"%s\"", t6_txt);
-          //ESP_LOGI("Nextion", "Sent distance: info.t6.txt=\"%s\"", t6_txt);
-
           id(display_nextion).send_command_printf("info.t7.txt=\"%s\"", t7_txt);
-          //ESP_LOGI("Nextion", "Sent calories: info.t7.txt=\"%s\"", t7_txt);
-
           id(display_nextion).send_command_printf("info.t8.txt=\"%s\"", t8_txt);
-          //ESP_LOGI("Nextion", "Sent avg_hr: info.t8.txt=\"%s\"", t8_txt);
-
           id(display_nextion).send_command_printf("info.t9.txt=\"%s\"", t9_txt);
-          //ESP_LOGI("Nextion", "Sent max_hr: info.t9.txt=\"%s\"", t9_txt);
 
-          // Логи для отладки
-          //ESP_LOGI("DEBUG", "last_time: %.2f min, last_distance: %.2f km, calories: %d, avg_speed: %.2f km/h, avg_incline: %.2f %, avg_hr: %.0f bpm, max_hr: %.0f bpm",
-                  //last_time, last_distance, calories, avg_speed, avg_incline, avg_heart_rate, max_heart_rate);
-          //ESP_LOGI("DEBUG", "Zone1: %d s, Zone2: %d s, Zone3: %d s, Zone4: %d s, Zone5: %d s",
-                  //zone1_time, zone2_time, zone3_time, zone4_time, zone5_time);
+          // --- Отправка данных на вкладку avgsummary ---
+          id(display_nextion).send_command_printf("avgsummary.t0.txt=\"%s\"", duration_txt);
+          id(display_nextion).send_command_printf("avgsummary.t1.txt=\"%s\"", distance_txt);
+          id(display_nextion).send_command_printf("avgsummary.t2.txt=\"%s\"", speed_txt);
+          id(display_nextion).send_command_printf("avgsummary.t3.txt=\"%s\"", incline_txt);
+          id(display_nextion).send_command_printf("avgsummary.t4.txt=\"%s\"", met_txt);
+          //id(display_nextion).send_command_printf("avgsummary.t5.txt=\"%s\"", vo2_txt);
+          id(display_nextion).send_command_printf("avgsummary.t6.txt=\"%s\"", calories_txt);
+          id(display_nextion).send_command_printf("avgsummary.t7.txt=\"%s\"", fat_txt);
+          id(display_nextion).send_command_printf("avgsummary.t8.txt=\"%s\"", user_txt);
+
+          // --- Логи для отладки ---
+          ESP_LOGI("Nextion", "Sent to info.j0.val: %d", percent_zone1);
+          ESP_LOGI("Nextion", "Sent to info.j1.val: %d", percent_zone2);
+          ESP_LOGI("Nextion", "Sent to info.j2.val: %d", percent_zone3);
+          ESP_LOGI("Nextion", "Sent to info.j3.val: %d", percent_zone4);
+          ESP_LOGI("Nextion", "Sent to info.j4.val: %d", percent_zone5);
+          ESP_LOGI("Nextion", "Sent to info.t0.txt: %s", t0_txt);
+          ESP_LOGI("Nextion", "Sent to info.t1.txt: %s", t1_txt);
+          ESP_LOGI("Nextion", "Sent to info.t2.txt: %s", t2_txt);
+          ESP_LOGI("Nextion", "Sent to info.t3.txt: %s", t3_txt);
+          ESP_LOGI("Nextion", "Sent to info.t4.txt: %s", t4_txt);
+          ESP_LOGI("Nextion", "Sent to info.t5.txt: %s", t5_txt);
+          ESP_LOGI("Nextion", "Sent to info.t6.txt: %s", t6_txt);
+          ESP_LOGI("Nextion", "Sent to info.t7.txt: %s", t7_txt);
+          ESP_LOGI("Nextion", "Sent to info.t8.txt: %s", t8_txt);
+          ESP_LOGI("Nextion", "Sent to info.t9.txt: %s", t9_txt);
+
+          ESP_LOGI("Nextion", "Sent to avgsummary.t0.txt: %s", duration_txt);
+          ESP_LOGI("Nextion", "Sent to avgsummary.t1.txt: %s", distance_txt);
+          ESP_LOGI("Nextion", "Sent to avgsummary.t2.txt: %s", speed_txt);
+          ESP_LOGI("Nextion", "Sent to avgsummary.t3.txt: %s", incline_txt);
+          ESP_LOGI("Nextion", "Sent to avgsummary.t4.txt: %s", met_txt);
+          //ESP_LOGI("Nextion", "Sent to avgsummary.t5.txt: %s", vo2_txt);
+          ESP_LOGI("Nextion", "Sent to avgsummary.t6.txt: %s", calories_txt);
+          ESP_LOGI("Nextion", "Sent to avgsummary.t7.txt: %s", fat_txt);
+          ESP_LOGI("Nextion", "Sent to avgsummary.t8.txt: %s", user_txt);
+
 
   - id: log_workout_summary
     then:
@@ -1614,6 +1675,7 @@ script:
             fat_calories += calories_zone5 * 0.05f;
           }
           float fat_grams = fat_calories / 9.0f; // 1 г жира = 9 ккал
+          id(fat_grams_stored) = fat_grams; // Сохраняем для Nextion
 
           // Форматируем время зон
           char zone1_str[10], zone2_str[10], zone3_str[10], zone4_str[10], zone5_str[10];
@@ -1624,9 +1686,9 @@ script:
           snprintf(zone5_str, sizeof(zone5_str), "%d:%02d", zone5_time / 60, zone5_time % 60);
 
           // Формируем объединённый лог
-          combined_log += "Log start\n"; // Добавляем строку "Log start"
+          combined_log += "Log start\n";
           combined_log += "===== Workout Summary =====\n";
-          combined_log += " \n"; // Пустая строка для красоты
+          combined_log += " \n";
 
           snprintf(buffer, sizeof(buffer), "  User: Gender=%s, Age=%.0f years, Weight=%.1f kg, Max HR=%.0f bpm\n", gender, age, weight, max_hr);
           combined_log += buffer;
@@ -1664,7 +1726,7 @@ script:
           snprintf(buffer, sizeof(buffer), "  Heart Rate Zones: Zone1=%s, Zone2=%s, Zone3=%s, Zone4=%s, Zone5=%s\n", zone1_str, zone2_str, zone3_str, zone4_str, zone5_str);
           combined_log += buffer;
 
-          combined_log += " \n"; // Пустая строка для красоты
+          combined_log += " \n";
           combined_log += "===== End of Summary =====\n";
 
           // Отправляем объединённый лог одним сообщением
@@ -1674,6 +1736,126 @@ script:
           combined_log.clear();
           ESP_LOGI("WorkoutSummary", "Log finished and cleared");
 
+
+  # Скрипт для управления наклоном на основе дистанции
+  - id: update_incline_by_map
+    then:
+      - lambda: |-
+          // Определение маршрутов
+          struct MapConfig {
+            const char* name;
+            float* array;
+            int max_index;
+            float max_distance;
+          };
+          MapConfig maps[] = {
+            {"Russia, Ufa 3.4km", id(incline_profile_map_russia_ufa3_4km), 113, 3420.0},
+            {"Russia, Ufa Sipailovo 4.4km", id(incline_profile_map_sipailovo_circle_4_37km), 145, 4373.4},
+            {"Russia, Ufa Kashkadan 1.72km", id(incline_profile_map_sipailovo_Kashkadan_1_72km), 57, 1719.6}, // Новый маршрут
+          };
+          const int map_count = 3;
+
+          // Проверяем, выбрана ли карта
+          const char* selected_map = id(map_select).state.c_str();
+          MapConfig* current_map = nullptr;
+          for (int i = 0; i < map_count; i++) {
+            if (strcmp(selected_map, maps[i].name) == 0) {
+              current_map = &maps[i];
+              break;
+            }
+          }
+          if (current_map == nullptr) {
+            // Если карта не выбрана или "None", устанавливаем наклон в 0 через ползунок и выходим
+            if (id(set_incline).state != 0.0) {
+              id(set_incline).publish_state(0.0);
+              ESP_LOGI("InclineMap", "Map not selected, incline reset to 0% via slider");
+            }
+            return;
+          }
+
+          // Получаем текущую дистанцию в метрах
+          float distance_km = id(treadmill_distance_km).state;
+          float distance_m = distance_km * 1000.0;
+
+          // Проверяем, достигнута ли последняя точка
+          if (distance_m >= current_map->max_distance) {
+            id(set_incline).publish_state(0.0); // Сбрасываем наклон перед остановкой
+            ESP_LOGI("InclineMap", "End of map reached at %.2f m, stopping program", distance_m);
+            id(stop_program).execute();
+            return;
+          }
+
+          // Рассчитываем индекс массива (каждые 30 метров)
+          int index = static_cast<int>(distance_m / 30.0);
+
+          // Проверяем, чтобы индекс не превышал длину массива
+          if (index > current_map->max_index) {
+            index = current_map->max_index;
+            ESP_LOGI("InclineMap", "Reached end of map at distance %.2f m, using last incline", distance_m);
+          }
+
+          // Получаем значение наклона из массива (в единицах беговой дорожки, где 1% = 10 единиц)
+          float new_incline_units = current_map->array[index];
+          float new_incline_percent = new_incline_units / 10.0; // Преобразуем в проценты (0-15%)
+
+          // Ограничиваем значение в диапазоне 0-15%
+          if (new_incline_percent > 15.0) new_incline_percent = 15.0;
+          if (new_incline_percent < 0.0) new_incline_percent = 0.0;
+
+          // Устанавливаем новое значение в ползунок, если оно отличается
+          if (fabs(id(set_incline).state - new_incline_percent) > 0.01) { // Проверка с небольшой погрешностью
+            id(set_incline).publish_state(new_incline_percent);
+            ESP_LOGI("InclineMap", "Distance: %.2f m, Index: %d, New Incline: %.1f%% via slider", distance_m, index, new_incline_percent);
+          }
+
+
+  # - id: update_incline_by_map
+  #   then:
+  #     - lambda: |-
+  #         // Проверяем, выбрана ли карта
+  #         if (id(map_select).state != "Russia, Ufa 3.4km") {
+  #           // Если карта не выбрана, устанавливаем наклон в 0 через ползунок и выходим
+  #           if (id(set_incline).state != 0.0) {
+  #             id(set_incline).publish_state(0.0);
+  #             ESP_LOGI("InclineMap", "Map not selected, incline reset to 0% via slider");
+  #           }
+  #           return;
+  #         }
+
+  #         // Получаем текущую дистанцию в метрах
+  #         float distance_km = id(treadmill_distance_km).state;
+  #         float distance_m = distance_km * 1000.0;
+
+  #         // Проверяем, достигнута ли последняя точка (3420 м)
+  #         if (distance_m >= 3420.0) {
+  #           id(set_incline).publish_state(0.0); // Сбрасываем наклон перед остановкой
+  #           ESP_LOGI("InclineMap", "End of map reached at %.2f m, stopping program", distance_m);
+  #           id(stop_program).execute();
+  #           return;
+  #         }
+
+  #         // Рассчитываем индекс массива (каждые 30 метров)
+  #         int index = static_cast<int>(distance_m / 30.0);
+
+  #         // Проверяем, чтобы индекс не превышал длину массива (114)
+  #         if (index >= 114) {
+  #           index = 113; // Последний элемент массива
+  #           ESP_LOGI("InclineMap", "Reached end of map at distance %.2f m, using last incline", distance_m);
+  #         }
+
+  #         // Получаем значение наклона из массива (в единицах беговой дорожки, где 1% = 10 единиц)
+  #         float new_incline_units = id(incline_profile_map_russia_ufa3_4km)[index];
+  #         float new_incline_percent = new_incline_units / 10.0; // Преобразуем в проценты (0-15%)
+
+  #         // Ограничиваем значение в диапазоне 0-15%
+  #         if (new_incline_percent > 15.0) new_incline_percent = 15.0;
+  #         if (new_incline_percent < 0.0) new_incline_percent = 0.0;
+
+  #         // Устанавливаем новое значение в ползунок, если оно отличается
+  #         if (fabs(id(set_incline).state - new_incline_percent) > 0.01) { // Проверка с небольшой погрешностью
+  #           id(set_incline).publish_state(new_incline_percent);
+  #           ESP_LOGI("InclineMap", "Distance: %.2f m, Index: %d, New Incline: %.1f%% via slider", distance_m, index, new_incline_percent);
+  #         }
 
 interval:
   - interval: 800ms
@@ -1951,6 +2133,15 @@ interval:
                   id(display_nextion).send_command_printf("t0.bco=%d", t0_bco);
                 }
 
+# интервал для изминения наклона для выбранной карты
+  - interval: 5s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(motor_running);'
+          then:
+            - script.execute: update_incline_by_map
+
 # Кнопки и селекторы
 button:
   - platform: template
@@ -2210,7 +2401,7 @@ sensor:
       then:
         - lambda: |-
             int new_time_warm = x; // Значение от number_sensor
-            if (new_time_warm >= 1 && new_time_warm <= 10) {
+            if (new_time_warm >= 0 && new_time_warm <= 10) {
               id(set_warm_up_time).publish_state(new_time_warm); // Исправлено
               ESP_LOGD("Settings", "Age updated to: %d", new_time_warm);
               //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
@@ -2228,7 +2419,7 @@ sensor:
       then:
         - lambda: |-
             int new_time_cool = x; // Значение от number_sensor
-            if (new_time_cool >= 1 && new_time_cool <= 10) {
+            if (new_time_cool >= 0 && new_time_cool <= 10) {
               id(set_cool_down_time).publish_state(new_time_cool); // Исправлено
               ESP_LOGD("Settings", "Age updated to: %d", new_time_cool);
               //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
@@ -2257,8 +2448,6 @@ sensor:
     icon: "mdi:angle-acute"
     lambda: |-
       return id(treadmill_incline_feedback) / 10.0;
-
-
 
   - platform: template
     name: "Treadmill Speed"
@@ -2298,6 +2487,7 @@ sensor:
             sprintf(incline_str, "%.1f", id(treadmill_incline_sensor_uart).state); // Форматирование числа с одной цифрой после запятой
             id(display_nextion).set_component_text("t4", incline_str); // Установка строки в текстовый компонент
           }
+
   - platform: template
     name: "ESP32 Free Memory"
     lambda: |-
@@ -2808,133 +2998,162 @@ binary_sensor:
 
 
   # Кнопка увеличения скорости
-  - platform: gpio
-    pin:
-      number: 13
-      mode: INPUT_PULLUP
-      inverted: true
-    id: raw_speed_up
-    filters:
-      - delayed_on: 40ms
-      - delayed_off: 40ms
-    on_state:
-      then:
-        - binary_sensor.template.publish:
-            id: speed_up_clicker
-            state: !lambda 'return x;'
-        - delay: 40ms
-        - binary_sensor.template.publish:
-            id: speed_up_clicker
-            state: !lambda 'return false;'
-
-  # Кнопка уменьшения скорости
-  - platform: gpio
-    pin:
-      number: 14
-      mode: INPUT_PULLUP
-      inverted: true
-    id: raw_speed_down
-    filters:
-      - delayed_on: 40ms
-      - delayed_off: 40ms
-    on_state:
-      then:
-        - binary_sensor.template.publish:
-            id: speed_down_clicker
-            state: !lambda 'return x;'
-        - delay: 40ms
-        - binary_sensor.template.publish:
-            id: speed_down_clicker
-            state: !lambda 'return false;'
-
-  # Шаблонный сенсор для обработки кликов (Speed Up)
-  - platform: template
-    id: speed_up_clicker
-    name: "Speed Up Clicker"
-    internal: true
-    on_multi_click:
-      # Одиночный клик (короткое нажатие, +0.1)
-      - timing:
-          - ON for at most 0.2s
-          - OFF for at least 0.2s
-        then:
-          - button.press: speed_up_button
-      # Удержание (более 0.5s, +0.5)
-      - timing:
-          - ON for at least 2s
-          - OFF for at least 0.5s
-        then:
-          - button.press: speed_up_button_large
-      # Двойной клик (опционально, +1.0)
-      - timing:
-          - ON for at most 0.2s
-          - OFF for at most 0.4s
-          - ON for at most 0.2s
-          - OFF for at least 0.2s
-        then:
-          - lambda: |-
-              if (id(motor_running) && id(target_speed) < 120) {
-                id(target_speed) += 10;
-                id(target_speed_goal) = id(target_speed);
-                id(set_speed).publish_state(id(target_speed) / 10.0);
-              }
-
-  # Шаблонный сенсор для обработки кликов (Speed Down)
-  - platform: template
-    id: speed_down_clicker
-    name: "Speed Down Clicker"
-    internal: true
-    on_multi_click:
-      # Одиночный клик (короткое нажатие, -0.1)
-      - timing:
-          - ON for at most 0.2s
-          - OFF for at least 0.2s
-        then:
-          - button.press: speed_down_button
-      # Удержание (более 0.5s, -0.5)
-      - timing:
-          - ON for at least 1.0s
-        then:
-          - button.press: speed_down_button_large
-      # Двойной клик (опционально, -1.0)
-      - timing:
-          - ON for at most 0.2s
-          - OFF for at most 0.4s
-          - ON for at most 0.2s
-          - OFF for at least 0.2s
-        then:
-          - lambda: |-
-              if (id(motor_running) && id(target_speed) > 6) {
-                id(target_speed) -= 10;
-                id(target_speed_goal) = id(target_speed);
-                id(set_speed).publish_state(id(target_speed) / 10.0);
-              }
-
   # - platform: gpio
   #   pin:
   #     number: 13
   #     mode: INPUT_PULLUP
   #     inverted: true
-  #   name: "Speed Up Button"
-  #   entity_category: diagnostic
-  #   on_press:
-  #     - button.press: speed_up_button
+  #   id: raw_speed_up
   #   filters:
-  #     - delayed_on: 50ms
-  #     - delayed_off: 50ms
+  #     - delayed_on: 40ms
+  #     - delayed_off: 40ms
+  #   on_state:
+  #     then:
+  #       - binary_sensor.template.publish:
+  #           id: speed_up_clicker
+  #           state: !lambda 'return x;'
+  #       - delay: 40ms
+  #       - binary_sensor.template.publish:
+  #           id: speed_up_clicker
+  #           state: !lambda 'return false;'
 
-  # - platform: gpio
-  #   pin:
-  #     number: 14
-  #     mode: INPUT_PULLUP
-  #     inverted: true
-  #   name: "Speed Down Button"
-  #   entity_category: diagnostic
+# # Кнопка увеличения скорости
+#   - platform: gpio
+#     pin:
+#       number: 13
+#       mode: INPUT_PULLUP
+#       inverted: true
+#     id: raw_speed_up
+#     filters:
+#       - delayed_on: 50ms
+#       - delayed_off: 50ms
+#     on_state:
+#       then:
+#         - binary_sensor.template.publish:
+#             id: speed_up_clicker
+#             state: !lambda 'return x;'
+#         - logger.log:
+#             format: "Button state: %d"
+#             args: ['x']
+
+#   # Кнопка уменьшения скорости
+#   - platform: gpio
+#     pin:
+#       number: 14
+#       mode: INPUT_PULLUP
+#       inverted: true
+#     id: raw_speed_down
+#     filters:
+#       - delayed_on: 40ms
+#       - delayed_off: 40ms
+#     on_state:
+#       then:
+#         - binary_sensor.template.publish:
+#             id: speed_down_clicker
+#             state: !lambda 'return x;'
+#         - delay: 40ms
+#         - binary_sensor.template.publish:
+#             id: speed_down_clicker
+#             state: !lambda 'return false;'
+
+  # Шаблонный сенсор для обработки кликов (Speed Up)
+  # Шаблонный сенсор
+  # - platform: template
+  #   id: speed_up_clicker
+  #   name: "Speed Up Clicker"
+  #   internal: true
   #   on_press:
-  #     - button.press: speed_down_button
-  #   filters:
-  #     - delayed_on: 50ms
-  #     - delayed_off: 50ms
+  #     - logger.log: "Button pressed"
+  #     - script.execute: check_single_click
+  #   on_multi_click:
+  #     # Удержание
+  #     - timing:
+  #         - ON for at least 0.2s
+  #       then:
+  #         - logger.log: "Holding started"
+  #         - lambda: |-
+  #             id(is_holding) = true;
+  #   on_release:
+  #     - logger.log: "Button released"
+  #     - lambda: |-
+  #         id(is_holding) = false;
+      # Удержание (более 0.5s, +0.5)
+      # - timing:
+      #     - ON for at least 2s
+      #     - OFF for at least 0.5s
+      #   then:
+      #     - button.press: speed_up_button_large
+      # Двойной клик (опционально, +1.0)
+      # - timing:
+      #     - ON for at most 0.2s
+      #     - OFF for at most 0.5s
+      #     - ON for at most 0.2s
+      #     - OFF for at least 0.2s
+        # then:
+        #   - lambda: |-
+        #       if (id(motor_running) && id(target_speed) < 120) {
+        #         id(target_speed) += 10;
+        #         id(target_speed_goal) = id(target_speed);
+        #         id(set_speed).publish_state(id(target_speed) / 10.0);
+        #       }
+
+  # Шаблонный сенсор для обработки кликов (Speed Down)
+  # - platform: template
+  #   id: speed_down_clicker
+  #   name: "Speed Down Clicker"
+  #   internal: true
+  #   on_multi_click:
+  #     # Одиночный клик (короткое нажатие, -0.1)
+  #     - timing:
+  #         - ON for at most 0.1s
+  #         - OFF for at least 0.1s
+  #       then:
+  #         - button.press: speed_down_button
+
+      # Удержание (более 0.5s, -0.5)
+      # - timing:
+      #     - ON for at least 1.0s
+      #   then:
+      #     - button.press: speed_down_button_large
+      # Двойной клик (опционально, -1.0)
+      # - timing:
+      #     - ON for at most 0.2s
+      #     - OFF for at most 0.5s
+      #     - ON for at most 0.2s
+      #     - OFF for at least 0.2s
+      #   then:
+      #     - lambda: |-
+      #         if (id(motor_running) && id(target_speed) > 6) {
+      #           id(target_speed) -= 10;
+      #           id(target_speed_goal) = id(target_speed);
+      #           id(set_speed).publish_state(id(target_speed) / 10.0);
+      #         }
+
+  - platform: gpio
+    pin:
+      number: 13
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Speed Up Button"
+    entity_category: diagnostic
+    on_press:
+      - button.press: speed_up_button_large
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+
+  - platform: gpio
+    pin:
+      number: 14
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Speed Down Button"
+    entity_category: diagnostic
+    on_press:
+      - button.press: speed_down_button_large
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
 
 
   - platform: gpio
@@ -2975,12 +3194,41 @@ binary_sensor:
             ESP_LOGI("Nextion", "mainPage tab (page 0) opened");
 
   - platform: nextion
+    page_id: 10
+    component_id: 0
+    id: map_page
+    on_press:
+      then:
+        - component.update: display_nextion
+        - lambda: |-
+            ESP_LOGI("Nextion", "map tab (page 10) opened");
+
+  - platform: nextion
+    page_id: 11
+    component_id: 0
+    id: page_map_select
+    on_press:
+      then:
+        - component.update: display_nextion
+        - lambda: |-
+            ESP_LOGI("Nextion", "map select (page 11) opened");
+
+  - platform: nextion
+    page_id: 8
+    component_id: 0
+    id: avgsummary
+    on_press:
+      then:
+        - component.update: display_nextion
+        - lambda: |-
+            ESP_LOGI("Nextion", "avgsummary tab (page 8) opened");
+
+  - platform: nextion
     page_id: 1
     component_id: 1
     id: speed
     on_press:
       then:
-        - component.update: display_nextion
         - lambda: |-
             ESP_LOGI("Nextion", "Speed tab (page 1) opened");
 
@@ -2993,6 +3241,16 @@ binary_sensor:
         - component.update: display_nextion
         - lambda: |-
             ESP_LOGI("Nextion", "Pulse zone tab (page 2) opened");
+
+  - platform: nextion
+    page_id: 9
+    component_id: 0
+    id: delayPage
+    on_press:
+      # then:
+      #   - script.execute: start_manual
+        - lambda: |-
+            ESP_LOGI("Nextion", "delayPage zone tab (page 9) opened");
 
 
   - platform: nextion
@@ -3027,7 +3285,7 @@ binary_sensor:
         - lambda: |-
             // Отправляем время
             id(display_nextion).send_command_printf("n_min.val=%d", (int)id(set_run_time).state);
-            // Отправляем время размина
+            // Отправляем время разминки
             id(display_nextion).send_command_printf("n_warm.val=%d", (int)id(set_warm_up_time).state);
             // Отправляем время заминка
             id(display_nextion).send_command_printf("n_cool.val=%d", (int)id(set_cool_down_time).state);
@@ -3061,10 +3319,10 @@ binary_sensor:
     id: m0_start_manual
     on_press:
       then:
-        - delay: 200ms
+        - delay: 3200ms
         - script.execute: start_manual
         - lambda: |-
-            id(program_select).publish_state("None"); 
+            id(program_select).publish_state("None");
             id(m0_start_manual).publish_state(false);
 
   - platform: nextion
@@ -3073,35 +3331,72 @@ binary_sensor:
     id: m0_start_program
     on_press:
       then:
-        #- delay: 200ms
+        - delay: 3000ms
         - script.execute: start_program
         - lambda: id(m0_start_program).publish_state(false);
 
   - platform: nextion
     page_id: 0
     component_id: 2
-    id: m1_fat_barn
+    id: m1_map
     on_press:
       then:
-        - delay: 200ms
         - lambda: |-
-            id(program_select).publish_state("Fat Burn");  // Выбираем программу
-            // После этого on_value триггер у program_select выполнит нужные действия, обновит zone_select, время, текст и др.
-        - delay: 200ms
-        - lambda: id(m1_fat_barn).publish_state(false);
+            ESP_LOGI("Nextion", "INFO tab (m1 map) press");
+            id(m1_map).publish_state(false);
 
   - platform: nextion
     page_id: 0
     component_id: 3
-    id: m2_recovery
+    id: m2_settings
     on_press:
       then:
-        - delay: 200ms
         - lambda: |-
-            id(program_select).publish_state("Recovery run");  // Выбираем программу
-            // После этого on_value триггер у program_select выполнит нужные действия, обновит zone_select, время, текст и др.
-        - delay: 200ms
-        - lambda: id(m2_recovery).publish_state(false);
+            ESP_LOGI("Nextion", "INFO tab (m2 settings) press");
+            id(m2_settings).publish_state(false);
+
+  - platform: nextion
+    page_id: 10
+    component_id: 1
+    id: m0_select_russia_ufa
+    on_press:
+      then:
+        - lambda: |-
+            id(map_select).publish_state("Russia, Ufa 3.4km");
+            id(m0_select_russia_ufa).publish_state(false);
+
+  - platform: nextion
+    page_id: 10
+    component_id: 4
+    id: m0_select_russia_ufa1
+    on_press:
+      then:
+        - lambda: |-
+            id(map_select).publish_state("Russia, Ufa Sipailovo 4.4km");
+            id(m0_select_russia_ufa1).publish_state(false);
+
+  - platform: nextion
+    page_id: 10
+    component_id: 3
+    id: m0_select_russia_ufa2
+    on_press:
+      then:
+        - lambda: |-
+            id(map_select).publish_state("Russia, Ufa Kashkadan 1.7km");
+            id(m0_select_russia_ufa2).publish_state(false);
+
+
+  - platform: nextion
+    page_id: 11
+    component_id: 1
+    id: map_start
+    on_press:
+      then:
+        - delay: 3000ms
+        - script.execute: start_manual
+        - lambda: |-
+            ESP_LOGI("Nextion", "INFO tab (map start) press"); 
+            id(map_start).publish_state(false);
 
   - platform: nextion
     page_id: 0
@@ -3313,6 +3608,21 @@ select:
     on_value:
       - script.execute: update_heart_rate_zones
 
+  - platform: template
+    name: "Map"
+    id: map_select
+    restore_value: no
+    options:
+      - "None"
+      - "Russia, Ufa 3.4km"
+      - "Russia, Ufa Sipailovo 4.4km"
+      - "Russia, Ufa Kashkadan 1.7km"
+    initial_option: "None"
+    optimistic: true
+    # on_value:
+    #   - script.execute: update_heart_rate_zones
+
+
   # - platform: template
   #   name: "UART Data Bits"
   #   id: uart_data_bits
@@ -3496,7 +3806,7 @@ number:
     name: "Set Run Time"
     id: set_run_time
     min_value: 0
-    max_value: 60
+    max_value: 240
     step: 1
     unit_of_measurement: "min"
     icon: "mdi:timer"
@@ -3699,7 +4009,7 @@ switch:
 display:
   - platform: nextion
     uart_id: uart_0
-    update_interval: 5s
+    update_interval: 1s
     id: display_nextion
     lambda: |-
         if (id(speed).state) {
