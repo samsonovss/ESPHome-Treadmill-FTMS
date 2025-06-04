@@ -183,7 +183,7 @@ ble_client:
 - Создание веб-интерфейса для управления без Home Assistant.
 
 ## История изменений
-Для подробной истории изменений см. [CHANGELOG.md](CHANGELOG.md).
+Для подробной истории изменений см. [CHANGELOG.md](/CHANGELOG.md).
 
 ## Авторы
 Создано [@samsonovss](https://t.me/samsonovss) & xAI Assistant
