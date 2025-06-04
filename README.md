@@ -124,17 +124,18 @@ A heart rate monitor connects via BLE to provide pulse data. Real-time intellige
 - After completing a workout, results are logged in the "Workout Summary" format. Example:
 ```yaml
   ===== Workout Summary =====
-  User: Gender=Male, Age=41 years, Weight=78.0 kg, Max HR=181 bpm
-  Duration: 58.17 min (3490 sec)
-  Distance: 4.51 km
-  Calories: 257 kcal
-  Avg Speed: 4.66 km/h
-  Avg Incline: 1.40% (Real Incline: 0.47%)
-  Avg MET: 3.27
-  Avg VO2: 11.9 ml/kg/min
-  Avg Heart Rate: 114 bpm
-  Max Heart Rate: 173 bpm
-  Heart Rate Zones: Zone1=8:33, Zone2=36:03, Zone3=7:36, Zone4=0:23, Zone5=1:05
+  User: Gender=Male, Age=41 years, Weight=75.0 kg, Max HR=181 bpm
+  Duration: 33.87 min (2032 sec)
+  Distance: 3.42 km
+  Calories: 178 kcal
+  Fat Burned: 9.6 g
+  Avg Speed: 6.06 km/h
+  Avg Incline: 1.85% (Real Incline: 0.62%)
+  Avg MET: 4.21
+  Avg VO2: 14.7 ml/kg/min
+  Avg Heart Rate: 121 bpm
+  Max Heart Rate: 138 bpm
+  Heart Rate Zones: Zone1=1:57, Zone2=12:23, Zone3=17:12, Zone4=0:00, Zone5=0:00
   ===== End of Summary =====
 ```
 
