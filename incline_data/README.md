@@ -32,7 +32,7 @@ This directory contains elevation-related data and processing scripts for treadm
 
 ### **4. Integrate with ESPHome**
 - Add the incline_data.h array to the global section in ESPHome.
-```
+```yaml
   - id: incline_profile_map_sipailovo_Kashkadan_1_72km
     type: float[58]
     restore_value: no
