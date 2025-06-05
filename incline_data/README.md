@@ -30,10 +30,13 @@ This directory contains elevation-related data and processing scripts for treadm
 
 - Since the treadmill incline system **maps a real-world incline of 5% to a treadmill incline setting of 15%**, the script **multiplies the real incline by 30** to scale it properly. This ensures that elevation changes are converted accurately for the treadmill’s incline mechanism.
 
+- **Important:** You should **measure the actual incline of your treadmill** and adjust the coefficient if it differs from this scaling. The default conversion assumes **5% real incline = 15% treadmill incline**, but your treadmill may use a different ratio.
+
+
 ### **4. Integrate with ESPHome**
 - Add the incline_data.h array to the global section in ESPHome.
 ```yaml
-  - id: incline_profile_map_sipailovo_Kashkadan_1_72km
+  - id: incline_profile_map_your_name
     type: float[58]
     restore_value: no
     initial_value: "{30, 0, 0, 60, 0, 0, 0, 70, 150, 150, 150, 80, 70, 10, 70, 20, 50, 10, 0, 20, 50, 80, 30, 0, 0, 0, 0, 0, 0, 20, 10, 0, 50, 0, 0, 30, 60, 0, 0, 0, 0, 30, 100, 0, 0, 0, 0, 0, 0, 50, 60, 0, 0, 0, 0, 100, 30, 0}"
