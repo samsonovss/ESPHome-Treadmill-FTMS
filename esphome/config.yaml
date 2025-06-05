@@ -749,29 +749,9 @@ script:
           id(training_status_sensor).publish_state(id(training_status_to_string)(0x0D));
           ESP_LOGI("FTMS", "Отправлено уведомление: Manual Mode (0x0D)");
 
-          if (id(mainPage).state) {
+          if (!id(speed).state) {
             id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(info).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(Time).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(age).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(pulsezone).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(avgsummary).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(map_page).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(page_map_select).state) {
-            id(display_nextion).send_command_printf("page 1");
+            ESP_LOGI("Nextion", "Переключение на страницу 1");
           }
 
 # Скрипт запускает программу тренировки
@@ -869,23 +849,9 @@ script:
           id(remaining_cool_down_time) = 0;
           id(warm_up_time) = 0;
 
-          if (id(mainPage).state) {
+          if (!id(speed).state) {
             id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(info).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(Time).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(age).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(pulsezone).state) {
-            id(display_nextion).send_command_printf("page 1");
-          }
-          if (id(avgsummary).state) {
-            id(display_nextion).send_command_printf("page 1");
+            ESP_LOGI("Nextion", "Переключение на страницу 1");
           }
 
 # Скрипт управляет процессом разминки, увеличивая скорость до достижения зоны 1 пульса, переходя к основной программе или останавливаясь при ошибке.
@@ -1591,32 +1557,6 @@ script:
           id(display_nextion).send_command_printf("avgsummary.t7.txt=\"%s\"", fat_txt);
           id(display_nextion).send_command_printf("avgsummary.t8.txt=\"%s\"", user_txt);
 
-          // --- Логи для отладки ---
-          ESP_LOGI("Nextion", "Sent to info.j0.val: %d", percent_zone1);
-          ESP_LOGI("Nextion", "Sent to info.j1.val: %d", percent_zone2);
-          ESP_LOGI("Nextion", "Sent to info.j2.val: %d", percent_zone3);
-          ESP_LOGI("Nextion", "Sent to info.j3.val: %d", percent_zone4);
-          ESP_LOGI("Nextion", "Sent to info.j4.val: %d", percent_zone5);
-          ESP_LOGI("Nextion", "Sent to info.t0.txt: %s", t0_txt);
-          ESP_LOGI("Nextion", "Sent to info.t1.txt: %s", t1_txt);
-          ESP_LOGI("Nextion", "Sent to info.t2.txt: %s", t2_txt);
-          ESP_LOGI("Nextion", "Sent to info.t3.txt: %s", t3_txt);
-          ESP_LOGI("Nextion", "Sent to info.t4.txt: %s", t4_txt);
-          ESP_LOGI("Nextion", "Sent to info.t5.txt: %s", t5_txt);
-          ESP_LOGI("Nextion", "Sent to info.t6.txt: %s", t6_txt);
-          ESP_LOGI("Nextion", "Sent to info.t7.txt: %s", t7_txt);
-          ESP_LOGI("Nextion", "Sent to info.t8.txt: %s", t8_txt);
-          ESP_LOGI("Nextion", "Sent to info.t9.txt: %s", t9_txt);
-
-          ESP_LOGI("Nextion", "Sent to avgsummary.t0.txt: %s", duration_txt);
-          ESP_LOGI("Nextion", "Sent to avgsummary.t1.txt: %s", distance_txt);
-          ESP_LOGI("Nextion", "Sent to avgsummary.t2.txt: %s", speed_txt);
-          ESP_LOGI("Nextion", "Sent to avgsummary.t3.txt: %s", incline_txt);
-          ESP_LOGI("Nextion", "Sent to avgsummary.t4.txt: %s", met_txt);
-          //ESP_LOGI("Nextion", "Sent to avgsummary.t5.txt: %s", vo2_txt);
-          ESP_LOGI("Nextion", "Sent to avgsummary.t6.txt: %s", calories_txt);
-          ESP_LOGI("Nextion", "Sent to avgsummary.t7.txt: %s", fat_txt);
-          ESP_LOGI("Nextion", "Sent to avgsummary.t8.txt: %s", user_txt);
 
 
   - id: log_workout_summary
@@ -1751,7 +1691,7 @@ script:
           MapConfig maps[] = {
             {"Russia, Ufa 3.4km", id(incline_profile_map_russia_ufa3_4km), 113, 3420.0},
             {"Russia, Ufa Sipailovo 4.4km", id(incline_profile_map_sipailovo_circle_4_37km), 145, 4373.4},
-            {"Russia, Ufa Kashkadan 1.72km", id(incline_profile_map_sipailovo_Kashkadan_1_72km), 57, 1719.6}, // Новый маршрут
+            {"Russia, Ufa Kashkadan 1.72km", id(incline_profile_map_sipailovo_Kashkadan_1_72km), 57, 1719.6},
           };
           const int map_count = 3;
 
@@ -1765,11 +1705,8 @@ script:
             }
           }
           if (current_map == nullptr) {
-            // Если карта не выбрана или "None", устанавливаем наклон в 0 через ползунок и выходим
-            if (id(set_incline).state != 0.0) {
-              id(set_incline).publish_state(0.0);
-              ESP_LOGI("InclineMap", "Map not selected, incline reset to 0% via slider");
-            }
+            // Если карта не выбрана или "None", просто выходим, не сбрасывая наклон
+            ESP_LOGI("InclineMap", "Map not selected, skipping auto incline adjustment");
             return;
           }
 
@@ -1803,59 +1740,11 @@ script:
           if (new_incline_percent < 0.0) new_incline_percent = 0.0;
 
           // Устанавливаем новое значение в ползунок, если оно отличается
-          if (fabs(id(set_incline).state - new_incline_percent) > 0.01) { // Проверка с небольшой погрешностью
+          if (fabs(id(set_incline).state - new_incline_percent) > 0.01) {
             id(set_incline).publish_state(new_incline_percent);
             ESP_LOGI("InclineMap", "Distance: %.2f m, Index: %d, New Incline: %.1f%% via slider", distance_m, index, new_incline_percent);
           }
 
-
-  # - id: update_incline_by_map
-  #   then:
-  #     - lambda: |-
-  #         // Проверяем, выбрана ли карта
-  #         if (id(map_select).state != "Russia, Ufa 3.4km") {
-  #           // Если карта не выбрана, устанавливаем наклон в 0 через ползунок и выходим
-  #           if (id(set_incline).state != 0.0) {
-  #             id(set_incline).publish_state(0.0);
-  #             ESP_LOGI("InclineMap", "Map not selected, incline reset to 0% via slider");
-  #           }
-  #           return;
-  #         }
-
-  #         // Получаем текущую дистанцию в метрах
-  #         float distance_km = id(treadmill_distance_km).state;
-  #         float distance_m = distance_km * 1000.0;
-
-  #         // Проверяем, достигнута ли последняя точка (3420 м)
-  #         if (distance_m >= 3420.0) {
-  #           id(set_incline).publish_state(0.0); // Сбрасываем наклон перед остановкой
-  #           ESP_LOGI("InclineMap", "End of map reached at %.2f m, stopping program", distance_m);
-  #           id(stop_program).execute();
-  #           return;
-  #         }
-
-  #         // Рассчитываем индекс массива (каждые 30 метров)
-  #         int index = static_cast<int>(distance_m / 30.0);
-
-  #         // Проверяем, чтобы индекс не превышал длину массива (114)
-  #         if (index >= 114) {
-  #           index = 113; // Последний элемент массива
-  #           ESP_LOGI("InclineMap", "Reached end of map at distance %.2f m, using last incline", distance_m);
-  #         }
-
-  #         // Получаем значение наклона из массива (в единицах беговой дорожки, где 1% = 10 единиц)
-  #         float new_incline_units = id(incline_profile_map_russia_ufa3_4km)[index];
-  #         float new_incline_percent = new_incline_units / 10.0; // Преобразуем в проценты (0-15%)
-
-  #         // Ограничиваем значение в диапазоне 0-15%
-  #         if (new_incline_percent > 15.0) new_incline_percent = 15.0;
-  #         if (new_incline_percent < 0.0) new_incline_percent = 0.0;
-
-  #         // Устанавливаем новое значение в ползунок, если оно отличается
-  #         if (fabs(id(set_incline).state - new_incline_percent) > 0.01) { // Проверка с небольшой погрешностью
-  #           id(set_incline).publish_state(new_incline_percent);
-  #           ESP_LOGI("InclineMap", "Distance: %.2f m, Index: %d, New Incline: %.1f%% via slider", distance_m, index, new_incline_percent);
-  #         }
 
 interval:
   - interval: 800ms
@@ -2779,6 +2668,77 @@ ble_client:
           id: connection_status
           state: "Отключено"
 
+
+    # - uuid: "1814"  # Running Speed and Cadence Service
+    #   advertise: true
+    #   characteristics:
+    #     - uuid: "2A53"  # RSC Measurement
+    #       id: rsc_measurement_char
+    #       notify: true
+    #       read: true
+    #       value: !lambda |-
+    #         std::vector<uint8_t> data;
+    #         uint8_t flags = 0x03; // Длина шага и дистанция поддерживаются
+    #         data.push_back(flags);
+    #         float speed_kph = id(treadmill_speed_sensor_uart).state;
+    #         if (isnan(speed_kph)) speed_kph = 0;
+    #         uint16_t speed = (uint16_t)(speed_kph * 256 / 3.6); // Скорость в 1/256 м/с (из км/ч)
+    #         data.push_back(speed & 0xFF);         // Низший байт
+    #         data.push_back((speed >> 8) & 0xFF);  // Высший байт
+    #         uint8_t cadence = 120; // Пример: 120 шагов в минуту (замените на реальные данные)
+    #         data.push_back(cadence);
+    #         uint16_t stride_length = 100; // Пример: длина шага 100 см
+    #         data.push_back(stride_length & 0xFF);
+    #         data.push_back((stride_length >> 8) & 0xFF);
+    #         float distance_km = id(treadmill_distance_km).state;
+    #         uint32_t distance = isnan(distance_km) ? 0 : (uint32_t)(distance_km * 10000); // Дециметры
+    #         data.push_back(distance & 0xFF);
+    #         data.push_back((distance >> 8) & 0xFF);
+    #         data.push_back((distance >> 16) & 0xFF);
+    #         data.push_back((distance >> 24) & 0xFF);
+    #         return data;
+    #     - uuid: "2A54"  # RSC Feature
+    #       id: rsc_feature_char
+    #       read: true
+    #       value: !lambda |-
+    #         std::vector<uint8_t> data;
+    #         uint16_t features = 0x000F; // Поддержка: длина шага, дистанция, статус ходьба/бег, калибровка
+    #         data.push_back(features & 0xFF);         // 0x0F
+    #         data.push_back((features >> 8) & 0xFF);  // 0x00
+    #         return data;
+    #     - uuid: "2A5D"  # Sensor Location
+    #       id: sensor_location_char
+    #       read: true
+    #       value: !lambda |-
+    #         std::vector<uint8_t> data;
+    #         data.push_back(14); // 14 = "Treadmill" по стандарту BLE
+    #         return data;
+    #     - uuid: "2A55"  # SC Control Point
+    #       id: sc_control_point_char
+    #       write: true
+    #       indicate: true
+    #       on_write: !lambda |-
+    #         if (x.empty()) return;
+    #         uint8_t op_code = x[0];
+    #         ESP_LOGI("RSC", "Получена команда RSC: 0x%02X, Данные: %d байт", op_code, x.size());
+    #         std::vector<uint8_t> response;
+    #         if (op_code == 0x03) {  // Start Sensor Calibration
+    #           ESP_LOGI("RSC", "Запуск калибровки скорости");
+    #           // Пример: сохраните текущую скорость для калибровки
+    #           float speed_kph = id(treadmill_speed_sensor_uart).state;
+    #           ESP_LOGI("RSC", "Текущая скорость для калибровки: %.2f км/ч", speed_kph);
+    #           response = {0x10, 0x03, 0x01};  // Success
+    #         } else if (op_code == 0x01) {  // Request Supported Sensor Locations
+    #           response = {0x10, 0x01, 0x01, 14};  // Success, location = Treadmill
+    #         } else {
+    #           response = {0x10, op_code, 0x02};  // Op Code Not Supported
+    #         }
+    #         if (!response.empty()) {
+    #           id(sc_control_point_char).set_value(response);
+    #           id(sc_control_point_char).indicate();
+    #           ESP_LOGI("RSC", "Ответ отправлен: 0x%02X", response[2]);
+    #         }
+
 esp32_ble_server:
   model: Treadmill Controller
   manufacturer: "ESP32-S3"
@@ -3250,6 +3210,7 @@ binary_sensor:
       # then:
       #   - script.execute: start_manual
         - lambda: |-
+            id(speed).publish_state(false);
             ESP_LOGI("Nextion", "delayPage zone tab (page 9) opened");
 
 
@@ -3319,7 +3280,7 @@ binary_sensor:
     id: m0_start_manual
     on_press:
       then:
-        - delay: 3200ms
+        - delay: 3400ms
         - script.execute: start_manual
         - lambda: |-
             id(program_select).publish_state("None");
@@ -3331,7 +3292,7 @@ binary_sensor:
     id: m0_start_program
     on_press:
       then:
-        - delay: 3000ms
+        - delay: 3400ms
         - script.execute: start_program
         - lambda: id(m0_start_program).publish_state(false);
 
@@ -3392,7 +3353,7 @@ binary_sensor:
     id: map_start
     on_press:
       then:
-        - delay: 3000ms
+        - delay: 3400ms
         - script.execute: start_manual
         - lambda: |-
             ESP_LOGI("Nextion", "INFO tab (map start) press"); 
@@ -3478,7 +3439,6 @@ binary_sensor:
             id(zone_select).publish_state("5");
         - delay: 200ms
         - lambda: id(m4_zone5).publish_state(false);
-
 
 
 # Текстовые сенсоры
