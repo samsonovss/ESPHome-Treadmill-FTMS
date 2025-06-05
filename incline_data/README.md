@@ -25,9 +25,11 @@ This directory contains elevation-related data and processing scripts for treadm
 - Run the script from `incline_data/scripts/`:  
   ```bash
   python gpx_to_treadmill_incline.py your_file.gpx
-- The script processes elevation data and generates incline_data.h, containing treadmill incline values from 0 to 150 (0 = 0%, 150 = 150%). These values are prepared for UART control.
+- The script processes elevation data and generates `incline_data.h`, containing treadmill incline values from **0 to 150** (`0 = 0%`, `150 = 15%`). These values are prepared for **UART control**.
 
-4. Integrate with ESPHome
+- Since the treadmill incline system **maps a real-world incline of 5% to a treadmill incline setting of 15%**, the script **multiplies the real incline by 30** to scale it properly. This ensures that elevation changes are converted accurately for the treadmill’s incline mechanism.
+
+### **4. Integrate with ESPHome**
 - Add the incline_data.h array to the global section in ESPHome.
 - Use it in the ESPHome script:
 ```- id: update_incline_by_map```
