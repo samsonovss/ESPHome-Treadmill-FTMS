@@ -3152,6 +3152,8 @@ binary_sensor:
         - component.update: display_nextion
         - lambda: |-
             ESP_LOGI("Nextion", "mainPage tab (page 0) opened");
+            id(map_select).publish_state("None"); //при возврате на главную вкладку сброс выбора карты
+            id(program_select).publish_state("None"); //при возврате на главную вкладку сброс выбора карты
 
   - platform: nextion
     page_id: 10
@@ -3360,6 +3362,17 @@ binary_sensor:
             id(map_start).publish_state(false);
 
   - platform: nextion
+    page_id: 11
+    component_id: 4
+    id: map_start_hrzone
+    on_press:
+      then:
+        - lambda: |-
+            id(program_select).publish_state("Pulse Zone");  // Выбираем программу
+            ESP_LOGI("Nextion", "INFO tab (map start hrzone) press"); 
+            id(map_start_hrzone).publish_state(false);
+
+  - platform: nextion
     page_id: 0
     component_id: 4
     id: m3_hiit
@@ -3368,7 +3381,6 @@ binary_sensor:
         - delay: 200ms
         - lambda: |-
             id(program_select).publish_state("HIIT");  // Выбираем программу
-            // После этого on_value триггер у program_select выполнит нужные действия, обновит zone_select, время, текст и др.
         - delay: 200ms
         # - script.execute: start_program
         - lambda: id(m3_hiit).publish_state(false);
