@@ -12,6 +12,7 @@ Transform your old treadmill into a modern, smart training companion! This proje
 **[Русская версия / Russian version](docs/guides/README.ru.md)**
 
 ## Table of Contents
+- [About the Project](#About-the-Project)
 - [How It Works](#how-it-works)
 - [UART Parsing](docs/guides/UART_PARSING.md)
 - [Recommended Hardware](#recommended-hardware)
