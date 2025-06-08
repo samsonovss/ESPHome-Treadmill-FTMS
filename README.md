@@ -17,7 +17,7 @@
 - [ESPHome Setup](#esphome-setup)
 - [Workout Results Example](#workout-results-example)
 - [Future Plans](#future-plans)
-- [Changelog](#changelog)
+- [Changelog](CHANGELOG.md)
 
 ## About the Project
 Transform your old treadmill into a smart training companion! Using ESP32-S3 and ESPHome firmware, you can add FTMS support for fitness apps via BLE, plus smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled treadmill. Minimal cost, maximum potential!
