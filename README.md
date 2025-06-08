@@ -1,4 +1,6 @@
-# Transform Your Treadmill with FTMS on ESPHome via ESP32-S3 BLE with Nextion Display
+# ESPHome-Treadmill-Zwift: Full Treadmill Computer Implementation on ESPHome
+
+Transform your old treadmill into a modern, smart training companion! This project is a complete replacement for the treadmill's onboard computer, built on ESP32-S3 and ESPHome firmware. It integrates the Fitness Machine Service (FTMS) protocol for direct communication with fitness apps via Bluetooth, eliminating the need for bridges or third-party apps. It also includes smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled model. Minimal cost, maximum potential!
 
 ### Supported FTMS Apps
 - :white_check_mark: Zwift
@@ -21,20 +23,36 @@
 - [Changelog](CHANGELOG.md)
 
 ## About the Project
-Transform your old treadmill into a smart training companion! Using ESP32-S3 and ESPHome firmware, you can add [FTMS](docs/specs/FTMS_v1.0.pdf) support for fitness apps via BLE, plus smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled treadmill. Minimal cost, maximum potential!
+- **Goal**: Replace the outdated treadmill onboard computer with a modern solution.
+- **Key Features**:
+  - Full implementation of the treadmill computer using ESP32-S3 and ESPHome firmware.
+  - Integration of the [Fitness Machine Service (FTMS)](/docs/specs/FTMS_v1.0.pdf) protocol for direct connection to fitness apps (Zwift, Kinomap, etc.) via Bluetooth Low Energy (BLE) without intermediaries.
+  - Minimalist design with a compact Nextion display showing speed, time, and distance, unobstructed by a tablet or monitor.
+  - UART support for communication with the treadmill board, e.g., PSA(xx).
+  - Smart algorithms for adjusting speed and incline based on heart rate data.
 
 ## How It Works
 The project uses the ESP32-S3 to communicate with the treadmill’s board (e.g., PSA(xx)) via UART. Commands like `[SETSPD:010]` (1 km/h) or `[SETINC:000]` (0%) were reverse-engineered by analyzing traffic with a [UART logger](docs/guides/UART_PARSING.md). The microcontroller processes this data, converts it into real speed and incline values, and transmits them via Bluetooth Low Energy (BLE) to apps like Zwift or logs them locally for analysis in Grafana.
 
 A heart rate monitor connects via BLE to provide pulse data. Real-time intelligent algorithms analyze the heart rate and smoothly adjust the treadmill’s settings to maintain your target training zone. For example, if your pulse drifts outside the goal, the speed adjusts automatically for a personalized and effective workout.
 
+## Key Insight: Why I Removed the Original Onboard Computer
+- **Issues with the Original Onboard Computer**:
+  1. **Command Conflict**: When sending commands from the upper onboard computer directly to the lower board, they transmit successfully, but the upper board continues sending its own data, interfering with my commands.
+     - Solution: Send commands via UART to the upper board to set speed and incline, letting it relay them to the lower board. However, I couldn’t successfully send data to the upper board. Instead, commands are sent directly to the lower board with ease.
+  2. **Outdated Design**: The original onboard computer is bulky and takes up significant space. While convenient for placing a tablet, it blocks the display showing speed, incline, and distance.
+- **My Solution**:
+  - Completely removed the upper onboard computer.
+  - Developed a minimalist panel with a compact Nextion display, ensuring speed, time, and distance are always visible, with space above for a tablet or monitor without obstructing key metrics.
+
 ## UART Data Reading and Parsing
 To integrate with the treadmill, you need to connect to UART and decode data (e.g., speed `[SETSPD:010]`, incline `[SETINC:000]`). A detailed guide on connecting, reading raw data, and decoding it is available in [UART_PARSING.md](docs/guides/UART_PARSING.md).
 
-### Advantages
+## Advantages
 - **Flexibility**: Compatible with any UART-supporting treadmill.
-- **Modernity**: Powered by the robust ESP32-S3 microcontroller.
-- **Affordability**: Requires minimal hardware components.
+- **Modernity**: Complete replacement of the onboard computer using ESP32-S3.
+- **Direct Connection**: FTMS via BLE without bridges or third-party apps.
+- **Affordability**: Minimal hardware costs.
 
 ## Recommended Hardware
   <details>
