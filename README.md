@@ -11,6 +11,7 @@
 
 ## Table of Contents
 - [How It Works](#how-it-works)
+- [UART Parsing](docs/readme/UART_PARSING.md)
 - [Recommended Hardware](#recommended-hardware)
 - [Connection](#connection)
 - [Features](#features)
