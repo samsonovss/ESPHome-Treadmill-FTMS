@@ -24,12 +24,12 @@
 Transform your old treadmill into a smart training companion! Using ESP32-S3 and ESPHome firmware, you can add FTMS support for fitness apps via BLE, plus smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled treadmill. Minimal cost, maximum potential!
 
 ## How It Works
-The project uses the ESP32-S3 to communicate with the treadmill’s board (e.g., PSA(xx)) via UART. Commands like `[SETSPD:010]` (1 km/h) or `[SETINC:000]` (0%) were reverse-engineered by analyzing traffic with a UART logger. The microcontroller processes this data, converts it into real speed and incline values, and transmits them via Bluetooth Low Energy (BLE) to apps like Zwift or logs them locally for analysis in Grafana.
+The project uses the ESP32-S3 to communicate with the treadmill’s board (e.g., PSA(xx)) via UART. Commands like `[SETSPD:010]` (1 km/h) or `[SETINC:000]` (0%) were reverse-engineered by analyzing traffic with a [UART logger](docs/readme/UART_PARSING.md). The microcontroller processes this data, converts it into real speed and incline values, and transmits them via Bluetooth Low Energy (BLE) to apps like Zwift or logs them locally for analysis in Grafana.
 
 A heart rate monitor connects via BLE to provide pulse data. Real-time intelligent algorithms analyze the heart rate and smoothly adjust the treadmill’s settings to maintain your target training zone. For example, if your pulse drifts outside the goal, the speed adjusts automatically for a personalized and effective workout.
 
 ## UART Data Reading and Parsing
-To integrate with the treadmill, you need to connect to UART and decode data (e.g., speed `[SETSPD:010]`, incline `[SETINC:000]`). A detailed guide on connecting, reading raw data, and decoding it is available in [UART_PARSING.md](UART_PARSING.md).
+To integrate with the treadmill, you need to connect to UART and decode data (e.g., speed `[SETSPD:010]`, incline `[SETINC:000]`). A detailed guide on connecting, reading raw data, and decoding it is available in [UART_PARSING.md](docs/readme/UART_PARSING.md).
 
 ### Advantages
 - **Flexibility**: Compatible with any UART-supporting treadmill.
