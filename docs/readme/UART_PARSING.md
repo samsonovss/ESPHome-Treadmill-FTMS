@@ -1,26 +1,25 @@
-# Инструкция по считыванию и декодированию данных UART для беговой дорожки
+# Guide to Reading and Decoding UART Data for a Treadmill
 
-## Шаг 1: Подключение к верхнему бортовому компьютеру
-- **Фотография**: Изображение верхнего бортового компьютера беговой дорожки.
-  Разъем UART (обычно 6-контактный, с RX и TX) обведен на фото.
-  
-  <img src="images/uart.png" alt="[фото бортового компьютера" width="400"/>
-- **Важно о подключении**:  
-  - Верхняя плата ("бортовой компьютер") отправляет команды нижней плате с интервалом примерно в полсекунды.
-  - Нижняя плата подтверждает получение, и отправляет только ответ в виде обратной связи.
-  - Для считывания команд подключайтесь именно к верхней плате!
-- **Подключение**:  
-  - Используйте ESP32-S3 для подключения к плате беговой дорожки.  
-  - **GPIO17 (TX)**: Подключите к RX (например, на разъеме Pin 5) на плате через преобразователь уровня (5В → 3.3В).  
-  - **GPIO18 (RX)**: Подключите к TX (например, на разъеме Pin 4) на плате через преобразователь уровня.  
-  - **GND**: Общий провод с преобразователем уровня и платой.  
-  - **Питание**: Используйте LM2596S для преобразования 12В в 5В, затем подключите 3.3В к ESP32-S3.
+## Step 1: Connecting to the Upper Control Board
+- **Photo**: Image of the upper control board of the treadmill.  
+  The UART connector (usually 6-pin, with RX and TX) is circled in the photo.  
+  <img src="images/uart.png" alt="[photo of control board]" width="400"/>
+- **Key Connection Notes**:  
+  - The upper board ("control board") sends commands to the lower board approximately every half second.  
+  - The lower board only sends confirmations as feedback and does not initiate data itself.  
+  - To read commands, connect specifically to the upper board!
+- **Connection**:  
+  - Use an ESP32-S3 to connect to the treadmill's board.  
+  - **GPIO17 (TX)**: Connect to RX (e.g., Pin 5 on the connector) via a level shifter (5V → 3.3V).  
+  - **GPIO18 (RX)**: Connect to TX (e.g., Pin 4 on the connector) via a level shifter.  
+  - **GND**: Common ground with the level shifter and the board.  
+  - **Power**: Use an LM2596S to convert 12V to 5V, then supply 3.3V to the ESP32-S3.
 
-## Шаг 2: Считывание сырых данных UART
-- **Цель**: Получить сырые данные, отправляемые бортовым компьютером, они закодированы в ASCII.
-- **Настройка UART**:  
-  - Начните с базовой конфигурации в ESPHome для захвата всех сообщений без фильтрации шума.  
-  - Используйте следующий код для вывода сырых данных:
+## Step 2: Reading Raw UART Data
+- **Goal**: Capture raw data sent by the control board, encoded in ASCII.
+- **UART Setup**:  
+  - Start with a basic ESPHome configuration to capture all messages without noise filtering.  
+  - Use the following code to output raw data:
   ```yaml
   uart:
     - id: uart_bus
@@ -57,9 +56,9 @@
               }
   ```
 
-- **Подбор скорости UART (Baud Rate)**:  
-  - Скорость передачи (baud rate) неизвестна, поэтому ее нужно определить.  
-  - Добавьте в конфигурацию ESPHome слайдер для подбора скорости, шаг 100: (в моем случае скорость 4800 - 5000)
+- **Selecting UART Baud Rate**:  
+  - The baud rate is unknown and needs to be determined.  
+  - Add a slider to the ESPHome configuration to adjust the speed, step 100: (in my case, the speed was 4800 - 5000)
   ```yaml
   number:
     - platform: template
@@ -83,29 +82,29 @@
               id(uart_bus).load_settings();
             }
   ```
-- **лог в режиме (Debug)**:
+- **Logging in Debug Mode**:
   ```yaml
   logger:
     level: DEBUG
   ```
 
-- **Процесс**:  
-  - Двигайте слайдер, изменяя скорость (например, от 1000 до 115200 с шагом 100).  
-  - Наблюдайте за логами в ESPHome (через `logger`).  
-  - Если начинают поступать сырые команды в ASCII значит подключение и подбор скорость коректны.  
-  - Запомните эту скорость (в моем случае, например, 4900 или 5000).
+- **Process**:  
+  - Adjust the slider, changing the speed (e.g., from 1000 to 115200 with a step of 100).  
+  - Monitor the logs in ESPHome (via `logger`).  
+  - If raw ASCII commands start appearing, the connection and baud rate are correct.  
+  - Note this speed (in my case, for example, 4900 or 5000).
 
-## Шаг 3: Декодирование данных из ASCII в текст
-- **Сырые данные**: На предыдущем шаге вы получили потоки байтов, возможно, с шумом (0x00). Эти данные закодированы в ASCII, где каждый байт представляет символ (например, 0x5B = `[`, 0x30 = `0`).
-- **Как декодировать в реальной жизни**:  
-  - **Просмотр байтов**: В логах вы увидите hex-значения, например, `5B 53 45 54 53 50 44 3A 30 31 30 5D`.  
-  - **Декодирование с помощью конвертеров**:  
-    - Используйте онлайн-инструменты, такие как "Hex to ASCII" конвертер.  
-    - Вставьте hex-строку (например, `5B 53 45 54 53 50 44 3A 30 31 30 5D`).  
-    - Результат: текст, например, `[SETSPD:010]`, где команда означает скорость 1.0 км/ч.  
-  - **Ручное декодирование**:  
-    - Найдите таблицу ASCII (например, на ascii-code.com).  
-    - Преобразуйте каждый hex-байт в символ:  
+## Step 3: Decoding Data from ASCII to Text
+- **Raw Data**: From the previous step, you obtained byte streams, possibly with noise (0x00). These are encoded in ASCII, where each byte represents a character (e.g., 0x5B = `[`, 0x30 = `0`).
+- **How to Decode in Real Life**:  
+  - **View Bytes**: In the logs, you’ll see hex values, e.g., `5B 53 45 54 53 50 44 3A 30 31 30 5D`.  
+  - **Decoding with Converters**:  
+    - Use online tools like a "Hex to ASCII" converter.  
+    - Input the hex string (e.g., `5B 53 45 54 53 50 44 3A 30 31 30 5D`).  
+    - Result: text, e.g., `[SETSPD:010]`, where the command indicates a speed of 1.0 km/h.  
+  - **Manual Decoding**:  
+    - Find an ASCII table (e.g., on ascii-code.com).  
+    - Convert each hex byte to a character:  
       - `5B` → 91 → `[`  
       - `53` → 83 → `S`  
       - `45` → 69 → `E`  
@@ -118,11 +117,11 @@
       - `31` → 49 → `1`  
       - `30` → 48 → `0`  
       - `5D` → 93 → `]`  
-    - Итог: `5B 53 45 54 53 50 44 3A 30 31 30 5D` → `[SETSPD:010]`.  
-  - **Интерпретация**: Команда `[SETSPD:010]` — это скорость 1.0 км/ч, `[SETINC:000]` — наклон 0%. Игнорируйте шум (0x00).  
-- **Фильтрация и декодирование в коде**:  
-  - Очистите данные от шума (0x00) и преобразуйте в читаемый вид.  
-  - Данный код использует парсинг команд `[SETSPD:010]` и `[SETINC:000]` , если ваше название команд отличается замените на свои: 
+    - Result: `5B 53 45 54 53 50 44 3A 30 31 30 5D` → `[SETSPD:010]`.  
+  - **Interpretation**: The command `[SETSPD:010]` means a speed of 1.0 km/h, `[SETINC:000]` means an incline of 0%. Ignore noise (0x00).  
+- **Filtering and Decoding in Code**:  
+  - Remove noise (0x00) and convert to readable form.  
+  - This code parses commands like `[SETSPD:010]` and `[SETINC:000]`. If your command names differ, replace them with your own:
   ```yaml
   uart:
     - id: uart_bus
@@ -156,7 +155,7 @@
                 }
               }
               if (len > 0) {
-                ESP_LOGD("UART", "Получено: %s", message);
+                ESP_LOGD("UART", "Received: %s", message);
                 auto parse_command = [&](const char* start) {
                   if (start == nullptr || *start != '[') return;
                   const char* end = strchr(start, ']');
@@ -168,12 +167,12 @@
                   int name_len = colon - (start + 1);
                   int value_len = end - (colon + 1);
                   if (name_len >= sizeof(command_name) || value_len >= sizeof(command_value)) {
-                    ESP_LOGW("UART", "Слишком длинная команда или значение: %s", start);
+                    ESP_LOGW("UART", "Command or value too long: %s", start);
                     return;
                   }
                   memcpy(command_name, start + 1, name_len);
                   memcpy(command_value, colon + 1, value_len);
-                  ESP_LOGD("UART", "Команда: %s, Значение: %s", command_name, command_value);
+                  ESP_LOGD("UART", "Command: %s, Value: %s", command_name, command_value);
                   if (strcmp(command_name, "SETSPD") == 0) {
                     int speed = 0;
                     bool valid = true;
@@ -186,9 +185,9 @@
                     }
                     if (valid) {
                       id(treadmill_speed_feedback) = speed;
-                      ESP_LOGD("UART", "Скорость обновлена: %d", speed);
+                      ESP_LOGD("UART", "Speed updated: %d", speed);
                     } else {
-                      ESP_LOGW("UART", "Некорректная скорость: %s", command_value);
+                      ESP_LOGW("UART", "Invalid speed: %s", command_value);
                     }
                   }
                   else if (strcmp(command_name, "SETINC") == 0) {
@@ -203,28 +202,28 @@
                     }
                     if (valid) {
                       id(treadmill_incline_feedback) = incline;
-                      ESP_LOGD("UART", "Наклон обновлен: %d", incline);
+                      ESP_LOGD("UART", "Incline updated: %d", incline);
                     } else {
-                      ESP_LOGW("UART", "Некорректный наклон: %s", command_value);
+                      ESP_LOGW("UART", "Invalid incline: %s", command_value);
                     }
                   }
                   else {
-                    ESP_LOGD("UART", "Неизвестная команда обработана: %s=%s", command_name, command_value);
+                    ESP_LOGD("UART", "Unknown command processed: %s=%s", command_name, command_value);
                   }
                 };
                 const char* start = strchr(message, '[');
                 parse_command(start);
                 if (start == nullptr) {
-                  ESP_LOGD("UART", "Не найдено команд в формате [КОМАНДА:ЗНАЧЕНИЕ]: %s", message);
+                  ESP_LOGD("UART", "No commands found in format [COMMAND:VALUE]: %s", message);
                 }
               }
   ```
-- **Результат**:  
-  - Сырые данные фильтруются, и команды вроде `[SETSPD:010]` (скорость 1 км/ч) или `[SETINC:000]` (наклон 0%) декодируются.  
-  - Значения обратной связи сохраняются в переменные, например, `treadmill_speed_feedback` и `treadmill_incline_feedback`, для дальнейшего использования.
+- **Result**:  
+  - Raw data is filtered, and commands like `[SETSPD:010]` (speed 1 km/h) or `[SETINC:000]` (incline 0%) are decoded.  
+  - Feedback values are stored in variables, e.g., `treadmill_speed_feedback` and `treadmill_incline_feedback`, for further use.
 
-## Итог
-- Подключитесь к UART, как показано на фото, и считайте сырые данные, подбирая скорость (baud rate) с помощью слайдера.  
-- Когда данные начнут поступать в сыром виде ASCII
-- Декодируйте данные из ASCII через помощью инструментов - конвертера или вручную (с таблицей ASCII), фильтруя шум и извлекая команды для получения читаемых значений скорости и наклона.  
-- Это мой метод дешифровки UART для беговой дорожки
+## Summary
+- Connect to UART as shown in the photo and read raw data, adjusting the baud rate with the slider.  
+- When raw ASCII data starts coming in:  
+- Decode the data from ASCII using tools like a converter or manually (with an ASCII table), filtering noise and extracting commands to obtain readable speed and incline values.  
+- This is my method for decoding UART for a treadmill!
