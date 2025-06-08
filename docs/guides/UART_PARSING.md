@@ -3,7 +3,7 @@
 ## Step 1: Connecting to the Upper Control Board
 - **Photo**: Image of the upper control board of the treadmill.  
   The UART connector (usually 6-pin, with RX and TX) is circled in the photo.  
-  <img src="images/uart.png" alt="[photo of control board]" width="400"/>
+  <img src="/docs/images/uart.png" alt="[photo of control board]" width="400"/>
 - **Key Connection Notes**:  
   - The upper board ("control board") sends commands to the lower board approximately every half second.  
   - The lower board only sends confirmations as feedback and does not initiate data itself.  

@@ -39,32 +39,32 @@
 ## Рекомендуемое оборудование
   <details>
   <summary><b>ESP32-S3</b>: Настоятельно рекомендуется для высокой производительности и поддержки BLE. (▶️ Нажмите для деталей)</summary>
-  <img src="images/esp32-s3.png" alt="ESP32-S Скриншот" width="400"/>
+  <img src="/docs/images/esp32-s3.png" alt="ESP32-S Скриншот" width="400"/>
   </details>
   
   <details>
   <summary><b>LM2596S</b>: Преобразователь напряжения с 12В на 5В (неизолированный). (▶️ Нажмите для деталей)</summary>
-  <img src="images/LM2596S.jpg" alt="LM2596S Скриншот" width="400"/>
+  <img src="/docs/images/LM2596S.jpg" alt="LM2596S Скриншот" width="400"/>
   </details>
   
   <details>
   <summary><b>2-канальный преобразователь уровня</b>: Для согласования 5В (PSA(xx)) и 3.3В (ESP32 S3). (▶️ Нажмите для деталей)</summary>
-  <img src="images/2-channel_level_shifter.webp" alt="LM2596S Скриншот" width="400"/>
+  <img src="/docs/images/2-channel_level_shifter.webp" alt="LM2596S Скриншот" width="400"/>
   </details>
     
   <details>
   <summary><b>Дисплей Nextion</b>: Для улучшенного пользовательского интерфейса и взаимодействия. (▶️ Нажмите для деталей)</summary>
-  <img src="images/nextion_display.jpg" alt="Скриншот дисплея" width="400"/>
+  <img src="/docs/images/nextion_display.jpg" alt="Скриншот дисплея" width="400"/>
   </details>
   
   <details>
   <summary><b>FC33</b>: Оптический датчик скорости для калибровки дорожки (опционально). (▶️ Нажмите для деталей)</summary>
-  <img src="images/FC-33_speed_sensor.jpg" alt="Скриншот оптического датчика скорости" width="400"/>
+  <img src="/docs/images/FC-33_speed_sensor.jpg" alt="Скриншот оптического датчика скорости" width="400"/>
   </details>
   
   <details>
   <summary><b>Беговая дорожка</b>: В идеале с платой PSA(xx), но подойдёт любая модель с поддержкой UART (RX-TX). (▶️ Нажмите для деталей)</summary>
-  <img src="images/PSA(XX)H.jpg" alt="Скриншот платы PSA(xx)"/>
+  <img src="/docs/images/PSA(XX)H.jpg" alt="Скриншот платы PSA(xx)"/>
   </details>
 
 ## Подключение
@@ -106,7 +106,7 @@
 ### Основные функции
 - <details>
   <summary><b>Поддержка Zwift</b>: Полная интеграция с популярной платформой. (▶️ Нажмите для деталей)</summary>
-  <img src="images/Zwift.gif" alt="Скриншот беговой дорожки с Zwift"/>
+  <img src="/docs/images/Zwift.gif" alt="Скриншот беговой дорожки с Zwift"/>
   </details>
 - **Поддержка FTMS**: Совместимость с Kinomap, FitShow и Kinni.
 - **Пульсометр**: Подключается через BLE с расчётом зон на основе возраста и пола.
@@ -117,11 +117,11 @@
 - **Интерфейс**:
   <details>
   <summary><b>Дисплей Nextion</b>: Поддерживает сенсорный дисплей для удобного мониторинга тренировок и управления дорожкой. (▶️ Нажмите для деталей)</summary>
-  <img src="images/nextion_desine.png" alt="Скриншот дисплея Nextion"/>
+  <img src="/docs/images/nextion_desine.png" alt="Скриншот дисплея Nextion"/>
   </details>
   <details>
   <summary><b>Интерфейс Hassio</b> (▶️ Нажмите для деталей)</summary>
-  <img src="images/hassio.png" alt="Скриншот интерфейса Hassio"/>
+  <img src="/docs/images/hassio.png" alt="Скриншот интерфейса Hassio"/>
   </details>
 
 ## Пример результатов тренировки
