@@ -28,6 +28,9 @@ The project uses the ESP32-S3 to communicate with the treadmill’s board (e.g.,
 
 A heart rate monitor connects via BLE to provide pulse data. Real-time intelligent algorithms analyze the heart rate and smoothly adjust the treadmill’s settings to maintain your target training zone. For example, if your pulse drifts outside the goal, the speed adjusts automatically for a personalized and effective workout.
 
+## UART Data Reading and Parsing
+To integrate with the treadmill, you need to connect to UART and decode data (e.g., speed `[SETSPD:010]`, incline `[SETINC:000]`). A detailed guide on connecting, reading raw data, and decoding it is available in [UART_PARSING.md](UART_PARSING.md).
+
 ### Advantages
 - **Flexibility**: Compatible with any UART-supporting treadmill.
 - **Modernity**: Powered by the robust ESP32-S3 microcontroller.
