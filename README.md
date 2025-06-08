@@ -7,11 +7,11 @@
 - :white_check_mark: Kinni
 - :white_check_mark: qdomyos
 
-**[Русская версия / Russian version](docs/readme/README.ru.md)**
+**[Русская версия / Russian version](docs/guides/README.ru.md)**
 
 ## Table of Contents
 - [How It Works](#how-it-works)
-- [UART Parsing](docs/readme/UART_PARSING.md)
+- [UART Parsing](docs/guides/UART_PARSING.md)
 - [Recommended Hardware](#recommended-hardware)
 - [Connection](#connection)
 - [Features](#features)
@@ -21,15 +21,15 @@
 - [Changelog](CHANGELOG.md)
 
 ## About the Project
-Transform your old treadmill into a smart training companion! Using ESP32-S3 and ESPHome firmware, you can add [FTMS](docs/readme/FTMS_v1.0.pdf) support for fitness apps via BLE, plus smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled treadmill. Minimal cost, maximum potential!
+Transform your old treadmill into a smart training companion! Using ESP32-S3 and ESPHome firmware, you can add [FTMS](docs/FTMS_v1.0.pdf) support for fitness apps via BLE, plus smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled treadmill. Minimal cost, maximum potential!
 
 ## How It Works
-The project uses the ESP32-S3 to communicate with the treadmill’s board (e.g., PSA(xx)) via UART. Commands like `[SETSPD:010]` (1 km/h) or `[SETINC:000]` (0%) were reverse-engineered by analyzing traffic with a [UART logger](docs/readme/UART_PARSING.md). The microcontroller processes this data, converts it into real speed and incline values, and transmits them via Bluetooth Low Energy (BLE) to apps like Zwift or logs them locally for analysis in Grafana.
+The project uses the ESP32-S3 to communicate with the treadmill’s board (e.g., PSA(xx)) via UART. Commands like `[SETSPD:010]` (1 km/h) or `[SETINC:000]` (0%) were reverse-engineered by analyzing traffic with a [UART logger](docs/guides/UART_PARSING.md). The microcontroller processes this data, converts it into real speed and incline values, and transmits them via Bluetooth Low Energy (BLE) to apps like Zwift or logs them locally for analysis in Grafana.
 
 A heart rate monitor connects via BLE to provide pulse data. Real-time intelligent algorithms analyze the heart rate and smoothly adjust the treadmill’s settings to maintain your target training zone. For example, if your pulse drifts outside the goal, the speed adjusts automatically for a personalized and effective workout.
 
 ## UART Data Reading and Parsing
-To integrate with the treadmill, you need to connect to UART and decode data (e.g., speed `[SETSPD:010]`, incline `[SETINC:000]`). A detailed guide on connecting, reading raw data, and decoding it is available in [UART_PARSING.md](docs/readme/UART_PARSING.md).
+To integrate with the treadmill, you need to connect to UART and decode data (e.g., speed `[SETSPD:010]`, incline `[SETINC:000]`). A detailed guide on connecting, reading raw data, and decoding it is available in [UART_PARSING.md](docs/guides/UART_PARSING.md).
 
 ### Advantages
 - **Flexibility**: Compatible with any UART-supporting treadmill.
@@ -39,32 +39,32 @@ To integrate with the treadmill, you need to connect to UART and decode data (e.
 ## Recommended Hardware
   <details>
   <summary><b>ESP32-S3</b>: Highly recommended for performance and BLE support. (▶️ Click to detail)</summary>
-  <img src="docs/readme/images/esp32-s3.png" alt="ESP32-S Screenshot" width="400"/>
+  <img src="docs/images/esp32-s3.png" alt="ESP32-S Screenshot" width="400"/>
   </details>
   
   <details>
   <summary><b>LM2596S</b>: Voltage converter from 12V to 5V (non-isolated). (▶️ Click to detail)</summary>
-  <img src="docs/readme/images/LM2596S.jpg" alt="LM2596S Screenshot" width="400"/>
+  <img src="docs/images/LM2596S.jpg" alt="LM2596S Screenshot" width="400"/>
   </details>
   
   <details>
   <summary><b>2-channel level shifter</b>: To match 5V (PSA(xx)) and 3.3V (ESP32 S3). (▶️ Click to detail)</summary>
-  <img src="docs/readme/images/2-channel_level_shifter.webp" alt="LM2596S Screenshot" width="400"/>
+  <img src="docs/images/2-channel_level_shifter.webp" alt="LM2596S Screenshot" width="400"/>
   </details>
     
   <details>
   <summary><b>Nextion display</b>: For enhanced user interface and interaction. (▶️ Click to detail)</summary>
-  <img src="docs/readme/images/nextion_display.jpg" alt="display Screenshot" width="400"/>
+  <img src="docs/images/nextion_display.jpg" alt="display Screenshot" width="400"/>
   </details>
   
   <details>
   <summary><b>FC33</b>: Optical speed sensor for treadmill calibration optional. (▶️ Click to detail)</summary>
-  <img src="docs/readme/images/FC-33_speed_sensor.jpg" alt="Optical speed sensor Screenshot" width="400"/>
+  <img src="docs/images/FC-33_speed_sensor.jpg" alt="Optical speed sensor Screenshot" width="400"/>
   </details>
   
   <details>
   <summary><b>Treadmill</b>: Ideally with a PSA(xx) board, but any UART-capable model (RX-TX) will do. (▶️ Click to detail)</summary>
-  <img src="docs/readme/images/PSA(XX)H.jpg" alt="PSA(xx) board Screenshot"/>
+  <img src="docs/images/PSA(XX)H.jpg" alt="PSA(xx) board Screenshot"/>
   </details>
 
 ## Connection
@@ -106,7 +106,7 @@ To integrate with the treadmill, you need to connect to UART and decode data (e.
 ### Core Functions
 - <details>
   <summary><b>Zwift Support</b>: Full integration with the popular platform. (▶️ Click to detail)</summary>
-  <img src="docs/readme/images/Zwift.gif" alt="ESPHome Treadmill Zwift Screenshot"/>
+  <img src="docs/images/Zwift.gif" alt="ESPHome Treadmill Zwift Screenshot"/>
   </details>
 - **FTMS Support**: Compatibility with Kinomap, FitShow, and Kinni.
 - **Heart Rate Monitor**: Connects via BLE with zone calculation based on age and gender.
@@ -117,11 +117,11 @@ To integrate with the treadmill, you need to connect to UART and decode data (e.
 - **Interface**:
   <details>
   <summary><b>Nextion Display</b>: Supports touch display for easy workout monitoring and treadmill control. (▶️ Click to detail)</summary>
-  <img src="docs/readme/images/nextion_desine.png" alt="nextion display Screenshot"/>
+  <img src="docs/images/nextion_desine.png" alt="nextion display Screenshot"/>
   </details>
   <details>
   <summary><b>Hassio Interface</b> (▶️ Click to detail)</summary>
-  <img src="docs/readme/images/hassio.png" alt="Hassio Interface Screenshot"/>
+  <img src="docs/images/hassio.png" alt="Hassio Interface Screenshot"/>
   </details>
 
 ## Workout Results Example
