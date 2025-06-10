@@ -1,3 +1,5 @@
+- June 11, 2025:
+  - Added swipe gestures to the Nextion display for seamless navigation between tabs and screens, enhancing user interaction and interface fluidity.
 - June 05, 2025:
   - Added elevation profiles for three running routes with auto-incline control, allowing users to select a route with or without a heart rate monitor for more personalized training sessions.
   - Integrated motor temperature sensor ds18b20 to monitor and prevent overheating, enhancing treadmill safety and longevity.
