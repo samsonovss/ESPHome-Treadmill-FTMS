@@ -2615,11 +2615,11 @@ sensor:
     icon: "mdi:battery"
 
 # BLE
-# esp32_ble_tracker:
-#   scan_parameters:
-#     interval: 1100ms
-#     window: 300ms
-#     active: false
+esp32_ble_tracker:
+  scan_parameters:
+    #interval: 1100ms
+    #window: 300ms
+    active: true
 
 ble_client:
   - mac_address: "C9:5A:91:C1:92:58"
@@ -3149,7 +3149,7 @@ binary_sensor:
     id: mainPage
     on_press:
       then:
-        - component.update: display_nextion
+        #- component.update: display_nextion
         - lambda: |-
             ESP_LOGI("Nextion", "mainPage tab (page 0) opened");
             id(map_select).publish_state("None"); //при возврате на главную вкладку сброс выбора карты
@@ -3161,7 +3161,7 @@ binary_sensor:
     id: map_page
     on_press:
       then:
-        - component.update: display_nextion
+       # - component.update: display_nextion
         - lambda: |-
             ESP_LOGI("Nextion", "map tab (page 10) opened");
 
@@ -3171,7 +3171,7 @@ binary_sensor:
     id: page_map_select
     on_press:
       then:
-        - component.update: display_nextion
+       # - component.update: display_nextion
         - lambda: |-
             ESP_LOGI("Nextion", "map select (page 11) opened");
 
@@ -3181,7 +3181,7 @@ binary_sensor:
     id: avgsummary
     on_press:
       then:
-        - component.update: display_nextion
+      #  - component.update: display_nextion
         - lambda: |-
             ESP_LOGI("Nextion", "avgsummary tab (page 8) opened");
 
@@ -3200,7 +3200,7 @@ binary_sensor:
     id: pulsezone
     on_press:
       then:
-        - component.update: display_nextion
+      #  - component.update: display_nextion
         - lambda: |-
             ESP_LOGI("Nextion", "Pulse zone tab (page 2) opened");
 
@@ -3269,7 +3269,7 @@ binary_sensor:
 
   - platform: nextion
     page_id: 1
-    component_id: 6
+    component_id: 8
     id: m0_stop
     on_press:
       then:
@@ -3378,11 +3378,8 @@ binary_sensor:
     id: m3_hiit
     on_press:
       then:
-        - delay: 200ms
         - lambda: |-
             id(program_select).publish_state("HIIT");  // Выбираем программу
-        - delay: 200ms
-        # - script.execute: start_program
         - lambda: id(m3_hiit).publish_state(false);
 
   - platform: nextion
@@ -3391,10 +3388,8 @@ binary_sensor:
     id: m4_castom_zone
     on_press:
       then:
-        - delay: 200ms
         - lambda: |-
             id(program_select).publish_state("Pulse Zone");  // Выбираем программу
-        - delay: 200ms
         - lambda: id(m4_castom_zone).publish_state(false);
   - platform: nextion
     page_id: 2
@@ -3402,10 +3397,8 @@ binary_sensor:
     id: mo_zone1
     on_press:
       then:
-        - delay: 200ms
         - lambda: |-
             id(zone_select).publish_state("1");
-        - delay: 200ms
         - lambda: id(mo_zone1).publish_state(false);
   - platform: nextion
     page_id: 2
@@ -3413,10 +3406,8 @@ binary_sensor:
     id: m1_zone2
     on_press:
       then:
-        - delay: 200ms
         - lambda: |-
             id(zone_select).publish_state("2");
-        - delay: 200ms
         - lambda: id(m1_zone2).publish_state(false);
   - platform: nextion
     page_id: 2
@@ -3424,10 +3415,8 @@ binary_sensor:
     id: m2_zone3
     on_press:
       then:
-        - delay: 200ms
         - lambda: |-
             id(zone_select).publish_state("3");
-        - delay: 200ms
         - lambda: id(m2_zone3).publish_state(false);
   - platform: nextion
     page_id: 2
@@ -3435,10 +3424,8 @@ binary_sensor:
     id: m3_zone4
     on_press:
       then:
-        - delay: 200ms
         - lambda: |-
             id(zone_select).publish_state("4");
-        - delay: 200ms
         - lambda: id(m3_zone4).publish_state(false);
   - platform: nextion
     page_id: 2
@@ -3446,10 +3433,8 @@ binary_sensor:
     id: m4_zone5
     on_press:
       then:
-        - delay: 200ms
         - lambda: |-
             id(zone_select).publish_state("5");
-        - delay: 200ms
         - lambda: id(m4_zone5).publish_state(false);
 
 
