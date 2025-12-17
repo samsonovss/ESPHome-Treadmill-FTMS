@@ -4,7 +4,7 @@
     - **Added three speed‑correction modes** for different running styles and treadmill behavior:
       - Soft – minimal intervention, smooth adjustments.
       - Precise – balanced correction for most users.
-      - Aggressive – fast compensation for heavy load or worn belt.
+      - Aggressive – fast corrections (possibly better suited for interval training)
   - Added new acceleration profiles and improved speed‑control loop:
     - Smooth alignment of current speed (target_speed) to the goal.
     - Added detailed acceleration profiles:
