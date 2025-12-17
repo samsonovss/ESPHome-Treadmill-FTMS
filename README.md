@@ -3,7 +3,7 @@
 Transform your old treadmill into a modern, smart training companion! This project is a complete replacement for the treadmill's onboard computer, built on ESP32-S3 and ESPHome firmware. It integrates the [Fitness Machine Service (FTMS)](/docs/specs/FTMS_v1.0.pdf) protocol for direct communication with fitness apps via Bluetooth, eliminating the need for bridges or third-party apps. It also includes smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled model. Minimal cost, maximum potential!
 
 <details>
-  <summary>Hassio Treadmill Interface</summary>
+  <summary>Show Home Assistant Treadmill Dashboard</summary>
   <p align="center">
   <img src="docs/images/hassio.png" alt="Hassio Interface Screenshot"/>
 </details>
@@ -41,9 +41,15 @@ Transform your old treadmill into a modern, smart training companion! This proje
 </details>
 
 <details>
-  <summary>Zwift — Treadmill running preview (GIF)</summary>
+  <summary>Show Zwift — Treadmill running preview (GIF)</summary>
   <p align="center">
   <img src="/docs/images/Zwift.gif"/>
+</details>
+
+<details>
+  <summary>Show connection treadmill- esp32</summary>
+  <p align="center">
+  <img src="docs/images/connection.png"/>
 </details>
 
 ### Supported FTMS Apps

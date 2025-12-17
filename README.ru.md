@@ -3,7 +3,7 @@
 Превратите старую беговую дорожку в современного умного помощника для тренировок! Этот проект — полноценная замена бортового компьютера на базе ESP32-S3 и прошивки ESPHome. Он добавляет поддержку протокола [Fitness Machine Service (FTMS)](/docs/specs/FTMS_v1.0.pdf) для прямого общения тренажёра с фитнес-приложениями через Bluetooth, без необходимости в мостах и сторонних приложениях. Также включает интеллектуальные программы на основе пульса и встроенные тренировочные режимы. Разработан для дорожек с платами PSA(xx), но адаптируется к любой модели с UART. Минимум затрат — максимум возможностей!
 
 <details>
-  <summary>Hassio Treadmill Interface</summary>
+  <summary>Показать Hassio интерфейс беговой дорожки </summary>
   <p align="center">
   <img src="docs/images/hassio.png" alt="Hassio Interface Screenshot"/>
 </details>
@@ -41,9 +41,15 @@
 </details>
 
 <details>
-  <summary>Zwift — GIF с бегом</summary>
+  <summary>Показать Zwift — GIF с бегом</summary>
   <p align="center">
   <img src="/docs/images/Zwift.gif"/>
+</details>
+
+<details>
+  <summary>Показать подключение treadmill- esp32</summary>
+  <p align="center">
+  <img src="docs/images/connection.png"/>
 </details>
 
 ### Поддерживаемые FTMS-приложения
