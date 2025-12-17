@@ -38,9 +38,13 @@
   <p align="center">
     📁 <a href="/docs/images/treadmill/IMG_6088.MOV">Download RAW video</a>
   </p>
-
 </details>
 
+<details>
+  <summary>Zwift — GIF с бегом</summary>
+  <p align="center">
+  <img src="/docs/images/Zwift.gif"/>
+</details>
 
 ### Поддерживаемые FTMS-приложения
 - :white_check_mark: Zwift
@@ -50,7 +54,7 @@
 - :white_check_mark: qdomyos
 
 **[English version](/README.md)**  
-**[Changelog](CHANGELOG.md)** • **[История изменений](CHANGELOG.RU.md)**
+**[Changelog](CHANGELOG.md)** / **[История изменений](CHANGELOG.RU.md)**
 
 ## Оглавление
 - [О проекте](#О-проекте)

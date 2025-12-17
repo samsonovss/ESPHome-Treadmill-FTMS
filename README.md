@@ -40,6 +40,12 @@ Transform your old treadmill into a modern, smart training companion! This proje
   </p>
 </details>
 
+<details>
+  <summary>Zwift — Treadmill running preview (GIF)</summary>
+  <p align="center">
+  <img src="/docs/images/Zwift.gif"/>
+</details>
+
 ### Supported FTMS Apps
 - :white_check_mark: Zwift
 - :white_check_mark: Kinomap (Android/iOS)
@@ -48,7 +54,7 @@ Transform your old treadmill into a modern, smart training companion! This proje
 - :white_check_mark: qdomyos
 
 **[Русская версия / Russian version](README.ru.md)**  
-**[Changelog](CHANGELOG.md)** • **[История изменений](CHANGELOG.RU.md)**
+**[Changelog](CHANGELOG.md)** / **[История изменений](CHANGELOG.RU.md)**
 
 ## Table of Contents
 - [About the Project](#About-the-Project)
