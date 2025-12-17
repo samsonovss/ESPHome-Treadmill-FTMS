@@ -10,7 +10,8 @@
 - :white_check_mark: qdomyos
 
 **[English version](/README.md)**
-➡️ [Changelog / История изменений](CHANGELOG.md)
+
+➡️ [Changelog / История изменений](CHANGELOG.RU.md.md)
 
 ## Оглавление
 - [О проекте](#О-проекте)
