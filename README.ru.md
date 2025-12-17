@@ -30,7 +30,7 @@
 </details>
 
 <details>
-  <summary>Показать видео</summary>
+  <summary>Показать видео — Дашборд</summary>
   <p align="center">
     🎥 <a href="https://youtube.com/shorts/wjRsA46usog">Watch on YouTube</a>
   </p>
@@ -41,13 +41,24 @@
 </details>
 
 <details>
+  <summary>Показать видео — Бег</summary>
+  <p align="center">
+    🎥 <a href="https://youtube.com/shorts/QqvJLKn4GOk">Watch on YouTube</a>
+  </p>
+
+  <p align="center">
+    📁 <a href="/docs/images/treadmill/IMG_1171.MOV">Download RAW video</a>
+  </p>
+</details>
+
+<details>
   <summary>Показать Zwift — GIF с бегом</summary>
   <p align="center">
   <img src="/docs/images/Zwift.gif"/>
 </details>
 
 <details>
-  <summary>Показать подключение treadmill- esp32</summary>
+  <summary>Показать подключение treadmill - esp32</summary>
   <p align="center">
   <img src="docs/images/connection.png"/>
 </details>

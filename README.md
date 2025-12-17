@@ -30,7 +30,7 @@ Transform your old treadmill into a modern, smart training companion! This proje
 </details>
 
 <details>
-  <summary>Show Video</summary>
+  <summary>Show Video — Dashboard Overview</summary>
   <p align="center">
     🎥 <a href="https://youtube.com/shorts/wjRsA46usog">Watch on YouTube</a>
   </p>
@@ -41,13 +41,24 @@ Transform your old treadmill into a modern, smart training companion! This proje
 </details>
 
 <details>
+  <summary>Show Video — Running</summary>
+  <p align="center">
+    🎥 <a href="https://youtube.com/shorts/QqvJLKn4GOk">Watch on YouTube</a>
+  </p>
+
+  <p align="center">
+    📁 <a href="/docs/images/treadmill/IMG_1171.MOV">Download RAW video</a>
+  </p>
+</details>
+
+<details>
   <summary>Show Zwift — Treadmill running preview (GIF)</summary>
   <p align="center">
   <img src="/docs/images/Zwift.gif"/>
 </details>
 
 <details>
-  <summary>Show connection treadmill- esp32</summary>
+  <summary>Show connection treadmill - esp32</summary>
   <p align="center">
   <img src="docs/images/connection.png"/>
 </details>
