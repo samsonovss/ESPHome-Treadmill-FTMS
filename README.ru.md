@@ -28,8 +28,13 @@
   <summary>Показать видео</summary>
 
   <p align="center">
-    🎥 <a href="/docs/images/treadmill/IMG_6088.MOV">Смотреть видео</a>
+    🎥 <a href="https://youtube.com/shorts/wjRsA46usog">Watch on YouTube</a>
   </p>
+
+  <p align="center">
+    📁 <a href="/docs/images/treadmill/IMG_6088.MOV">Download RAW video</a>
+  </p>
+
 </details>
 
 
