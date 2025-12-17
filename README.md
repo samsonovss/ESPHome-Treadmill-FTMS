@@ -10,6 +10,7 @@ Transform your old treadmill into a modern, smart training companion! This proje
 - :white_check_mark: qdomyos
 
 **[Русская версия / Russian version](README.ru.md)**
+➡️ [Changelog / История изменений](CHANGELOG.md)
 
 ## Table of Contents
 - [About the Project](#About-the-Project)
