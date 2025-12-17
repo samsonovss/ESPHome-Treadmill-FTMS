@@ -22,8 +22,16 @@
     <img src="/docs/images/treadmill/8.jpg" width="32%">
     <img src="/docs/images/treadmill/9.jpg" width="32%">
   </p>
-
 </details>
+
+<details>
+  <summary>Показать видео</summary>
+
+  <p align="center">
+    🎥 <a href="/docs/images/treadmill/IMG_6088.MOV">Смотреть видео</a>
+  </p>
+</details>
+
 
 ### Поддерживаемые FTMS-приложения
 - :white_check_mark: Zwift

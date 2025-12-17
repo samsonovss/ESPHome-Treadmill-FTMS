@@ -2,6 +2,36 @@
 
 Transform your old treadmill into a modern, smart training companion! This project is a complete replacement for the treadmill's onboard computer, built on ESP32-S3 and ESPHome firmware. It integrates the [Fitness Machine Service (FTMS)](/docs/specs/FTMS_v1.0.pdf) protocol for direct communication with fitness apps via Bluetooth, eliminating the need for bridges or third-party apps. It also includes smart heart rate-based programs and built-in training modes. Designed for treadmills with PSA(xx) boards, it adapts to any UART-enabled model. Minimal cost, maximum potential!
 
+<details>
+  <summary>Show Gallery</summary>
+
+  <p align="center">
+    <img src="/docs/images/treadmill/1.jpg" width="32%">
+    <img src="/docs/images/treadmill/2.jpg" width="32%">
+    <img src="/docs/images/treadmill/3.jpg" width="32%">
+  </p>
+
+  <p align="center">
+    <img src="/docs/images/treadmill/4.jpg" width="32%">
+    <img src="/docs/images/treadmill/5.jpg" width="32%">
+    <img src="/docs/images/treadmill/6.jpg" width="32%">
+  </p>
+
+  <p align="center">
+    <img src="/docs/images/treadmill/7.jpg" width="32%">
+    <img src="/docs/images/treadmill/8.jpg" width="32%">
+    <img src="/docs/images/treadmill/9.jpg" width="32%">
+  </p>
+</details>
+
+<details>
+  <summary>Show Video</summary>
+
+  <p align="center">
+    🎥 <a href="/docs/images/treadmill/IMG_6088.MOV">Watch video</a>
+  </p>
+</details>
+
 ### Supported FTMS Apps
 - :white_check_mark: Zwift
 - :white_check_mark: Kinomap (Android/iOS)
