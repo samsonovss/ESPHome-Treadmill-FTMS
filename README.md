@@ -177,7 +177,7 @@ To integrate with the treadmill, you need to connect to UART and decode data (e.
 - **Local Storage**: Save runs and visualize them in Grafana.
 - **Interface**:
   <details>
-  <summary><b>Nextion Display</b>: Supports touch display for easy workout monitoring and treadmill control. (▶️ Click to detail)</summary>
+  <summary><b>Nextion Display</b>: Supports touch display. (▶️ Click to detail)</summary>
   <img src="docs/images/nextion_desine.png" alt="nextion display Screenshot"/>
   </details>
   <details>
@@ -207,7 +207,7 @@ To integrate with the treadmill, you need to connect to UART and decode data (e.
 ### Smart Adjustment
 - **Pulse Maintenance**: Speed adjusts smoothly based on the difference from the target zone:
   - Difference > 10 bpm: ±0.5 km/h in 0.1 steps every 2 seconds.
-  - Difference < 10 bpm: ±0.1 km/h every 20 seconds.
+  - Difference < 10 bpm: ±0.1 km/h every 20 seconds. (the correction offset is configured in the Home Assistant dashboard)
 
 ### Warm-Up
 - **Gradual Start**: Gradual Start: Speed increases by 0.1 km/h every 10 seconds during the warm-up period. If the heart rate doesn't reach Zone 1 within the set time, the status displays a message like: "Waiting for pulse 91."
