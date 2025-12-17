@@ -6,21 +6,21 @@
   <summary>Показать галерею</summary>
 
   <p align="center">
-    <img src="images/1.jpg" width="32%">
-    <img src="images/2.jpg" width="32%">
-    <img src="images/3.jpg" width="32%">
+    <img src="/docs/images/treadmill/1.jpg" width="32%">
+    <img src="/docs/images/treadmill/2.jpg" width="32%">
+    <img src="/docs/images/treadmill/3.jpg" width="32%">
   </p>
 
   <p align="center">
-    <img src="images/4.jpg" width="32%">
-    <img src="images/5.jpg" width="32%">
-    <img src="images/6.jpg" width="32%">
+    <img src="/docs/images/treadmill/4.jpg" width="32%">
+    <img src="/docs/images/treadmill/5.jpg" width="32%">
+    <img src="/docs/images/treadmill/6.jpg" width="32%">
   </p>
 
   <p align="center">
-    <img src="images/7.jpg" width="32%">
-    <img src="images/8.jpg" width="32%">
-    <img src="images/9.jpg" width="32%">
+    <img src="/docs/images/treadmill/7.jpg" width="32%">
+    <img src="/docs/images/treadmill/8.jpg" width="32%">
+    <img src="/docs/images/treadmill/9.jpg" width="32%">
   </p>
 
 </details>
@@ -33,7 +33,7 @@
 - :white_check_mark: qdomyos
 
 **[English version](/README.md)**  
-**[Changelog / История изменений](CHANGELOG.RU.md.md)**
+**[Changelog / История изменений](CHANGELOG.RU.md)**
 
 ## Оглавление
 - [О проекте](#О-проекте)
