@@ -2,6 +2,29 @@
 
 Превратите старую беговую дорожку в современного умного помощника для тренировок! Этот проект — полноценная замена бортового компьютера на базе ESP32-S3 и прошивки ESPHome. Он добавляет поддержку протокола [Fitness Machine Service (FTMS)](/docs/specs/FTMS_v1.0.pdf) для прямого общения тренажёра с фитнес-приложениями через Bluetooth, без необходимости в мостах и сторонних приложениях. Также включает интеллектуальные программы на основе пульса и встроенные тренировочные режимы. Разработан для дорожек с платами PSA(xx), но адаптируется к любой модели с UART. Минимум затрат — максимум возможностей!
 
+<details>
+  <summary>Показать галерею</summary>
+
+  <p align="center">
+    <img src="images/1.jpg" width="32%">
+    <img src="images/2.jpg" width="32%">
+    <img src="images/3.jpg" width="32%">
+  </p>
+
+  <p align="center">
+    <img src="images/4.jpg" width="32%">
+    <img src="images/5.jpg" width="32%">
+    <img src="images/6.jpg" width="32%">
+  </p>
+
+  <p align="center">
+    <img src="images/7.jpg" width="32%">
+    <img src="images/8.jpg" width="32%">
+    <img src="images/9.jpg" width="32%">
+  </p>
+
+</details>
+
 ### Поддерживаемые FTMS-приложения
 - :white_check_mark: Zwift
 - :white_check_mark: Kinomap (Android/iOS)
