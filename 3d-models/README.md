@@ -40,7 +40,7 @@ These components will be added in future revisions of the design.
 
 - Printed on Bambu Lab A1  
 - Print area used: 256 × 256 × 256 mm  
-- Surface printed using fuzzy skin for improved grip and texture
+- Surface printed using fuzzy skin
 
 ## 🎨 Finishing (Optional)
 
