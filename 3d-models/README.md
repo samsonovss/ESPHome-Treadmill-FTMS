@@ -19,12 +19,12 @@ It enables the free‑run mode, automatically activates the display, and control
 Under the top panel, a **magnet is permanently fixed**, allowing you to attach **any magnetic button** on top of the enclosure.  
 You can program this button for any custom action depending on your ESPHome configuration.
 
-The enclosure also supports **optional upgrades**, such as:
+The enclosure is planned to support additional upgrades in future revisions, such as:
 
-- a **tablet mount** installed on top of the enclosure  
-- a **wireless charging pad** placed underneath the tablet holder  
+- a tablet mount installed on top of the enclosure
+- a wireless charging pad placed underneath the tablet holder
 
-These additions are useful if you want to use a tablet for Zwift, YouTube, or other training applications.
+These features will be useful if you want to use a tablet for Zwift, YouTube, or other training applications.
 
 ## ⚠️ Design Status
 
