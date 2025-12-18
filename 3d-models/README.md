@@ -14,7 +14,7 @@ This enclosure was designed specifically for the ESPHome Treadmill‑Zwift modul
 The design consists of **three separate parts**, which are assembled together and mounted on top of the treadmill’s control module.
 
 In the **lower section of the enclosure**, a **distance sensor** is installed.  
-This sensor is responsible for detecting the treadmill belt movement and calculating speed.
+It enables the free‑run mode, automatically activates the display, and controls the treadmill speed based on the measured distance.
 
 Under the top panel, a **magnet is permanently fixed**, allowing you to attach **any magnetic button** on top of the enclosure.  
 You can program this button for any custom action depending on your ESPHome configuration.
@@ -35,7 +35,7 @@ These components will be added in future revisions of the design.
 ## 🖨️ 3D Printing Details
 
 - Printed on **Bambu Lab A1**  
-- Print area used: **235 × 235 mm**  
+- Print area used: **256 × 256 x 256 mm**  
 - All parts fit on a standard print bed  
 - Designed for easy assembly and stable mounting
 
