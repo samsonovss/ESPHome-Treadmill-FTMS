@@ -1,6 +1,6 @@
-# 3d-models – 3D Printed Enclosure
+# 3D Printed Enclosure
 
-This folder contains the Fusion 360 design files and documentation for the custom 3D‑printed enclosure used in the ESPHome Treadmill‑Zwift project.
+This folder contains the 3D model of the enclosure and the small mounting parts used for installing the speed‑sensor module.
 
 <p align="center">
   <img src="/docs/images/treadmill/6.jpg" width="32%">
