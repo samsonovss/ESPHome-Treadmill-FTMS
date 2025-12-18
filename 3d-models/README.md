@@ -29,15 +29,13 @@ These features will be useful if you want to use a tablet for Zwift, YouTube, or
 ## ⚠️ Design Status
 
 The current STEP model is **not fully finished**.  
-At this stage, the enclosure **does not yet include the bottom cover and the top lid**.  
+At this stage, the enclosure **does not yet include the bottom cover**.  
 These components will be added in future revisions of the design.
 
 ## 🖨️ 3D Printing Details
 
 - Printed on **Bambu Lab A1**  
 - Print area used: **256 × 256 x 256 mm**  
-- All parts fit on a standard print bed  
-- Designed for easy assembly and stable mounting
 
 ## 🎨 Finishing (Optional)
 
