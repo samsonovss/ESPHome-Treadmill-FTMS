@@ -8,34 +8,39 @@ This folder contains the 3D model of the enclosure and the small mounting parts 
   <img src="/docs/images/treadmill/9.jpg" width="32%">
 </p>
 
+## 🎯 Design Philosophy
+
+The goal of this project was to create a clean, minimalist enclosure instead of the bulky, outdated “modern” designs commonly found in treadmill accessories.  
+The envisioned setup includes a sleek control panel with a display, an optional tablet mount with wireless charging, and a large wall‑mounted TV for training apps — all designed to look simple, elegant, and unobtrusive.
+
 ## 📦 Enclosure Overview
 
-This enclosure was designed specifically for the ESPHome Treadmill‑Zwift module and optimized for reliable 3D printing.  
-The design consists of **three separate parts**, which are assembled together and mounted on top of the treadmill’s control module.
+The design consists of three separate parts, which are assembled together and mounted on top of the treadmill’s control module.
 
-In the **lower section of the enclosure**, a **distance sensor** is installed.  
+In the lower section of the enclosure, a distance sensor is installed.  
 It enables the free‑run mode, automatically activates the display, and controls the treadmill speed based on the measured distance.
 
-Under the top panel, a **magnet is permanently fixed**, allowing you to attach **any magnetic button** on top of the enclosure.  
+Under the top panel, a magnet is permanently fixed, allowing you to attach any magnetic button on top of the enclosure.  
 You can program this button for any custom action depending on your ESPHome configuration.
 
 The enclosure is planned to support additional upgrades in future revisions, such as:
 
-- a tablet mount installed on top of the enclosure
-- a wireless charging pad placed underneath the tablet holder
+- a tablet mount installed on top of the enclosure  
+- a wireless charging pad placed underneath the tablet holder  
 
 These features will be useful if you want to use a tablet for Zwift, YouTube, or other training applications.
 
 ## ⚠️ Design Status
 
-The current STEP model is **not fully finished**.  
-At this stage, the enclosure **does not yet include the bottom cover**.  
+The current STEP model is not fully finished.  
+At this stage, the enclosure does not yet include the bottom cover.  
 These components will be added in future revisions of the design.
 
 ## 🖨️ 3D Printing Details
 
-- Printed on **Bambu Lab A1**  
-- Print area used: **256 × 256 x 256 mm**  
+- Printed on Bambu Lab A1  
+- Print area used: 256 × 256 × 256 mm  
+- Surface printed using fuzzy skin for improved grip and texture
 
 ## 🎨 Finishing (Optional)
 
@@ -45,4 +50,4 @@ If desired, the enclosure can be:
 - primed  
 - painted  
 
-This allows you to achieve a smooth, durable, and professional-looking finish.
+This allows you to achieve a smooth, durable, and professional‑looking finish.
