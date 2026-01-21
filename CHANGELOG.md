@@ -1,3 +1,6 @@
+- December 21, 2026:  
+  - Compatibility with **ESPHome 2026.0.1**
+  
 - December 17, 2025:
   - **Refactored FTMS implementation** to ensure full compatibility with **ESPHome 2025.12.0**
   - **Updated Adaptive Speed Correction algorithm** it can be enabled or disabled, and it takes into account user weight, belt friction, and dynamic load to maintain the target speed more accurately.
