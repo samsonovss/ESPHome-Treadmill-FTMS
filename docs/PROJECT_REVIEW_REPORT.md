@@ -6,10 +6,10 @@ This report summarizes a static review of the repository as it exists on 2026-03
 
 ## Repository overview
 
-- Main firmware/configuration: `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/esphome/config.yaml`
-- Incline profile data: `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/esphome/incline_profiles.h`
-- User documentation: `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/README.md`
-- UART reverse-engineering guide: `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/docs/guides/UART_PARSING.md`
+- Main firmware/configuration: `esphome/config.yaml`
+- Incline profile data: `esphome/incline_profiles.h`
+- User documentation: `README.md`
+- UART reverse-engineering guide: `docs/guides/UART_PARSING.md`
 
 ## Validation status
 
@@ -20,7 +20,7 @@ The repository currently does not include an automated test suite, linter config
 ### 1. Hard-coded operational secrets are committed to the main ESPHome config
 
 **Files**
-- `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/esphome/config.yaml:127-148`
+- `esphome/config.yaml:127-148`
 
 **What was found**
 - The API encryption key is stored directly in the tracked config.
@@ -40,7 +40,7 @@ The repository currently does not include an automated test suite, linter config
 ### 2. `resume_training` uses `sprintf()` for UART commands
 
 **Files**
-- `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/esphome/config.yaml:1069-1074`
+- `esphome/config.yaml:1069-1074`
 
 **What was found**
 - The code formats UART commands with:
@@ -60,8 +60,8 @@ The repository currently does not include an automated test suite, linter config
 ### 3. Warm-up “no pulse” safety behavior does not match its own comments
 
 **Files**
-- `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/esphome/config.yaml:1391-1395`
-- `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/esphome/config.yaml:1420-1513`
+- `esphome/config.yaml:1391-1395`
+- `esphome/config.yaml:1420-1513`
 
 **What was found**
 - The comments say the firmware should emergency-stop if heart rate is unavailable for more than 60 seconds during warm-up.
@@ -79,7 +79,7 @@ The repository currently does not include an automated test suite, linter config
 ### 4. FTMS control point validation is incomplete and inconsistent
 
 **Files**
-- `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/esphome/config.yaml:5579-5629`
+- `esphome/config.yaml:5579-5629`
 
 **What was found**
 - Target speed handling accepts any packet with `x.size() >= 3`.
@@ -100,7 +100,7 @@ The repository currently does not include an automated test suite, linter config
 ### 5. The project carries a self-include in `incline_profiles.h`
 
 **Files**
-- `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/esphome/incline_profiles.h:1-2`
+- `esphome/incline_profiles.h:1-2`
 
 **What was found**
 - The header begins with:
@@ -119,7 +119,7 @@ The repository currently does not include an automated test suite, linter config
 ### 6. The firmware logic is concentrated in a single very large YAML file
 
 **Files**
-- `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/esphome/config.yaml`
+- `esphome/config.yaml`
 
 **What was found**
 - The main ESPHome config contains thousands of lines of configuration, inline C++ lambdas, FTMS logic, workout state handling, display control, and hardware integration.
@@ -161,8 +161,8 @@ The repository currently does not include an automated test suite, linter config
 ### 8. Documentation could better distinguish “example values” from production values
 
 **Files**
-- `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/README.md`
-- `/home/runner/work/ESPHome-Treadmill-FTMS/ESPHome-Treadmill-FTMS/docs/guides/UART_PARSING.md`
+- `README.md`
+- `docs/guides/UART_PARSING.md`
 
 **What was found**
 - The UART guide shows example baud-rate discovery values around `4900-5000`, while the checked-in main config uses `4800`.
