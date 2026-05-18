@@ -262,6 +262,5 @@ Join the project community on Telegram: [Treadmill Smart](https://t.me/Treadmill
 Your support helps keep this project alive and growing! If you'd like to contribute, you can make a donation using one of the following methods:
 - **PayPal**: samsonov@hotmail.com
 - **Bitcoin (BTC)**: `bc1q3cza0kasutzes4hfddxuclmd9ghn5v7zw2nr5c`  
-- **USDT (TRC-20)**: `0x5dd5a346Dd64dfE938a60D7b24b633b1ACE01719`
   
 Every bit helps — thank you!
