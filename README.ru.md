@@ -260,6 +260,5 @@ ble_client:
 Если вы хотите поддержать проект и помочь его развитию, угостите меня кофе! Ваши пожертвования помогают улучшать проект:
 - **PayPal**: samsonov@hotmail.com
 - **BTC:** `bc1q3cza0kasutzes4hfddxuclmd9ghn5v7zw2nr5c`  
-- **USDT (TRC-20):** `0x5dd5a346Dd64dfE938a60D7b24b633b1ACE01719`
   
 Любая поддержка важна — спасибо!
