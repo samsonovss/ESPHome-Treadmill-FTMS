@@ -1,5 +1,5 @@
-- December 21, 2026:  
-  - Compatibility with **ESPHome 2026.0.1**
+- January 21, 2026:  
+  - Compatibility with **ESPHome 2026.1.0**
   
 - December 17, 2025:
   - **Refactored FTMS implementation** to ensure full compatibility with **ESPHome 2025.12.0**
