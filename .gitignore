@@ -1,0 +1,12 @@
+# ESPHome local state and build output
+.esphome/
+.pioenvs/
+.piolibdeps/
+
+# Local credentials
+secrets.yaml
+esphome/secrets.yaml
+
+# Python cache
+__pycache__/
+*.py[cod]

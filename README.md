@@ -150,14 +150,13 @@ Verify the voltage levels of your motor board before connecting it. Never feed 5
 
 ## Quick Start
 
-1. Download the repository and open `esphome/config.yaml`.
-2. Copy `esphome/incline_profiles.h` next to the YAML file in the ESPHome directory.
-3. Configure Wi-Fi in `secrets.yaml`.
-4. Replace installation-specific API, OTA, fallback access-point, and heart-rate monitor values.
-5. Verify pin assignments, UART settings, and the command format used by your treadmill.
-6. Disconnect the power stage and first test ESP32 boot, Nextion, and sensors.
-7. Create a backup, compile the configuration, and inspect the logs.
-8. Test stop behavior, minimum speed, and incline reset without a person on the belt.
+1. Download the repository and copy the contents of `esphome/` into your ESPHome configuration directory.
+2. Rename `secrets.example.yaml` to `secrets.yaml`.
+3. Configure Wi-Fi, API, OTA, fallback access point, DS18B20 address, heart-rate monitor MAC, and Nextion TFT URL.
+4. Verify pin assignments, UART settings, and the command format used by your treadmill.
+5. Disconnect the power stage and first test ESP32 boot, Nextion, and sensors.
+6. Create a backup, compile the configuration, and inspect the logs.
+7. Test stop behavior, minimum speed, and incline reset without a person on the belt.
 
 The configuration is a working example for one installation, not a universal firmware image for every treadmill.
 

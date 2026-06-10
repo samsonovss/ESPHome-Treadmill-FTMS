@@ -81,6 +81,8 @@ Everything below **Unreleased** is already present in the published GitHub versi
 - Added dedicated Zwift pairing and incline-calibration guides:
   - `docs/guides/ZWIFT.ru.md`;
   - `docs/guides/ZWIFT.md`.
+- Added the required local `esp32_ble_server` component with patch documentation and the ESPHome license.
+- Added a safe `esphome/secrets.example.yaml`; installation-specific API, OTA, Wi-Fi, BLE, DS18B20, and Nextion values were removed from the public configuration.
 - Moved native Zwift automatic incline from the roadmap to implemented features.
 - Corrected UART guide links and the Nextion display model.
 
