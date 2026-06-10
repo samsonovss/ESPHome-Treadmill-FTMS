@@ -1,8 +1,8 @@
 # Changelog
 
-Everything below **Unreleased** is already present in the published GitHub version. **Unreleased** describes the difference between `esphome/config.yaml` on `main` and the current working configuration.
+This changelog lists only completed changes that are already included in the `main` branch.
 
-## Unreleased - June 10, 2026
+## June 10, 2026
 
 ### Added
 
