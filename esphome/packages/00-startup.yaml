@@ -1,0 +1,53 @@
+# Startup state initialization and KICKR RUN advertising setup.
+esphome:
+  on_boot:
+    - priority: 600
+      then:
+        - script.execute: update_heart_rate_zones
+        - globals.set:
+            id: ble_client_connected
+            value: 'false'
+        - text_sensor.template.publish:
+            id: ble_server_status
+            state: "Отключен"
+        - text_sensor.template.publish:
+            id: connection_status
+            state: "Отключено"
+        - sensor.template.publish:
+            id: heart_rate_sensor
+            state: 0
+        - sensor.template.publish:
+            id: battery_level_sensor
+            state: 0
+        - globals.set:
+            id: treadmill_running
+            value: 'false'
+        - globals.set:
+            id: current_distance_km
+            value: '0.0'
+        - globals.set:
+            id: current_speed
+            value: '0.0'
+        - lambda: |-
+            // Инициализация Training Status: Idle (0x01)
+            id(training_status_char).set_value({0x00, 0x01});
+            id(last_training_status) = {0x00, 0x01};
+            id(ftms_training_status_sensor).publish_state(
+                id(training_status_to_string)(0x01));
+            ESP_LOGI("FTMS",
+                     "Инициализация при старте: Training Status = Idle (0x01)");
+
+    # Set FTMS service data after BLE setup so Zwift can validate CONTROLLABLE.
+    - priority: -100
+      then:
+        - lambda: |-
+            if (esphome::esp32_ble::global_ble != nullptr) {
+              esphome::esp32_ble::global_ble
+                  ->advertising_set_service_data_and_name(
+                      std::vector<uint8_t>{0x01, 0x01, 0x00}, true);
+              ESP_LOGI("KICKR_RUN",
+                       "FTMS advertising name and service data set: 01 01 00");
+            } else {
+              ESP_LOGW("KICKR_RUN",
+                       "BLE component unavailable; service data not set");
+            }

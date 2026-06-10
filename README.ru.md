@@ -214,8 +214,8 @@ ESP32-S3 становится центральным контроллером. �
 
 ## Структура репозитория
 
-- [`esphome/config.yaml`](esphome/config.yaml) — короткий основной файл, загружающий локальные пакеты;
-- [`esphome/packages/`](esphome/packages/) — ядро, оборудование, глобальные переменные, скрипты, сенсоры, BLE/FTMS, элементы управления и Nextion;
+- [`esphome/config.yaml`](esphome/config.yaml) — основная конфигурация ESP32, сети, API, OTA, BLE и подключаемых пакетов;
+- [`esphome/packages/`](esphome/packages/) — стартовая логика, оборудование, глобальные переменные, скрипты, сенсоры, BLE/FTMS, элементы управления и Nextion;
 - [`esphome/incline_profiles.h`](esphome/incline_profiles.h) — сгенерированные профили наклона маршрутов;
 - [`treadmill_workouts/`](treadmill_workouts/) — запись тренировок Home Assistant в CSV и экспорт в FIT;
 - [`nextion_display/`](nextion_display/) — исходник, HMI и готовый TFT дисплея;
