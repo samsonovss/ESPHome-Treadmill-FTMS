@@ -219,7 +219,7 @@ ESP32-S3 становится центральным контроллером. �
 - [`esphome/incline_profiles.h`](esphome/incline_profiles.h) — сгенерированные профили наклона маршрутов;
 - [`treadmill_workouts/`](treadmill_workouts/) — запись тренировок Home Assistant в CSV и экспорт в FIT;
 - [`nextion_display/`](nextion_display/) — исходник, HMI и готовый TFT дисплея;
-- [`incline_data/`](incline_data/) — GPX, профили маршрутов и скрипты преобразования;
+- [`route_profiles/`](route_profiles/) — необязательные исходные GPX, сохранённые профили маршрутов и инструменты их подготовки;
 - [`3d-models/`](3d-models/) — корпус и крепления для печати;
 - [`PCB/`](PCB/) — материалы будущей печатной платы;
 - [`docs/guides/`](docs/guides/) — подробные инструкции;
