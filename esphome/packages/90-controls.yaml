@@ -487,6 +487,12 @@ number:
             id(target_incline_goal) = incline_value;
             id(target_incline) = incline_value;
 
+            if (id(current_page) == 1) {
+              char incline_str[10];
+              snprintf(incline_str, sizeof(incline_str), "%.1f", incline);
+              id(display_nextion).set_component_text("t4", incline_str);
+            }
+
             // --- FTMS: Target Incline Changed (0x06) ---
             uint8_t low  = static_cast<uint8_t>(incline_value & 0xFF);
             uint8_t high = static_cast<uint8_t>(incline_value >> 8);

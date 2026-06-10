@@ -1,11 +1,3 @@
-one_wire:
-  - platform: gpio
-    pin: 21
-
-# Отладочные сенсоры системы (debug)
-debug:
-  update_interval: 5s  # как часто опрашивать
-
 # Сенсоры
 sensor:
   # === BEGIN EXPERIMENTAL_KICKR_RUN ===
@@ -37,24 +29,14 @@ sensor:
   - platform: debug
     free:
       name: "Heap Free"            #    - Heap Free — свободная оперативная память (байты).
-      filters:
-        - delta: 1
     block:
       name: "Heap Max Block"       #    - Heap Max Block — максимальный непрерывный блок памяти (байты).
-      filters:
-        - delta: 1
     loop_time:
       name: "Loop Time"            #    - Loop Time — время выполнения основного цикла (мс).
-      filters:
-        - delta: 1
     psram:
       name: "Free PSRAM"           #    - Free PSRAM — свободная внешняя PSRAM (если доступна).
-      filters:
-        - delta: 1
     cpu_frequency:
       name: "CPU Frequency"        #    - CPU Frequency — текущая частота процессора (МГц).
-      filters:
-        - delta: 1
 
   - platform: template
     name: "Zone1"
@@ -267,8 +249,6 @@ sensor:
       then:
         - lambda: |-
             id(brightness_level) = (int)x;
-    filters:
-      - delta: 0.05
 
 # My Raw Distance (VL53L1X) — лазерный дальномер ToF в режиме long.
 # Публикует расстояние в мм, обновляется каждую секунду.
@@ -280,8 +260,6 @@ sensor:
       name: My Raw Distance
       id: my_raw_distance
       unit_of_measurement: "mm" 
-      filters:
-       - delta: 5
     # range_status:
     #   name: My Range Status
     #   id: my_range_status
@@ -300,8 +278,6 @@ sensor:
     accuracy_decimals: 0
     lambda: |-
       return id(my_raw_distance).state / 10.0;
-    filters:
-      - delta: 1.0
     update_interval: 1s
     on_value:
       then:
@@ -360,7 +336,6 @@ sensor:
       - lambda: |-
           if (x == 0.0) return NAN;   // игнорируем ложные нули
           return x;
-      - delta: 0.05   # публиковать только если изменилась ≥ 0.05 (чтобы не спамить в логах)
     on_value:
       then:
         - lambda: |-
@@ -469,8 +444,6 @@ sensor:
         //vo2, met, weight, time_sec / 60.0f, avg_speed, avg_incline, real_incline, avg_heart_rate, calories);
 
       return calories;
-    filters:
-      - delta: 0.05
 # Average Heart Rate — средний пульс за тренировку.
 # Считает сумму всех замеров и делит на их количество.
 # Если замеров нет → возвращает 0. Используется для отображения средней нагрузки.
@@ -617,8 +590,6 @@ sensor:
     icon: "mdi:run"
     lambda: |-
       return id(treadmill_speed_feedback) / 10.0;
-    filters:
-      - delta: 0.05
 
 # Treadmill Incline Feedback — обратная связь по наклону от мотора (UART), %.
 # Делит значение на 10, обновляется каждые 1.1 секунды, категория diagnostic.
@@ -632,8 +603,6 @@ sensor:
     icon: "mdi:angle-acute"
     lambda: |-
       return id(treadmill_incline_feedback) / 10.0;
-    filters:
-      - delta: 0.05
 
 
 # Treadmill Speed (Goal) — целевая скорость, отображаемая на дисплее.
@@ -722,14 +691,9 @@ sensor:
             // Синхронизация ползунка
             id(set_speed).publish_state(current);
           }
-    filters:
-      - delta: 0.05   # публиковать только если изменилась ≥ 0.05 км/ч (чтобы не спамить в логах)
-
-
-
 # Treadmill Incline — отображает целевой наклон дорожки (%).
 # Значение берётся из target_incline (деление на 10).
-# Обновляется каждую секунду, на дисплей отправляется только при изменении ≥0.5%.
+# Обновляется каждую секунду, каждое новое значение сразу отправляется на дисплей.
 # Используется для отображения и синхронизации наклона на Nextion (t4).
   # - platform: template
   #   name: "Treadmill Incline"
@@ -756,9 +720,6 @@ sensor:
   #             ESP_LOGD("Nextion", "Отправка команды на дисплей - наклон");
   #           }
   #         }
-  #   filters:
-  #     - delta: 0.05   # публиковать только если изменилась ≥ 0.05 (чтобы не спамить в логах)
-
   - platform: template
     name: "Treadmill Incline"
     unit_of_measurement: "%"
@@ -783,23 +744,14 @@ sensor:
 
     on_value:
       - lambda: |-
-          static float last_sent = -100.0f;
           float current = id(treadmill_incline_goal_sensor).state;
 
-          // обновляем только если разница >= 0.5%
-          if (fabs(current - last_sent) >= 0.5f) {
-            last_sent = current;
-
-            if (id(current_page) == 1) {
-              char incline_str[10];
-              sprintf(incline_str, "%.1f", current);
-              id(display_nextion).set_component_text("t4", incline_str);
-              ESP_LOGD("Nextion", "Отправка команды на дисплей - наклон");
-            }
+          if (id(current_page) == 1) {
+            char incline_str[10];
+            sprintf(incline_str, "%.1f", current);
+            id(display_nextion).set_component_text("t4", incline_str);
+            ESP_LOGD("Nextion", "Отправка команды на дисплей - наклон");
           }
-
-    filters:
-      - delta: 0.05
 
 
 
@@ -871,10 +823,6 @@ sensor:
             snprintf(time_str, sizeof(time_str), "%02d:%02d", total_minutes, seconds);
             id(display_nextion).set_component_text("t3", time_str);
           }
-    filters:
-      - delta: 0.05   # публиковать только если изменилась ≥ 0.05 (чтобы не спамить в логах)
-
-
 # Treadmill Distance — расчёт пройденной дистанции.
 # При выключенном моторе сбрасывается, при паузе замирает,
 # при работе мотора накапливается каждую секунду (км/ч → км/сек).
@@ -915,8 +863,6 @@ sensor:
     update_interval: 1s
     icon: "mdi:map-marker-distance"
     state_class: measurement
-    filters:
-      - delta: 0.01   # публиковать только если изменилась ≥ 0.05 км/ч (чтобы не спамить в логах)
 
 # Raw Treadmill Data — счётчик импульсов энкодера (GPIO16).
 # Считает фронты (rising_edge), фильтр 13 мкс от дребезга.
@@ -938,11 +884,6 @@ sensor:
       falling_edge: DISABLE
     internal_filter: 13us
     entity_category: diagnostic
-    filters:
-     # Публикуем только при изменении значения на 1 импульс.
-     # Это убирает дубли "0 pulses/s" в логе, при стоящей дорожке
-     # значение публикуется только один раз (пока не изменится).
-     - delta: 1
 
 
 # Treadmill Speed Motor — фактическая скорость по данным энкодера.
@@ -975,8 +916,6 @@ sensor:
       return speed_kph;
     update_interval: 1s
     icon: "mdi:run"
-    filters:
-      - delta: 0.05   # публиковать только если изменилась ≥ 0.05 (чтобы не спамить в логах)
     # filters:
     #   - exponential_moving_average:
     #       alpha: 0.25

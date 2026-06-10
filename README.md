@@ -215,7 +215,7 @@ Videos:
 ## Repository Layout
 
 - [`esphome/config.yaml`](esphome/config.yaml) - main device configuration with ESP32, network, API, OTA, BLE, and package declarations;
-- [`esphome/packages/`](esphome/packages/) - startup logic, hardware, globals, scripts, sensors, BLE/FTMS, controls, and Nextion configuration;
+- [`esphome/packages/`](esphome/packages/) - hardware, globals, scripts, sensors, BLE/FTMS, controls, and Nextion configuration;
 - [`esphome/incline_profiles.h`](esphome/incline_profiles.h) - generated route incline profiles;
 - [`treadmill_workouts/`](treadmill_workouts/) - Home Assistant CSV recorder and FIT exporter;
 - [`nextion_display/`](nextion_display/) - display source, HMI, and compiled TFT;

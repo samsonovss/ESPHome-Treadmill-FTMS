@@ -5,6 +5,10 @@ i2c:
   id: bus_a
   frequency: 400kHz
 
+# DS18B20 motor temperature sensor bus.
+one_wire:
+  - platform: gpio
+    pin: 21
 
 uart:
   # --- UART 0: дисплей Nextion ---
@@ -277,10 +281,5 @@ uart:
   #             UARTDebug::log_string(direction, filtered_bytes);
   #           }
 
-
-# SNTP — синхронизация времени по интернету
-time:
-  - platform: sntp
-    id: sntp_time
 
 # Глобальные переменные 

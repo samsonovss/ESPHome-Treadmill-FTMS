@@ -1,7 +1,6 @@
 # Smart treadmill base configuration.
 # Functional logic is grouped into packages below.
 packages:
-  00_startup: !include packages/00-startup.yaml
   10_hardware: !include packages/10-hardware.yaml
   20_globals: !include packages/20-globals.yaml
   30_scripts: !include packages/30-scripts.yaml
@@ -20,6 +19,59 @@ esphome:
     board_build.arduino.memory_type: qio_opi
   includes:
     - incline_profiles.h
+
+  # Initialize runtime state and publish the KICKR RUN service data.
+  on_boot:
+    - priority: 600
+      then:
+        - script.execute: update_heart_rate_zones
+        - globals.set:
+            id: ble_client_connected
+            value: 'false'
+        - text_sensor.template.publish:
+            id: ble_server_status
+            state: "Отключен"
+        - text_sensor.template.publish:
+            id: connection_status
+            state: "Отключено"
+        - sensor.template.publish:
+            id: heart_rate_sensor
+            state: 0
+        - sensor.template.publish:
+            id: battery_level_sensor
+            state: 0
+        - globals.set:
+            id: treadmill_running
+            value: 'false'
+        - globals.set:
+            id: current_distance_km
+            value: '0.0'
+        - globals.set:
+            id: current_speed
+            value: '0.0'
+        - lambda: |-
+            // Инициализация Training Status: Idle (0x01)
+            id(training_status_char).set_value({0x00, 0x01});
+            id(last_training_status) = {0x00, 0x01};
+            id(ftms_training_status_sensor).publish_state(
+                id(training_status_to_string)(0x01));
+            ESP_LOGI("FTMS",
+                     "Инициализация при старте: Training Status = Idle (0x01)");
+
+    # Set FTMS service data after BLE setup so Zwift can validate CONTROLLABLE.
+    - priority: -100
+      then:
+        - lambda: |-
+            if (esphome::esp32_ble::global_ble != nullptr) {
+              esphome::esp32_ble::global_ble
+                  ->advertising_set_service_data_and_name(
+                      std::vector<uint8_t>{0x01, 0x01, 0x00}, true);
+              ESP_LOGI("KICKR_RUN",
+                       "FTMS advertising name and service data set: 01 01 00");
+            } else {
+              ESP_LOGW("KICKR_RUN",
+                       "BLE component unavailable; service data not set");
+            }
 
 external_components:
   - source: github://mrtoy-me/esphome-vl53l1x@main
@@ -87,6 +139,15 @@ ota:
 # Local status and control interface. Web OTA is intentionally disabled.
 web_server:
   port: 80
+
+# System diagnostics update interval.
+debug:
+  update_interval: 5s
+
+# Internet time synchronization used for workout timestamps.
+time:
+  - platform: sntp
+    id: sntp_time
 
 wifi:
   ssid: !secret wifi_ssid
