@@ -1,4 +1,4 @@
-# Smart ESPHome Treadmill with FTMS and Zwift
+# Smart ESPHome Treadmill with FTMS and Native Zwift Incline Control
 
 [Русская версия](README.ru.md) | [Releases and history](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram community](https://t.me/TreadmillSmart)
 

@@ -1,4 +1,4 @@
-# Умная беговая дорожка на ESPHome с FTMS и Zwift
+# Умная беговая дорожка на ESPHome с FTMS и нативным управлением наклоном из Zwift
 
 [English version](README.md) | [Версии и история изменений](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram-сообщество](https://t.me/TreadmillSmart)
 
