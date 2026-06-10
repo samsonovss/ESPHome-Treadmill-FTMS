@@ -1,0 +1,453 @@
+binary_sensor:
+
+# Treadmill Usage — логический индикатор активности.
+# Возвращает true, если целевая скорость > 0.0 (дорожка используется).
+  - platform: template
+    name: "Treadmill Usage"
+    id: treadmill_usage
+    lambda: |-
+      return id(treadmill_speed_goal_sensor).state > 0.0;
+
+
+# Speed Up Button — физическая кнопка на GPIO13, увеличивает скорость.
+  - platform: gpio
+    pin:
+      number: 13
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Speed Up Button"
+    entity_category: diagnostic
+    on_press:
+      - button.press: speed_up_button_large
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+
+
+# Speed Down Button — физическая кнопка на GPIO14, уменьшает скорость.
+  - platform: gpio
+    pin:
+      number: 14
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Speed Down Button"
+    entity_category: diagnostic
+    on_press:
+      - button.press: speed_down_button_large
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+
+
+# Incline Up Button — физическая кнопка на GPIO9, увеличивает наклон.
+  - platform: gpio
+    pin:
+      number: 9
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Incline Up Button"
+    entity_category: diagnostic
+    on_press:
+      - button.press: incline_up_button
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+
+# Incline Down Button — физическая кнопка на GPIO10, уменьшает наклон.
+  - platform: gpio
+    pin:
+      number: 10
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Incline Down Button"
+    entity_category: diagnostic
+    on_press:
+      - button.press: incline_down_button
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+
+
+  - platform: nextion
+    page_id: 1
+    component_id: 15
+    id: m0_stop
+    on_press:
+      then:
+        - logger.log: "pause pressed"
+        - script.execute: pause_training
+        - lambda: id(m0_stop).publish_state(false);
+
+  - platform: nextion
+    page_id: 25
+    component_id: 2
+    id: bstop
+    on_press:
+      then:
+        - logger.log: "bstop pressed, scheduling stop_program"
+        - if:
+            condition:
+              lambda: 'return id(free_running_mode_switch).state || id(motor_running) || id(pause_active);'
+            then:
+              - script.execute: stop_program
+              - lambda: id(bstop).publish_state(false);
+            else:
+              - logger.log: "bstop: Treadmill already stopped, skipping"
+
+        - lambda: |-
+            ESP_LOGI("Nextion", "Button (bstop) press");
+
+  # bresume — кнопка на странице 13
+  # Логирует событие, востанавливает тренировку
+  - platform: nextion
+    page_id: 25
+    component_id: 1
+    id: bresume
+    on_press:
+      then:
+        - lambda: |-
+            ESP_LOGI("Nextion", "Button (bresume) press");
+            id(bresume).publish_state(false);
+        - script.execute: resume_training
+
+  # bquick_start — кнопка быстрого старта на главной странице.
+  # Запускает ручной режим после задержки, сбрасывает выбор программы.
+  - platform: nextion
+    page_id: 0
+    component_id: 2
+    id: bquick_start
+    on_press:
+      then:
+        - delay: 3400ms
+        - script.execute: start_manual
+        - lambda: |-
+            id(program_select).publish_state("None");
+            id(bquick_start).publish_state(false);
+
+  # bquick_start1 — кнопка быстрого старта на странице выбора карты.
+  # Аналогично запускает ручной режим, сбрасывает программу.
+  - platform: nextion
+    page_id: 11
+    component_id: 1
+    id: bquick_start1
+    on_press:
+      then:
+        - delay: 3400ms
+        - script.execute: start_manual
+        - lambda: |-
+            id(program_select).publish_state("None");
+            id(bquick_start).publish_state(false);
+
+  # bfree_run — кнопка Free Run на главной странице.
+  # Включает режим свободного бега, запускает ручной режим, сбрасывает программу.
+  - platform: nextion
+    page_id: 0
+    component_id: 7
+    id: bfree_run
+    on_press:
+      then:
+        - delay: 3400ms
+        - switch.turn_on: free_running_mode_switch
+        - script.execute: start_manual
+        - lambda: |-
+            id(program_select).publish_state("None");
+            id(bfree_run).publish_state(false);
+
+  # bfree_run1 — кнопка Free Run на странице выбора карты.
+  # То же самое, что и bfree_run, но с другой вкладки.
+  - platform: nextion
+    page_id: 11
+    component_id: 3
+    id: bfree_run1
+    on_press:
+      then:
+        - delay: 3400ms
+        - switch.turn_on: free_running_mode_switch
+        - script.execute: start_manual
+        - lambda: |-
+            id(program_select).publish_state("None");
+            id(bfree_run).publish_state(false);
+
+  # b_cal — кнопка калибровки (страница caldistspeed).
+  # Меняет надписи на дисплее, показывает обратный отсчёт, запускает скрипт калибровки.
+  - platform: nextion
+    page_id: 15
+    component_id: 4
+    id: b_cal
+    on_press:
+      then:
+        - lambda: |-
+           id(display_nextion).set_component_text("b_cal", "Running...");
+           id(display_nextion).set_component_text("caldistspeed.t_info_calib", "3");
+           id(display_nextion).send_command_printf("p_zone.pic=76"); // картинка зоны 
+           ESP_LOGI("Nextion", "Sending command for p_zone.pic=76");
+           id(display_nextion).set_component_text("caldistspeed.t_speed_up", "");
+           id(display_nextion).set_component_text("caldistspeed.t_speed_down", "");
+           id(display_nextion).set_component_text("caldistspeed.t_lenght", "");
+        - delay: 1000ms
+        - lambda: id(display_nextion).set_component_text("caldistspeed.t_info_calib", "2");
+        - delay: 1000ms
+        - lambda: id(display_nextion).set_component_text("caldistspeed.t_info_calib", "1");
+        - delay: 1000ms
+        - script.execute: start_calibration
+        - lambda: |-
+            id(b_cal).publish_state(false);
+            ESP_LOGI("Nextion", "Button (b_cal) press");
+
+  # bstart_program — кнопка запуска программы (страница Time).
+  # После задержки запускает выбранную программу.
+  - platform: nextion
+    page_id: 5
+    component_id: 9
+    id: bstart_program
+    on_press:
+      then:
+        - delay: 3400ms
+        - script.execute: start_program
+        - lambda: |-
+            id(bstart_program).publish_state(false);
+
+  # bmap — кнопка перехода к выбору карты (главная страница).
+  # Логирует событие, сбрасывает состояние кнопки.
+  - platform: nextion
+    page_id: 0
+    component_id: 5
+    id: bmap
+    on_press:
+      then:
+        - lambda: |-
+            ESP_LOGI("Nextion", "INFO tab (bmap) press");
+            id(bmap).publish_state(false);
+
+  # bsettings — кнопка настроек (главная страница).
+  # Логирует событие, сбрасывает состояние кнопки.
+  - platform: nextion
+    page_id: 0
+    component_id: 6
+    id: bsettings
+    on_press:
+      then:
+        - lambda: |-
+            ESP_LOGI("Nextion", "INFO tab (bsettings) press");
+            id(bsettings).publish_state(false);
+
+  # map_start_hrzone — кнопка запуска программы Pulse Zone со страницы карты.
+  # Устанавливает программу Pulse Zone, логирует событие, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 11
+    component_id: 2
+    id: map_start_hrzone
+    on_press:
+      then:
+        - lambda: |-
+            id(program_select).publish_state("Pulse Zone");  // Выбираем программу
+            ESP_LOGI("Nextion", "INFO tab (map start hrzone) press"); 
+            id(map_start_hrzone).publish_state(false);
+
+  # bhiit — кнопка запуска программы HIIT (главная страница).
+  # Устанавливает программу HIIT, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 0
+    component_id: 4
+    id: bhiit
+    on_press:
+      then:
+        - lambda: |-
+            id(program_select).publish_state("HIIT");  // Выбираем программу
+        - lambda: id(bhiit).publish_state(false);
+
+  # bhr_zone — кнопка запуска программы Pulse Zone (главная страница).
+  # Устанавливает программу Pulse Zone, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 0
+    component_id: 3
+    id: bhr_zone
+    on_press:
+      then:
+        - lambda: |-
+            id(program_select).publish_state("Pulse Zone");  // Выбираем программу
+        - lambda: id(bhr_zone).publish_state(false);
+
+  # bzone1 — кнопка выбора зоны 1 (страница Pulse Zone).
+  # Устанавливает зону 1, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 2
+    id: bzone1
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("1");
+        - lambda: id(bzone1).publish_state(false);
+
+  # bzone2 — кнопка выбора зоны 2.
+  # Устанавливает зону 2, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 3
+    id: bzone2
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("2");
+        - lambda: id(bzone2).publish_state(false);
+
+  # bzone3 — кнопка выбора зоны 3.
+  # Устанавливает зону 3, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 4
+    id: bzone3
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("3");
+        - lambda: id(bzone3).publish_state(false);
+
+  # bzone4 — кнопка выбора зоны 4.
+  # Устанавливает зону 4, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 5
+    id: bzone4
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("4");
+        - lambda: id(bzone4).publish_state(false);
+
+  # bzone5 — кнопка выбора зоны 5.
+  # Устанавливает зону 5, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 6
+    id: bzone5
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("5");
+        - lambda: id(bzone5).publish_state(false);
+
+  # map_m0 — кнопка запуска программы Pulse Zone (страница map_m0).
+  # Устанавливает Pulse Zone, логирует событие, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 12
+    component_id: 3
+    id: map_m0
+    on_press:
+      then:
+        - lambda: |-
+            id(program_select).publish_state("Pulse Zone");  // Выбираем программу
+            ESP_LOGI("Nextion", "INFO tab (map_m0 press) press"); 
+            id(map_m0).publish_state(false);
+
+  # map_m1 — кнопка запуска программы Pulse Zone (страница map_m1).
+  # Аналогично map_m0, но с другой кнопки.
+  - platform: nextion
+    page_id: 12
+    component_id: 1
+    id: map_m1
+    on_press:
+      then:
+        - lambda: |-
+            id(program_select).publish_state("Pulse Zone");  // Выбираем программу
+            ESP_LOGI("Nextion", "INFO tab (map_m1 press) press"); 
+            id(map_m1).publish_state(false);
+
+# Текстовые сенсоры
+text_sensor:
+  # - platform: template
+  #   name: "Last Time"
+  #   id: last_time_text
+  #   icon: mdi:timer-outline
+  #   update_interval: never
+  #   lambda: |-
+  #     return std::string("00:00:00"); 
+
+  - platform: template
+    name: "Training Start"
+    id: start_training_date
+    icon: mdi:calendar-start
+    update_interval: never
+    lambda: |-
+      return id(start_training_date_stored);
+  - platform: template
+    name: "Training End"
+    id: last_training_date
+    icon: mdi:calendar-clock
+    update_interval: never
+    lambda: |-
+      return id(last_training_date_stored);
+
+  # Модель BLE‑устройства (fit_smart)
+  - platform: ble_client
+    name: "BT Model"
+    id: name_bt_sensor
+    ble_client_id: fit_smart
+    service_uuid: "180A"
+    characteristic_uuid: "2A29"
+    update_interval: never
+
+  # Версия прошивки ESPHome
+  - platform: version
+    id: ESPHomeVersion
+    name: "ESPHome version"
+    hide_timestamp: true
+
+  # Отладочная информация (устройство, причина сброса)
+  - platform: debug
+    device:
+      name: "Device Info"
+    reset_reason:
+      name: "Reset Reason"
+
+  # Статус подключения пульсометра
+  - platform: template
+    name: "Pulse monitor"
+    id: connection_status
+    icon: "mdi:bluetooth"
+
+  # Статус BLE‑сервера (например, Zwift)
+  - platform: template
+    name: "Zwift"
+    id: ble_server_status
+    icon: "mdi:bluetooth"
+
+  # Выбранные данные (отображение текущего выбора)
+  - platform: template
+    name: "Selected Data"
+    id: selected_data
+    icon: "mdi:information"
+    lambda: |-
+      return {};
+
+  # «локальный» статус для дорожки и дисплея. Статус программы (ручной/авто и т.п.)
+  - platform: template
+    name: "Status"
+    id: program_status
+    icon: "mdi:monitor-dashboard"
+    lambda: |-
+      return id(program_status).state;  // Просто возвращаем текущее значение
+
+  # Статус FTMS (BLE‑протокол тренажёра)
+  - platform: template
+    name: "FTMS Status"
+    id: ftms_status_sensor
+    icon: "mdi:information-outline"
+    entity_category: diagnostic
+    update_interval: never  # Обновляем только вручную
+
+  # Статус FTMS тренировки (Idle, Running и т.п.)
+  - platform: template
+    name: "Training Status"
+    id: ftms_training_status_sensor
+    icon: "mdi:information-outline"
+    update_interval: never
+
+  # - platform: ble_client
+  #   ble_client_id: fit_smart
+  #   name: "Pulse"
+  #   service_uuid: '180d'
+  #   characteristic_uuid: '2a38'
+
+

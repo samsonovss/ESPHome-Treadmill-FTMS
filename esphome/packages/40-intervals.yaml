@@ -1,0 +1,852 @@
+interval:
+  # Глобальная защита двигателя от перегрева.
+  # Работает независимо от открытой страницы Nextion.
+  - interval: 2s
+    id: overheat_safety_interval
+    then:
+      - lambda: |-
+          if (!id(bt_tempmode_state)) {
+            if (id(overheat_lockout)) {
+              ESP_LOGI("Overheat", "Protection disabled, lockout cleared");
+            }
+            id(overheat_lockout) = false;
+            id(overheat_sensor_fault) = false;
+            return;
+          }
+
+          const float temperature = id(temp).state;
+          const float stop_temperature = id(overheat_stop_temperature).state;
+          const float reset_temperature = stop_temperature - 10.0f;
+
+          if (isnan(temperature)) {
+            id(overheat_sensor_fault) = true;
+            id(overheat_lockout) = true;
+
+            if (id(motor_running) && !id(overheat_emergency_stop).is_running()) {
+              id(overheat_emergency_stop).execute();
+            }
+            return;
+          }
+
+          if (temperature >= stop_temperature) {
+            id(overheat_sensor_fault) = false;
+            id(overheat_lockout) = true;
+
+            if (id(motor_running) && !id(overheat_emergency_stop).is_running()) {
+              ESP_LOGW("Overheat", "Motor temperature %.1f C >= %.1f C", temperature, stop_temperature);
+              id(overheat_emergency_stop).execute();
+            }
+            return;
+          }
+
+          if (id(overheat_lockout) && temperature <= reset_temperature) {
+            id(overheat_lockout) = false;
+            id(overheat_sensor_fault) = false;
+            id(program_status).publish_state("Overheat protection ready");
+            ESP_LOGI("Overheat", "Lockout cleared at %.1f C (reset threshold %.1f C)",
+                     temperature, reset_temperature);
+          }
+
+# Интервал для свободного режима (Free Running Interval)
+# 1. Запускается каждые 1 секунду.
+# 2. Проверяет, активирован ли режим свободного бега:
+#    - Условие: включён переключатель free_running_mode_switch и установлен флаг free_running_active.
+#    - Если режим активен → выполняется скрипт free_running_logic (управление скоростью по зонам).
+#    - Если режим неактивен, но флаг ещё стоит → логируется отключение, сбрасываются флаги free_running_active и auto_mode,
+#      выключается переключатель free_running_mode_switch и вызывается stop_program для корректной остановки.
+# 3. Таким образом, интервал служит «сердцем» режима Free Run — он раз в секунду проверяет состояние и либо продолжает логику,
+#    либо завершает режим при отключении.
+  - interval: 1s
+    id: free_running_interval
+    then:
+      - if:
+          condition:
+            lambda: |-
+              bool is_active = id(free_running_mode_switch).state && id(free_running_active);
+              ESP_LOGD("FreeRunning", "Проверка интервала: switch=%d, active=%d, is_active=%d, auto_mode=%d",
+                       id(free_running_mode_switch).state, id(free_running_active), is_active, id(auto_mode));
+              return is_active;
+          then:
+            - script.execute: free_running_logic
+          else:
+            - lambda: |-
+                if (id(free_running_active)) {
+                  ESP_LOGI("FreeRunning", "Free Running Mode отключен: switch=%d, active=%d",
+                           id(free_running_mode_switch).state, id(free_running_active));
+                  id(free_running_active) = false;
+                  id(auto_mode) = false;
+                  id(free_running_mode_switch).turn_off(); // Явно отключаем свитч
+                  id(stop_program).execute();
+                }
+
+# Интервал безопасной остановки (Safe Stop)
+# 1. Запускается каждые 1 секунду.
+# 2. Проверяет условие: включён ли режим безопасного контроля (safe_mode_switch) и работает ли мотор.
+# 3. Если оба условия выполняются → запускается скрипт safe_stop, который проверяет положение пользователя
+#    на беговой дорожке и при выходе из допустимой зоны выполняет аварийную остановку.
+# 4. Таким образом, этот интервал служит защитным механизмом: если пользователь покидает рабочую зону,
+#    дорожка автоматически останавливается.
+  - interval: 1s
+    id: safe_stop_interval
+    then:
+      - if:
+          condition:
+            lambda: 'return id(safe_mode_switch).state && id(motor_running);'
+          then:
+            - script.execute: safe_stop
+
+
+# ============================
+# Управление скоростью и профили разгона
+# ----------------------------
+# Интервал: каждые 200 мс выполняется цикл управления:
+# 1) Плавное подтягивание текущей скорости (target_speed) к целевой (goal).
+# 2) При включённой адаптивной коррекции — корректировка по фактической скорости.
+# 3. Отправляет команду мотору через UART ([SETSPD:XXX]).
+#
+# Профили разгона (Acceleration Profile):
+# ┌────────────┬───────────────┬───────────┬──────────────────────────┬─────────────────────┐
+# │   Профиль  │ Шаг (км/ч/тик)│ Интервал  │ Скорость разгона (км/ч/с)│ Время 10→20 км/ч    │
+# ├────────────┼───────────────┼───────────┼──────────────────────────┼─────────────────────┤
+# │ Soft       │ 0.1           │ 200 мс    │ ~0.5                     │ ~20 сек             │
+# │ Normal     │ 0.2           │ 200 мс    │ ~1.0                     │ ~10 сек             │
+# │ Fast       │ 0.3           │ 200 мс    │ ~1.5                     │ ~7 сек              │
+# │ Technogym  │ 0.2           │ 200 мс    │ ~0.8–1.0                 │ ~12-13 сек (MyRun)  │
+# └────────────┴───────────────┴───────────┴──────────────────────────┴─────────────────────┘
+#
+# Soft      – максимально плавный разгон, комфорт для ходьбы.
+# Normal    – универсальный режим, сбалансированный.
+# Fast      – быстрый отклик, подходит для интервальных тренировок.
+# Technogym – имитация поведения Technogym MyRun (~0.8 км/ч в сек).
+# ============================
+  - interval: 200ms
+    then:
+      - if:
+          condition:
+            lambda: 'return id(motor_running) && id(target_speed_goal) > 0;'
+          then:
+            - lambda: |-
+                // --- Шаг 1: плавное подтягивание target_speed к goal ---
+                // Выбираем шаг изменения в зависимости от профиля
+                int accel_step = 1; // по умолчанию 0.1 км/ч за тик
+
+                if (id(accel_profile).current_option() == "Soft") {
+                  accel_step = 1;   // 0.1 км/ч каждые 200мс → 0.5 км/ч в сек
+                } else if (id(accel_profile).current_option() == "Normal") {
+                  accel_step = 2;   // 0.2 км/ч каждые 200мс → 1.0 км/ч в сек
+                } else if (id(accel_profile).current_option() == "Fast") {
+                  accel_step = 3;   // 0.3 км/ч каждые 200мс → 1.5 км/ч в сек
+                } else if (id(accel_profile).current_option() == "Technogym") {
+                  accel_step = 2;   // 0.2 км/ч каждые 200–250мс ≈ 0.8–1.0 км/ч в сек
+                }
+
+                // Плавное подтягивание
+                if (id(target_speed) < id(target_speed_goal)) {
+                  id(target_speed) += accel_step;
+                  if (id(target_speed) > id(target_speed_goal)) id(target_speed) = id(target_speed_goal);
+                } else if (id(target_speed) > id(target_speed_goal)) {
+                  id(target_speed) -= accel_step;
+                  if (id(target_speed) < id(target_speed_goal)) id(target_speed) = id(target_speed_goal);
+                  if (id(target_speed) < 6) id(target_speed) = 6; // защита от <0.6 км/ч
+                }
+
+                float base_kph   = id(target_speed) / 10.0;
+                float actual_kph = id(treadmill_speed_actual).state;
+                float new_target_kph = base_kph;
+
+                // --- Шаг 2: адаптивная коррекция ---
+                if (id(bt_speed_correction_state)) {
+                  float float_kph = id(target_speed_goal_float);
+                  if (float_kph <= 0.0f) {
+                    float_kph = base_kph;
+                    id(target_speed_goal_float) = float_kph;
+                  }
+
+                  float error = actual_kph - base_kph;
+                  new_target_kph = float_kph;
+
+                  float ACTIVATE_ERR = 0.30f;
+                  float DEACTIVATE_ERR = 0.20f;
+                  float Kp = 0.25f;
+                  float MAX_STEP = 0.30f;
+
+                  if (id(speed_corr_profile).current_option() == "Soft") {
+                    ACTIVATE_ERR = 0.30f; DEACTIVATE_ERR = 0.20f; Kp = 0.15f; MAX_STEP = 0.10f;
+                  } else if (id(speed_corr_profile).current_option() == "Precise") {
+                    ACTIVATE_ERR = 0.15f; DEACTIVATE_ERR = 0.05f; Kp = 0.25f; MAX_STEP = 0.20f;
+                  } else if (id(speed_corr_profile).current_option() == "Aggressive") {
+                    ACTIVATE_ERR = 0.10f; DEACTIVATE_ERR = 0.05f; Kp = 0.35f; MAX_STEP = 0.40f;
+                  }
+
+                  if (fabsf(error) > ACTIVATE_ERR) {
+                    float delta = -Kp * error;
+                    if (delta >  MAX_STEP) delta =  MAX_STEP;
+                    if (delta < -MAX_STEP) delta = -MAX_STEP;
+                    new_target_kph = float_kph + delta;
+                    ESP_LOGI("Interval", "Corr[%s]: base=%.2f, float=%.2f, actual=%.2f, err=%.2f, delta=%.2f, new=%.2f",
+                            id(speed_corr_profile).current_option(), base_kph, float_kph, actual_kph, error, delta, new_target_kph);
+                  } else {
+                    //лог режима Hold временно отключил
+                    //ESP_LOGI("Interval", "Hold[%s]: base=%.2f, float=%.2f, actual=%.2f, err=%.2f",
+                            //id(speed_corr_profile).state.c_str(), base_kph, float_kph, actual_kph, error);
+                  }
+
+                  if (new_target_kph < 0.6f)  new_target_kph = 0.6f;
+                  if (new_target_kph > 18.0f) new_target_kph = 18.0f;
+                  id(target_speed_goal_float) = new_target_kph;
+                }
+
+                // --- Шаг 3: отправка команды мотору ---
+                int cmd_target = (int)roundf(new_target_kph * 10.0f);
+                if (cmd_target < 6)   cmd_target = 6;
+                if (cmd_target > 180) cmd_target = 180;
+
+                char speed_buffer[13];
+                snprintf(speed_buffer, sizeof(speed_buffer), "[SETSPD:%03d]", cmd_target);
+                // отправляем через очередь скриптов
+                id(uart_send)->execute(speed_buffer);
+
+                static int last_sent_speed = -1;
+                if (cmd_target != last_sent_speed) {
+                  last_sent_speed = cmd_target;
+                  ESP_LOGI("Interval", "SpeedCmd sent: %s", speed_buffer);
+                }
+
+# Управление наклоном беговой дорожки
+# 1. Интервал 700 мс — каждые ~0.7 секунды отправляется команда по UART.
+# 2. Если мотор работает:
+#    - Отправляется текущая целевая величина наклона (target_incline_goal) в формате [SETINC:XXX].
+# 3. Если мотор выключен, но фактический наклон (set_incline) всё ещё > 0:
+#    - Отправляется команда сброса наклона в 0 ([SETINC:000]).
+# 4. Таким образом, блок поддерживает актуальный наклон во время работы и автоматически возвращает дорожку в горизонтальное положение при остановке.
+  - interval: 700ms
+    then:
+      - lambda: |-
+          char incline_buffer[13];
+          // Если двигатель работает, отправляем текущую цель наклона
+          if (id(motor_running)) {
+            snprintf(incline_buffer, sizeof(incline_buffer), "[SETINC:%03d]", id(target_incline_goal));
+            id(uart_send)->execute(incline_buffer);
+            //ESP_LOGI("treadmill", "Incline sent (running): %s", incline_buffer);
+          }
+          // Если двигатель выключен, но наклон ещё не 0, возвращаем в 0
+          else if (id(treadmill_incline_feedback) > 5) {  // 5 = 0.5%
+            snprintf(incline_buffer, sizeof(incline_buffer), "[SETINC:000]");
+            id(uart_send)->execute(incline_buffer);
+            ESP_LOGI("treadmill", "Incline sent (reset to 0): %s", incline_buffer);
+          }
+
+
+# Интервал 1s — запуск логики HIIT.
+# Логика работы:
+# 1. Каждую секунду выполняется проверка условий:
+#    - мотор включён (motor_running = true),
+#    - выбрана программа "HIIT",
+#    - разминка завершена (warm_up_active = false).
+# 2. Если все условия выполняются:
+#    - запускается скрипт interval_training,
+#      который управляет фазами высокой и низкой интенсивности.
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            # Проверяем, что мотор работает, выбрана программа HIIT и разминка завершена
+            lambda: 'return id(motor_running) && id(program_select).current_option() == "HIIT" && !id(warm_up_active);'
+          then:
+             # Выполняем скрипт интервальной тренировки для управления фазами
+            - script.execute: interval_training
+
+
+  # Интервал регулирует скорость по пульсу каждые 4 секунды в автоматическом режиме
+  # Объединённый интервал для разминки и основной программы
+  # - interval: 4s
+  #   then:
+  #     - if:
+  #         condition:
+  #           lambda: 'return id(motor_running);'
+  #         then:
+  #           - lambda: |-
+  #               static int speed_increase_timer = 0;
+  #               speed_increase_timer += 10; // Увеличиваем таймер на 10 секунд за каждый интервал
+  #               float heart_rate = id(heart_rate_sensor).state;
+
+  #               // Этап ожидания пульса в разминке
+  #               if (id(control_mode) != 1 && id(warm_up_active) && id(remaining_warm_up_time) <= 0 && id(target_speed) == id(target_speed_goal)) {
+  #                 float zone_1_min = id(max_heart_rate) * 0.5;
+  #                 if (!isnan(heart_rate) && heart_rate < zone_1_min && speed_increase_timer >= 20) {
+  #                   if (id(target_speed_goal) < 180) {
+  #                     id(target_speed_goal) += 5;
+  #                     speed_increase_timer = 0;
+  #                     ESP_LOGI("Interval10s", "Warm-up: Waiting for pulse, increase speed by 0.5, target_speed_goal=%d", id(target_speed_goal));
+  #                   }
+  #                 }
+  #               }
+  #               // Основная программа в автоматическом режиме
+  #               else if (id(control_mode) != 1 && id(auto_mode) && !id(warm_up_active) && id(remaining_cool_down_time) <= 0) {
+  #                 id(adjust_speed_by_pulse).execute();
+  #               }
+
+# ============================
+# interval 4s — регулировка скорости по пульсу (обычные программы)
+# ----------------------------
+# ВАЖНО:
+# - Этот интервал работает ТОЛЬКО для обычных пульсовых программ
+#   (Pulse Zone, Fat Burn, Recovery run).
+# - Для HIIT используется отдельный интервал и скрипт interval_training.
+#
+# Логика работы:
+# 1. Запускается каждые 4 секунды (частота проверки фиксирована).
+# 2. Если активна разминка:
+#    - Условие: не ручной режим, warm_up_active=true, время разминки вышло,
+#      и текущая скорость совпадает с целевой.
+#    - Если пульс ниже зоны 1 (50% HRmax) и прошло ≥10 секунд с последнего изменения:
+#        * Увеличивает скорость на +0.5 км/ч (до лимита 18.0 км/ч).
+# 3. Если идёт основная программа (Pulse Zone, Fat Burn, Recovery run):
+#    - Условие: не ручной режим, auto_mode=true, разминка завершена,
+#      заминка ещё не началась.
+#    - Каждые ≥N секунд (N задаётся параметром Pulse Adjust Interval)
+#      вызывает скрипт adjust_speed_by_pulse_normal для коррекции скорости.
+# 4. Ведётся логирование всех изменений скорости.
+# ============================
+  - interval: 4s
+    then:
+      - if:
+          # Проверяем, что мотор запущен
+          condition:
+            lambda: 'return id(motor_running);'
+          then:
+            - lambda: |-
+                // --- Локальные переменные для контроля времени ---
+                static unsigned long last_adjust_ms = 0;   // когда последний раз меняли скорость
+                unsigned long now = millis();              // текущее время в миллисекундах
+                float heart_rate = id(heart_rate_sensor).state; // текущий пульс
+
+                // --- Этап разминки ---
+                // Условие: не ручной режим, разминка активна, время разминки вышло,
+                // и текущая скорость совпадает с целевой (т.е. нет других изменений).
+                if (id(control_mode) != 1 && id(warm_up_active) && id(remaining_warm_up_time) <= 0 && id(target_speed) == id(target_speed_goal)) {
+                  float zone_1_min = id(max_heart_rate) * 0.5; // нижняя граница зоны 1 (50% от maxHR)
+
+                  // Если пульс есть, он ниже зоны 1, и прошло хотя бы 10 секунд с последнего изменения
+                  if (!isnan(heart_rate) && heart_rate < zone_1_min && (now - last_adjust_ms) >= 10000) {
+                    if (id(target_speed_goal) < 180) {
+                      id(target_speed_goal) += 5;   // Увеличиваем скорость на 0.5 км/ч
+                      last_adjust_ms = now;         // Запоминаем время изменения
+                      ESP_LOGI("Interval", "Warm-up: Waiting for pulse, increase speed by 0.5, target_speed_goal=%d", id(target_speed_goal));
+                    }
+                  }
+                }
+
+                // --- Основная программа (обычные пульсовые) ---
+                // Условие: не ручной режим, включён auto_mode, разминка уже не активна,
+                // и заминка ещё не началась.
+                else if (id(control_mode) != 1 && id(auto_mode) && !id(warm_up_active) && id(remaining_cool_down_time) <= 0) {
+                  // Берём интервал из параметра Pulse Adjust Interval (по умолчанию 4 секунды)
+                  int adjust_interval_ms = (int)(id(pulse_adjust_interval).state * 1000);
+                  if ((now - last_adjust_ms) >= adjust_interval_ms) {
+                    id(adjust_speed_by_pulse_normal).execute(); // вызываем скрипт мягкой коррекции
+                    last_adjust_ms = now;                       // обновляем время последнего изменения
+                  }
+                }
+
+
+  # Проверяем входящий UART‑буфер каждые 100 мс.
+  # Почему именно 100 мс:
+  #   • Плата дорожки шлёт пакеты примерно раз в 200 мс.
+  #   • Если опрашивать реже (200 мс и больше), то в буфере может накопиться сразу несколько пакетов,
+  #     и они будут обработаны с задержкой.
+  #   • 100 мс — это вдвое чаще среднего интервала прихода пакетов, поэтому мы гарантированно
+  #     успеваем вычитать данные до переполнения и обрабатываем их почти в реальном времени.
+  #   • Такой период не создаёт заметной нагрузки на контроллер, но обеспечивает стабильный приём.
+  # - interval: 200ms
+  #   then:
+  #     - lambda: |-
+  #         char message[64] = {0};
+  #         int len = 0;
+
+  #         // читаем всё, что есть в RX за этот вызов
+  #         while (id(uart_bus).available() && len < 63) {
+  #           uint8_t c;
+  #           if (id(uart_bus).read_byte(&c)) {
+  #             if (c != 0x00) {
+  #               message[len++] = (char)c;
+  #             }
+  #           }
+  #         }
+
+  #         if (len > 0) {
+  #           ESP_LOGD("UART", "Получено: %s", message);
+
+  #           const char* start = strchr(message, '[');
+  #           const char* end   = strchr(message, ']');
+  #           if (start && end && end > start) {
+  #             const char* colon = strchr(start + 1, ':');
+  #             if (colon && colon < end) {
+  #               char cmd[16] = {0};
+  #               char val[16] = {0};
+  #               memcpy(cmd, start + 1, colon - (start + 1));
+  #               memcpy(val, colon + 1, end - (colon + 1));
+
+  #               if (strcmp(cmd, "SETSPD") == 0) {
+  #                 int speed = atoi(val);
+  #                 id(treadmill_speed_feedback) = speed;
+  #                 //ESP_LOGI("UART", "Скорость обновлена: %d", speed);
+  #               } else if (strcmp(cmd, "SETINC") == 0) {
+  #                 int incline = atoi(val);
+  #                 if (incline <= 1) incline = 0;
+  #                 id(treadmill_incline_feedback) = incline;
+  #                 //ESP_LOGI("UART", "Наклон обновлен: %d", incline);
+  #               } else {
+  #                 ESP_LOGW("UART", "Неизвестная команда: %s=%s", cmd, val);
+  #               }
+  #             }
+  #           }
+  #         }
+  - interval: 200ms
+    then:
+      - lambda: |-
+          static std::string buf;
+
+          // читаем всё, что уже есть в RX (НЕ ждём)
+          while (id(uart_bus).available()) {
+            uint8_t c;
+            id(uart_bus).read_byte(&c);
+
+            // фильтруем бинарный мусор
+            if (c < 32 || c > 126) continue;
+
+            buf.push_back((char)c);
+
+            // ждём закрывающую скобку — только тогда команда готова
+            if (c == ']') {
+
+              // команда должна начинаться с '['
+              if (buf.front() != '[') {
+                buf.clear();
+                continue;
+              }
+
+              // ищем формат [CMD:VAL]
+              auto s = buf.find('[');
+              auto m = buf.find(':', s);
+              auto e = buf.find(']', m);
+
+              // если формат корректный
+              if (s != std::string::npos &&
+                  m != std::string::npos &&
+                  e != std::string::npos &&
+                  m < e)
+              {
+                std::string cmd = buf.substr(s + 1, m - (s + 1));
+                std::string val = buf.substr(m + 1, e - (m + 1));
+
+                // обработка команд
+                if (cmd == "SETSPD") {
+                  id(treadmill_speed_feedback) = atoi(val.c_str());
+                }
+                else if (cmd == "SETINC") {
+                  int inc = atoi(val.c_str());
+                  if (inc <= 1) inc = 0;
+                  id(treadmill_incline_feedback) = inc;
+                }
+                else {
+                  // неизвестные команды игнорируем — НИКАКОГО СПАМА
+                }
+              }
+
+              // очищаем буфер после обработки
+              buf.clear();
+            }
+
+            // защита от переполнения
+            if (buf.size() > 128) buf.clear();
+          }
+
+
+
+# interval 1s — отправка данных FTMS.
+# Логика работы:
+# 1. Каждую секунду проверяет, есть ли BLE‑подключение (ble_client_connected).
+# 2. Если подключение активно → выполняет скрипт send_treadmill_data
+#    для отправки текущих данных дорожки по BLE.
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(ble_client_connected);'
+          then:
+            - script.execute: send_treadmill_data
+       
+
+# interval 1s — управление разминкой.
+# Логика работы:
+# 1. Каждую секунду проверяет, что мотор работает и разминка активна.
+# 2. Если осталось время разминки:
+#    - уменьшает счётчик remaining_warm_up_time на 1 сек.
+#    - каждые 60 секунд обновляет ползунок set_warm_up_time в интерфейсе.
+# 3. Независимо от времени вызывает скрипт warm_up,
+#    который управляет скоростью и контролем пульса.
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            # Проверяем, что мотор работает и разминка активна
+            lambda: 'return id(motor_running) && id(warm_up_active);'
+          then:
+            - lambda: |- 
+                if (id(remaining_warm_up_time) > 0) {                               // Если осталось время разминки
+                  id(remaining_warm_up_time)--;                                     // Уменьшаем оставшееся время на 1 секунду
+                  if (id(remaining_warm_up_time) % 60 == 0) {                       // Каждые 60 секунд обновляем ползунок
+                    int remaining_minutes = id(remaining_warm_up_time) / 60;        // Вычисляем оставшиеся минуты
+                    id(set_warm_up_time).publish_state((float)remaining_minutes);   // Обновляем ползунок разминки в интерфейсе
+                  }
+                }
+                // Выполняем скрипт разминки для управления скоростью и пульсом
+                id(warm_up).execute();
+
+
+# interval 1s — управление основной частью тренировки.
+# Логика работы:
+# 1. Каждую секунду проверяет условия:
+#    - мотор работает (motor_running = true),
+#    - осталось время тренировки (remaining_run_time > 0),
+#    - разминка завершена (remaining_warm_up_time <= 0 и warm_up_active = false).
+# 2. Если условия выполняются:
+#    - запускает скрипт run_program,
+#      который отслеживает время тренировки и переводит её в фазу заминки.
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            # Проверяем, что мотор работает, есть время тренировки, разминка завершена
+            lambda: 'return id(motor_running) && id(remaining_run_time) > 0 && id(remaining_warm_up_time) <= 0 && !id(warm_up_active);'
+          then:
+            # Выполняем скрипт основной программы для отслеживания времени и перехода к заминке
+            - script.execute: run_program
+
+
+# interval 1s — управление заминкой.
+# Логика работы:
+# 1. Каждую секунду проверяет условия:
+#    - мотор работает (motor_running = true),
+#    - идёт заминка (remaining_cool_down_time > 0),
+#    - основное время тренировки закончилось (remaining_run_time <= 0).
+# 2. Если условия выполняются:
+#    - уменьшает счётчик remaining_cool_down_time на 1 сек.
+#    - каждые 60 секунд обновляет ползунок set_cool_down_time в интерфейсе.
+#    - вызывает скрипт cool_down для плавного снижения скорости и завершения тренировки.
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(motor_running) && id(remaining_cool_down_time) > 0 && id(remaining_run_time) <= 0;'
+          then:
+            - lambda: |-
+                if (id(remaining_cool_down_time) > 0) {
+                  id(remaining_cool_down_time)--; // Уменьшаем время
+                  if (id(remaining_cool_down_time) % 60 == 0) { // Каждые 60 секунд
+                    int remaining_minutes = id(remaining_cool_down_time) / 60;
+                    id(set_cool_down_time).publish_state((float)remaining_minutes); // Обновляем ползунок
+                  }
+                }
+            - script.execute: cool_down                        
+
+
+
+# interval 1s — накопление статистики тренировки.
+# Логика работы:
+# 1. Запускается каждую секунду, пока работает мотор.
+# 2. Сохраняет:
+#    - Общее время тренировки (treadmill_time_sec).
+#    - Общую дистанцию (treadmill_distance_km).
+# 3. Накопление статистики:
+#    - Средняя скорость: суммирует значения и считает количество измерений.
+#    - Средний наклон: суммирует значения и считает количество измерений.
+#    - Пульс: суммирует значения, считает количество измерений, фиксирует максимальный пульс.
+# 4. Расчёт MET:
+#    - Использует скорость и наклон для вычисления VO₂ и MET.
+#    - Накопленные значения позволяют рассчитать средний MET.
+# 5. Учёт времени в пульсовых зонах:
+#    - Увеличивает счётчик времени для текущей зоны (1–5).
+# 6. Если мотор остановлен:
+#    - текущая зона сбрасывается в 0.
+  # - interval: 1s
+  #   then:
+  #     - lambda: |-
+  #         if (id(motor_running)) {
+  #           // Берём время напрямую из сенсора treadmill_time_sec (секунды)
+  #           float elapsed_sec = id(treadmill_time_sec).state;
+  #           id(total_time_sec) = elapsed_sec;
+
+
+  #           float current_distance = id(treadmill_distance_km).state;
+  #           if (current_distance > 0) id(total_distance_km) = current_distance;
+
+  #           float current_speed = id(treadmill_speed_goal_sensor).state;
+  #           float current_incline = id(treadmill_incline_goal_sensor).state;
+  #           float current_heart_rate = id(heart_rate_sensor).state;
+
+  #           if (current_speed > 0) {
+  #             id(total_speed_sum) += current_speed;
+  #             id(speed_count)++;
+  #           }
+
+  #           if (current_incline >= 0) {
+  #             id(total_incline_sum) += current_incline;
+  #             id(incline_count)++;
+  #           }
+
+  #           if (current_heart_rate > 0 && !isnan(current_heart_rate)) {
+  #             id(total_heart_rate_sum) += current_heart_rate;
+  #             id(heart_rate_count)++;
+  #             if (current_heart_rate > id(max_heart_rate_total)) {
+  #               id(max_heart_rate_total) = current_heart_rate;
+  #             }
+  #           }
+
+  #           // Расчёт MET
+  #           if (current_speed > 0 && current_incline >= 0) {
+  #             float real_incline = current_incline / 3.0f;
+  #             float speed_m_per_min = current_speed * 1000.0f / 60.0f;
+  #             float grade = real_incline / 100.0f;
+  #             float vo2 = 0.1f * speed_m_per_min + 1.8f * speed_m_per_min * grade + 3.5f;
+  #             float met = vo2 / 3.5f;
+  #             id(total_met_sum) += met;
+  #             id(met_count)++;
+  #           }
+
+  #           // Время в зонах
+  #           int zone = id(current_zone);
+  #           if (zone == 1) id(zone1_time)++;
+  #           else if (zone == 2) id(zone2_time)++;
+  #           else if (zone == 3) id(zone3_time)++;
+  #           else if (zone == 4) id(zone4_time)++;
+  #           else if (zone == 5) id(zone5_time)++;
+  #         } else {
+  #           id(current_zone) = 0;
+  #         }
+# interval 1s — накопление статистики тренировки.
+# Логика работы:
+# 1. Запускается каждую секунду, пока работает мотор.
+# 2. Сохраняет:
+#    - Общую дистанцию (treadmill_distance_km).
+# 3. Накопление статистики:
+#    - Средняя скорость: суммирует значения и считает количество измерений.
+#    - Средний наклон: суммирует значения и считает количество измерений.
+#    - Пульс: суммирует значения, считает количество измерений, фиксирует максимальный пульс.
+# 4. Расчёт MET:
+#    - Использует скорость и наклон для вычисления VO₂ и MET.
+#    - Накопленные значения позволяют рассчитать средний MET.
+# 5. Учёт времени в пульсовых зонах:
+#    - Увеличивает счётчик времени для текущей зоны (1–5).
+# 6. Если мотор остановлен:
+#    - текущая зона сбрасывается в 0.
+  - interval: 1s
+    then:
+      - lambda: |-
+          if (id(motor_running)) {
+            // --- Дистанция
+            float current_distance = id(treadmill_distance_km).state;
+            if (current_distance > 0) id(total_distance_km) = current_distance;
+
+            // --- Текущие значения
+            float current_speed = id(treadmill_speed_goal_sensor).state;
+            float current_incline = id(treadmill_incline_goal_sensor).state;
+            float current_heart_rate = id(heart_rate_sensor).state;
+
+            // --- Средняя скорость
+            if (current_speed > 0) {
+              id(total_speed_sum) += current_speed;
+              id(speed_count)++;
+            }
+
+            // --- Средний наклон
+            if (current_incline >= 0) {
+              id(total_incline_sum) += current_incline;
+              id(incline_count)++;
+            }
+
+            // --- Пульс
+            if (current_heart_rate > 0 && !isnan(current_heart_rate)) {
+              id(total_heart_rate_sum) += current_heart_rate;
+              id(heart_rate_count)++;
+              if (current_heart_rate > id(max_heart_rate_total)) {
+                id(max_heart_rate_total) = current_heart_rate;
+              }
+            }
+
+            // --- Расчёт MET
+            if (current_speed > 0 && current_incline >= 0) {
+              float real_incline = current_incline / 3.0f;
+              float speed_m_per_min = current_speed * 1000.0f / 60.0f;
+              float grade = real_incline / 100.0f;
+              float vo2 = 0.1f * speed_m_per_min + 1.8f * speed_m_per_min * grade + 3.5f;
+              float met = vo2 / 3.5f;
+              id(total_met_sum) += met;
+              id(met_count)++;
+            }
+
+            // --- Время в зонах
+            int zone = id(current_zone);
+            if (zone == 1) id(zone1_time)++;
+            else if (zone == 2) id(zone2_time)++;
+            else if (zone == 3) id(zone3_time)++;
+            else if (zone == 4) id(zone4_time)++;
+            else if (zone == 5) id(zone5_time)++;
+          } else {
+            id(current_zone) = 0;
+          }
+
+
+# interval 5s — обновление наклона по выбранной карте.
+# Логика работы:
+# 1. Каждые 5 секунд проверяет, что мотор работает.
+# 2. Если условие выполняется:
+#    - запускает скрипт update_incline_by_map,
+#      который подбирает наклон по текущей дистанции и профилю маршрута.
+  - interval: 5s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(motor_running);'
+          then:
+            - script.execute: update_incline_by_map
+
+
+
+# Интервал для периодического обновления heart_rate_sensor Компонент number (для эмуляции пульса)
+  # - interval: 1s
+  #   then:
+  #     - if:
+  #         condition:
+  #           lambda: 'return id(emulate_ble_connected) && id(test_heart_rate).state >= 60 && id(test_heart_rate).state <= 200;'
+  #         then:
+  #           - sensor.template.publish:
+  #               id: heart_rate_sensor
+  #               state: !lambda 'return id(test_heart_rate).state;'
+  #           - lambda: |-
+  #               float heart_rate = id(test_heart_rate).state;
+  #               ESP_LOGI("TEST", "Heart Rate updated to: %.0f bpm", heart_rate);
+  #               // Повторяем логику зон и дисплея для синхронизации
+  #               float max_hr = id(max_heart_rate);
+  #               float min_zone_1 = max_hr * 0.50;
+  #               float max_zone_1 = max_hr * 0.60;
+  #               float min_zone_2 = max_hr * 0.60;
+  #               float max_zone_2 = max_hr * 0.70;
+  #               float min_zone_3 = max_hr * 0.70;
+  #               float max_zone_3 = max_hr * 0.80;
+  #               float min_zone_4 = max_hr * 0.80;
+  #               float max_zone_4 = max_hr * 0.90;
+  #               float min_zone_5 = max_hr * 0.90;
+  #               float max_zone_5 = max_hr;
+
+  #               int heart_rate_zone = 0;
+  #               if (heart_rate < min_zone_1) {
+  #                 heart_rate_zone = 0;
+  #               } else if (heart_rate < max_zone_1) {
+  #                 heart_rate_zone = 1;
+  #               } else if (heart_rate < max_zone_2) {
+  #                 heart_rate_zone = 2;
+  #               } else if (heart_rate < max_zone_3) {
+  #                 heart_rate_zone = 3;
+  #               } else if (heart_rate < max_zone_4) {
+  #                 heart_rate_zone = 4;
+  #               } else {
+  #                 heart_rate_zone = 5;
+  #               }
+  #               id(current_zone) = heart_rate_zone;
+  #               ESP_LOGI("TEST", "Heart Rate: %.0f, Current Zone: %d", heart_rate, heart_rate_zone);
+
+  #               if (id(speed).state) {
+  #                 char heart_str[10];
+  #                 sprintf(heart_str, "%.0f", heart_rate);
+  #                 id(display_nextion).send_command_printf("t0.txt=\"%s\"", heart_str);
+  #                 ESP_LOGI("Nextion", "Sending command for t0.txt");
+  #                 uint16_t picture_id = 7;
+  #                 uint16_t t0_bco = 21162;
+  #                 if (heart_rate < min_zone_1) {
+  #                   picture_id = 7;
+  #                 } else if (heart_rate < max_zone_1) {
+  #                   picture_id = 2;
+  #                   t0_bco = 15487;
+  #                 } else if (heart_rate < max_zone_2) {
+  #                   picture_id = 3;
+  #                   t0_bco = 11744;
+  #                 } else if (heart_rate < max_zone_3) {
+  #                   picture_id = 4;
+  #                   t0_bco = 64992;
+  #                 } else if (heart_rate < max_zone_4) {
+  #                   picture_id = 5;
+  #                   t0_bco = 64294;
+  #                 } else {
+  #                   picture_id = 6;
+  #                   t0_bco = 64040;
+  #                 }
+  #                 id(display_nextion).send_command_printf("p0.pic=%d", picture_id);
+  #                 ESP_LOGI("Nextion", "Sending command for p0.pic");
+  #                 id(display_nextion).send_command_printf("t0.bco=%d", t0_bco);
+  #                 ESP_LOGI("Nextion", "Sending command for t0.bco");
+  #               }
+
+  # RSC Measurement для Zwift Companion.
+  # Передаёт заданную скорость раз в секунду, чтобы показания не прыгали
+  # вслед за шумом обратной связи FC-33.
+  - interval: 1s
+    id: rsc_measurement_interval
+    then:
+      - lambda: |-
+          if (!id(ble_client_connected))
+            return;
+
+          float speed_kph = id(target_speed_goal) / 10.0f;
+          if (speed_kph < 0.0f)
+            speed_kph = 0.0f;
+
+          uint16_t speed_raw =
+              static_cast<uint16_t>(lroundf((speed_kph / 3.6f) * 256.0f));
+          float distance_km = id(treadmill_distance_km).state;
+          if (isnan(distance_km) || distance_km < 0.0f)
+            distance_km = 0.0f;
+          uint32_t distance_raw =
+              static_cast<uint32_t>(lroundf(distance_km * 10000.0f));
+
+          // RSC Measurement includes total distance.
+          id(rsc_measurement_char).set_value({
+              0x02,
+              static_cast<uint8_t>(speed_raw & 0xFF),
+              static_cast<uint8_t>((speed_raw >> 8) & 0xFF),
+              0x00,
+              static_cast<uint8_t>(distance_raw & 0xFF),
+              static_cast<uint8_t>((distance_raw >> 8) & 0xFF),
+              static_cast<uint8_t>((distance_raw >> 16) & 0xFF),
+              static_cast<uint8_t>((distance_raw >> 24) & 0xFF)
+          });
+          id(rsc_measurement_char).notify();
+
+          // Indoor Bike Data is also emitted for Zwift's treadmill incline
+          // compatibility path.
+          uint16_t speed_hundredths =
+              static_cast<uint16_t>(lroundf(speed_kph * 100.0f));
+          int heart_rate_value = isnan(id(heart_rate_sensor).state)
+                                     ? 0
+                                     : static_cast<int>(
+                                           lroundf(id(heart_rate_sensor).state));
+          if (heart_rate_value < 0)
+            heart_rate_value = 0;
+          if (heart_rate_value > 255)
+            heart_rate_value = 255;
+          uint8_t heart_rate = static_cast<uint8_t>(heart_rate_value);
+          id(indoor_bike_data_char).set_value({
+              0x64, 0x02,
+              static_cast<uint8_t>(speed_hundredths & 0xFF),
+              static_cast<uint8_t>((speed_hundredths >> 8) & 0xFF),
+              0x00, 0x00,  // cadence
+              0x00, 0x00,  // resistance
+              0x00, 0x00,  // instantaneous power
+              heart_rate,
+              0x00
+          });
+          id(indoor_bike_data_char).notify();
+
+
+# Кнопки управления тренажёром и интерфейсом

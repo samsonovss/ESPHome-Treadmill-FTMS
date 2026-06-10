@@ -153,10 +153,11 @@ Verify the voltage levels of your motor board before connecting it. Never feed 5
 1. Download the repository and copy the contents of `esphome/` into your ESPHome configuration directory.
 2. Rename `secrets.example.yaml` to `secrets.yaml`.
 3. Configure Wi-Fi, API, OTA, fallback access point, DS18B20 address, heart-rate monitor MAC, and Nextion TFT URL.
-4. Verify pin assignments, UART settings, and the command format used by your treadmill.
-5. Disconnect the power stage and first test ESP32 boot, Nextion, and sensors.
-6. Create a backup, compile the configuration, and inspect the logs.
-7. Test stop behavior, minimum speed, and incline reset without a person on the belt.
+4. Keep the `packages/` directory next to `config.yaml`; the main file loads all functional sections from it.
+5. Verify pin assignments, UART settings, and the command format used by your treadmill.
+6. Disconnect the power stage and first test ESP32 boot, Nextion, and sensors.
+7. Create a backup, compile the configuration, and inspect the logs.
+8. Test stop behavior, minimum speed, and incline reset without a person on the belt.
 
 The configuration is a working example for one installation, not a universal firmware image for every treadmill.
 
@@ -213,7 +214,9 @@ Videos:
 
 ## Repository Layout
 
-- [`esphome/`](esphome/) - ESPHome configuration and incline profiles;
+- [`esphome/config.yaml`](esphome/config.yaml) - short entry point loading the local packages;
+- [`esphome/packages/`](esphome/packages/) - core, hardware, globals, scripts, sensors, BLE/FTMS, controls, and Nextion configuration;
+- [`esphome/incline_profiles.h`](esphome/incline_profiles.h) - generated route incline profiles;
 - [`nextion_display/`](nextion_display/) - display source, HMI, and compiled TFT;
 - [`incline_data/`](incline_data/) - GPX data, route profiles, and conversion scripts;
 - [`3d-models/`](3d-models/) - printable enclosure and sensor mounts;

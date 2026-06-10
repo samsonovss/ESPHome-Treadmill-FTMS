@@ -1,0 +1,1102 @@
+one_wire:
+  - platform: gpio
+    pin: 21
+
+# Отладочные сенсоры системы (debug)
+debug:
+  update_interval: 5s  # как часто опрашивать
+
+# Сенсоры
+sensor:
+  # === BEGIN EXPERIMENTAL_KICKR_RUN ===
+  # Zwift Requested Incline — исходный реальный градиент трассы, который
+  # присылает Zwift через фирменную характеристику KICKR RUN.
+  # Значение может быть отрицательным на спуске.
+  # Для удаления эксперимента удалить все блоки с меткой EXPERIMENTAL_KICKR_RUN.
+  - platform: template
+    name: "Zwift Requested Incline"
+    id: zwift_requested_incline
+    unit_of_measurement: "%"
+    accuracy_decimals: 2
+    icon: "mdi:slope-uphill"
+    update_interval: never
+
+  # Zwift Mapped Treadmill Incline — рассчитанный уровень дорожки после
+  # применения калибровки и интенсивности. Это значение показывает, какую
+  # цель автоматика установит на дорожке; при выключенной автоматике сенсор
+  # продолжает считать и показывать результат, но мотором не управляет.
+  - platform: template
+    name: "Zwift Mapped Treadmill Incline"
+    id: zwift_mapped_incline
+    unit_of_measurement: "level"
+    accuracy_decimals: 1
+    icon: "mdi:angle-acute"
+    update_interval: never
+  # === END EXPERIMENTAL_KICKR_RUN ===
+
+  - platform: debug
+    free:
+      name: "Heap Free"            #    - Heap Free — свободная оперативная память (байты).
+      filters:
+        - delta: 1
+    block:
+      name: "Heap Max Block"       #    - Heap Max Block — максимальный непрерывный блок памяти (байты).
+      filters:
+        - delta: 1
+    loop_time:
+      name: "Loop Time"            #    - Loop Time — время выполнения основного цикла (мс).
+      filters:
+        - delta: 1
+    psram:
+      name: "Free PSRAM"           #    - Free PSRAM — свободная внешняя PSRAM (если доступна).
+      filters:
+        - delta: 1
+    cpu_frequency:
+      name: "CPU Frequency"        #    - CPU Frequency — текущая частота процессора (МГц).
+      filters:
+        - delta: 1
+
+  - platform: template
+    name: "Zone1"
+    id: last_zone1_time
+    unit_of_measurement: s
+    device_class: duration
+    accuracy_decimals: 0
+    icon: mdi:heart-pulse
+    lambda: |-
+      return id(zone1_time_stored);
+
+  - platform: template
+    name: "Zone2"
+    id: last_zone2_time
+    unit_of_measurement: s
+    device_class: duration
+    accuracy_decimals: 0
+    icon: mdi:heart-pulse
+    lambda: |-
+      return id(zone2_time_stored);
+
+  - platform: template
+    name: "Zone3"
+    id: last_zone3_time
+    unit_of_measurement: s
+    device_class: duration
+    accuracy_decimals: 0
+    icon: mdi:heart-pulse
+    lambda: |-
+      return id(zone3_time_stored);
+
+  - platform: template
+    name: "Zone4"
+    id: last_zone4_time
+    unit_of_measurement: s
+    device_class: duration
+    accuracy_decimals: 0
+    icon: mdi:heart-pulse
+    lambda: |-
+      return id(zone4_time_stored);
+
+  - platform: template
+    name: "Zone5"
+    id: last_zone5_time
+    unit_of_measurement: s
+    device_class: duration
+    accuracy_decimals: 0
+    icon: mdi:heart-pulse
+    lambda: |-
+      return id(zone5_time_stored);
+
+  # Время тренировки (секунды)
+  - platform: template
+    name: "Last Time"
+    id: last_time
+    unit_of_measurement: s
+    device_class: duration
+    accuracy_decimals: 0
+    icon: mdi:timer-outline
+    lambda: |-
+      return id(last_time_stored);
+
+  # Дистанция
+  - platform: template
+    name: "Last Distance"
+    id: last_distance
+    unit_of_measurement: "km"
+    accuracy_decimals: 2
+    icon: mdi:map-marker-distance
+    lambda: |-
+      return id(last_distance_stored);
+
+  # Калории
+  - platform: template
+    name: "Last Calories"
+    id: last_calories
+    unit_of_measurement: "kcal"
+    accuracy_decimals: 0
+    icon: mdi:fire
+    lambda: |-
+      return id(last_calories_stored);
+
+  # Жир
+  - platform: template
+    name: "Last Fat"
+    id: last_fat
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    icon: mdi:scale-balance
+    lambda: |-
+      return id(fat_grams_stored);
+
+  # Средняя скорость
+  - platform: template
+    name: "Last Avg Speed"
+    id: last_avg_speed
+    unit_of_measurement: "km/h"
+    accuracy_decimals: 1
+    icon: mdi:speedometer
+    lambda: |-
+      return id(avg_speed_stored);
+
+  # Средний наклон
+  - platform: template
+    name: "Last Avg Incline"
+    id: last_avg_incline
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    icon: mdi:terrain
+    lambda: |-
+      return id(avg_incline_stored);
+
+  # Средний пульс
+  - platform: template
+    name: "Last Avg HR"
+    id: last_avg_hr
+    unit_of_measurement: "bpm"
+    accuracy_decimals: 0
+    icon: mdi:heart-pulse
+    lambda: |-
+      return id(avg_heart_rate_stored);
+
+  # Максимальный пульс
+  - platform: template
+    name: "Last Max HR"
+    id: last_max_hr
+    unit_of_measurement: "bpm"
+    accuracy_decimals: 0
+    icon: mdi:heart-flash
+    lambda: |-
+      return id(max_heart_rate_stored);
+
+  # VO2
+  - platform: template
+    name: "Last Avg VO2"
+    id: last_vo2
+    unit_of_measurement: "ml/kg/min"
+    accuracy_decimals: 1
+    icon: mdi:lungs
+    lambda: |-
+      return id(avg_vo2_stored);
+
+  # MET
+  - platform: template
+    name: "Last Avg MET"
+    id: last_met
+    unit_of_measurement: "MET"
+    accuracy_decimals: 2
+    icon: mdi:run
+    lambda: |-
+      return id(avg_met_stored);
+
+  # Pace
+  - platform: template
+    name: "Last Avg Pace"
+    id: last_pace
+    unit_of_measurement: "min/km"
+    accuracy_decimals: 2
+    icon: mdi:walk
+    lambda: |-
+      return id(avg_pace_stored);
+
+# Map ID — сенсор выбора маршрута с дисплея Nextion (переменная mapid).
+# При изменении значения публикует в map_select название и длину выбранного маршрута.
+# Используется для синхронизации выбора карты между Nextion и ESPHome.
+  - platform: nextion
+    name: "Map ID"
+    id: map_id_sensor
+    variable_name: "mapid"
+    #update_interval: 1s
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    on_value:
+      then:
+        - lambda: |-
+            if (x == 1) {
+              id(map_select).publish_state("Russia, Ufa 3.4km");
+            } else if (x == 2) {
+              id(map_select).publish_state("Russia, Ufa Sipailovo 4.4km");
+            } else if (x == 3) {
+              id(map_select).publish_state("Russia, Ufa Kashkadan 1.7km");
+            } else if (x == 4) {
+              id(map_select).publish_state("Zwift Epic Run 6.2km");
+            } else if (x == 5) {
+              id(map_select).publish_state("Zwift 5K loop 5.0km");
+            } else if (x == 6) {
+              id(map_select).publish_state("Zwift Mountain Mash 5.9km");
+            } else if (x == 7) {
+              id(map_select).publish_state("Zwift Chili Pepper 8.0km");
+            } else if (x == 8) {
+              id(map_select).publish_state("Zwift Hilly Route Reverse Run 9.2km");
+            } else if (x == 9) {
+              id(map_select).publish_state("Zwift Ocean Blvd 11.2km");
+            } else if (x == 10) {
+              id(map_select).publish_state("Zwift Beach Island Loop 12.8km");
+            } else if (x == 11) {
+              id(map_select).publish_state("Zwift Jon’s Route 12.6km");
+            }
+
+
+# Brightness Slider — ползунок яркости с дисплея Nextion.
+# Обновляется каждые 2 секунды, сохраняет значение в переменную brightness_level.
+  - platform: nextion
+    id: nextion_slider
+    component_name: display.hbright
+    entity_category: diagnostic
+    name: "Brightness Slider"
+    update_interval: 2s
+    on_value:
+      then:
+        - lambda: |-
+            id(brightness_level) = (int)x;
+    filters:
+      - delta: 0.05
+
+# My Raw Distance (VL53L1X) — лазерный дальномер ToF в режиме long.
+# Публикует расстояние в мм, обновляется каждую секунду.
+# Используется как источник данных для вычислений и отображения.
+  - platform: vl53l1x
+    distance_mode: long
+    distance:
+      entity_category: diagnostic
+      name: My Raw Distance
+      id: my_raw_distance
+      unit_of_measurement: "mm" 
+      filters:
+       - delta: 5
+    # range_status:
+    #   name: My Range Status
+    #   id: my_range_status
+    update_interval: 1s
+
+# My Distance — шаблонный сенсор, переводит my_raw_distance из мм в см.
+# Округляет до целого, обновляется раз в секунду (только при изменении ≥1 см).
+# При каждом обновлении отправляет значение на дисплей Nextion.
+# Если активна калибровка — обновляет min/max расстояния (0–150 см) и пишет в лог.
+  - platform: template
+    id: my_distance
+    name: "My Distance"
+    unit_of_measurement: "cm"
+    state_class: "measurement"
+    device_class: "distance"
+    accuracy_decimals: 0
+    lambda: |-
+      return id(my_raw_distance).state / 10.0;
+    filters:
+      - delta: 1.0
+    update_interval: 1s
+    on_value:
+      then:
+        - lambda: |-
+            float distance = x;
+            int position_value = (int)distance;
+
+            // Обновление дисплея Nextion
+            id(display_nextion).send_command_printf("position=%d", position_value);
+            //ESP_LOGI("Nextion", "Sending command for position");
+            //if (id(caldistspeed).state) {
+              //id(display_nextion).send_command_printf("caldistspeed.ndist.val=%d", position_value);
+              //ESP_LOGI("Nextion", "Sending command for caldistspeed.ndist.val");
+            //}
+            // Логика калибровки
+            if (id(calibration_active)) {
+              // Проверяем, что значение в разумном диапазоне (0–150 см)
+              if (distance > 0.0 && distance < 150.0) {
+                if (distance < id(calibration_min_distance)) {
+                  id(calibration_min_distance) = distance;
+                  ESP_LOGI("Calibration", "Новое минимальное расстояние: %.1f см", distance);
+                }
+                if (distance > id(calibration_max_distance)) {
+                  id(calibration_max_distance) = distance;
+                  ESP_LOGI("Calibration", "Новое максимальное расстояние: %.1f см", distance);
+                }
+              }
+            }
+
+
+# Сенсор температуры мотора (DS18B20 через Dallas)
+# 1. Читает температуру с датчика по адресу из secrets.yaml.
+# 2. Обновление каждые 5 секунд (update_interval: 5s).
+# 3. Фильтр: игнорирует ложные нули (возвращает NAN, если x == 0.0).
+# 4. При каждом обновлении:
+#    - Если значение корректное:
+#        * Преобразует температуру в целое число (°C).
+#        * Отправляет её на дисплей Nextion:
+#            - speed.ntemp (если активна страница скорости).
+#            - motor.ntemp (если активна страница мотора).
+#        * Обновление происходит только при изменении значения (чтобы не спамить дисплей).
+#    - Контроль перегрева:
+#        * Если включён режим контроля температуры (bt_tempmode) и мотор работает.
+#        * При превышении 85°C:
+#            - Логируется предупреждение.
+#            - На дисплее переключается страница 24 (страница аварии).
+#            - В program_status публикуется "Overheat Emergency Stop".
+#            - Выполняется аварийная остановка дорожки (stop_program).
+  - platform: dallas_temp
+    address: !secret motor_temperature_sensor_address
+    name: "Motor"
+    id: temp
+    force_update: false
+    update_interval: 5s
+    filters:
+      - lambda: |-
+          if (x == 0.0) return NAN;   // игнорируем ложные нули
+          return x;
+      - delta: 0.05   # публиковать только если изменилась ≥ 0.05 (чтобы не спамить в логах)
+    on_value:
+      then:
+        - lambda: |-
+            float temp_value = id(temp).state;
+            if (!isnan(temp_value)) {
+              int tempmotor = (int)temp_value;
+
+              static int last_sent_temp = -1000;
+              if (tempmotor != last_sent_temp) {
+                last_sent_temp = tempmotor;
+
+                if (id(current_page) == 1) {
+                  id(display_nextion).set_component_value("speed.ntemp", tempmotor);
+                  ESP_LOGI("Nextion", "Setting value for speed.ntemp = %d", tempmotor);
+                }
+                if (id(current_page) == 10) {
+                  id(display_nextion).set_component_value("motor.ntemp", tempmotor);
+                  ESP_LOGI("Nextion", "Setting value for motor.ntemp = %d", tempmotor);
+                }
+              }
+            }
+
+# ------------------------------------------------------------
+# Сенсор "Calories Burned"
+# Логика работы:
+# 1. Берём данные пользователя (вес, возраст, пол) и вычисляем
+#    максимальный пульс по полу и возрасту.
+# 2. Считаем средние значения за тренировку: скорость, наклон,
+#    пульс, время.
+# 3. Переводим скорость и наклон в параметры для формулы ACSM.
+#    Она даёт VO₂ (потребление кислорода, мл/кг/мин).
+# 4. VO₂ переводим в MET (метаболический эквивалент нагрузки).
+# 5. Если пульс высокий (>70% от максимального), добавляем
+#    поправку до +10% к MET.
+# 6. MET × вес = расход энергии в ккал/час.
+# 7. Умножаем на время тренировки → итоговые калории.
+# 8. При паузе значение замирает, при остановке дорожки
+#    сбрасывается в 0.
+# ------------------------------------------------------------
+  - platform: template
+    name: "Calories Burned"
+    id: total_calories
+    unit_of_measurement: "kcal"
+    accuracy_decimals: 0
+    update_interval: 1s
+    lambda: |-
+      // Если мотор выключен — тренировка закончена, сбрасываем калории
+      //if (!id(motor_running)) {
+        //return 0.0f;
+      //}
+
+      // Если активна пауза — калории замирают, возвращаем предыдущее значение
+      if (id(pause_active)) {
+        return id(total_calories).state;
+      }
+
+      // --- 1. Базовые данные пользователя ---
+      float weight = id(weight_kg).state;                          // Вес в кг
+      int age = id(age_number).state;                              // Возраст
+      bool is_male = (id(gender_select).current_option() == "Male");
+      // формула для максимального пульса (разные для мужчин и женщин)
+      float max_hr = (is_male) ? (214 - 0.8 * age) : (209 - 0.7 * age); 
+
+      // --- 2. Средние значения за тренировку ---
+      float time_sec = id(treadmill_time_sec).state;                                                             // Время в секундах
+      float avg_speed = (id(speed_count) > 0) ? (id(total_speed_sum) / id(speed_count)) : 0;                     // средняя скорость
+      float avg_incline = (id(incline_count) > 0) ? (id(total_incline_sum) / id(incline_count)) : 0;             // средний наклон
+      float avg_heart_rate = (id(heart_rate_count) > 0) ? (id(total_heart_rate_sum) / id(heart_rate_count)) : 0; // средний пульс
+
+      // --- 3. Пересчёт наклона дорожки в реальный наклон ---
+      float real_incline = avg_incline / 3.0f;                     // 15% дорожки ≈ 5% реального уклона
+
+      // --- 4. Пересчёт скорости и уклона ---
+      float speed_m_per_min = avg_speed * 1000.0f / 60.0f;         // км/ч → м/мин
+      float grade = real_incline / 100.0f;                         // % → доля
+
+      // --- 5. Уравнение ACSM для VO₂ (мл/кг/мин) ---
+      // формула учитывает горизонтальную составляющую, наклон и базовый обмен
+      float vo2 = 0.1f * speed_m_per_min
+                + 1.8f * speed_m_per_min * grade
+                + 3.5f;
+
+      // --- 6. Перевод VO₂ в MET ---
+      // 1 MET = 3.5 мл/кг/мин
+      float met = vo2 / 3.5f;
+
+      // --- 7. Коррекция по пульсу ---
+      // если пульс выше 70% от максимального, добавляем до +10% к MET
+      float hr_ratio = avg_heart_rate / max_hr;
+      if (hr_ratio > 0.7f) {
+        float hr_factor = 1.0f + (hr_ratio - 0.7f) * 0.2f;         // рост до 10% при 90% HR
+        if (hr_factor > 1.1f) hr_factor = 1.1f;
+        met *= hr_factor;
+      }
+
+      // --- 8. Перевод MET в калории ---
+      float calories_per_hour = met * weight;                      // ккал/час
+      float calories = (calories_per_hour * time_sec) / 3600.0f; // ккал за прошедшее время
+
+      // --- 9. Ограничение на отрицательные значения ---
+      if (calories < 0) calories = 0;
+
+      // --- 10. Логирование для отладки ---
+      //ESP_LOGI("Calories",
+        //"VO₂: %.2f, MET: %.2f, Weight: %.1f, Time: %.2f min, Avg Speed: %.2f, Avg Incline: %.2f, Real Incline: %.2f, Avg HR: %.0f, Calories: %.0f",
+        //vo2, met, weight, time_sec / 60.0f, avg_speed, avg_incline, real_incline, avg_heart_rate, calories);
+
+      return calories;
+    filters:
+      - delta: 0.05
+# Average Heart Rate — средний пульс за тренировку.
+# Считает сумму всех замеров и делит на их количество.
+# Если замеров нет → возвращает 0. Используется для отображения средней нагрузки.
+  - platform: template
+    name: "Average Heart Rate"
+    id: avg_heart_rate_sensor
+    unit_of_measurement: "bpm"
+    accuracy_decimals: 0
+    lambda: |-
+      return (id(heart_rate_count) > 0) ? (id(total_heart_rate_sum) / id(heart_rate_count)) : 0;
+
+
+# Max Heart Rate — максимальный зафиксированный пульс.
+# Берёт значение из глобальной переменной max_heart_rate_total.
+# Используется для отображения пикового значения нагрузки.
+  - platform: template
+    name: "Max Heart Rate"
+    id: max_heart_rate_sensor
+    unit_of_measurement: "bpm"
+    accuracy_decimals: 0
+    lambda: |-
+      return id(max_heart_rate_total);
+
+# Age from Nextion — внутренний сенсор, читает возраст (n_age) с дисплея.
+# При корректном значении (16–100 лет) обновляет number‑сенсор age_number.
+# При некорректном вводе пишет предупреждение в лог.
+  - platform: nextion
+    nextion_id: display_nextion
+    id: age_sensor
+    name: "Age from Nextion"
+    internal: true
+    component_name: n_age  
+    on_value:
+      then:
+        - lambda: |-
+            int new_age = x; // Значение от number_sensor
+            if (new_age >= 16 && new_age <= 100) {
+              id(age_number).make_call().set_value(new_age).perform();
+              //id(age_number).publish_state(new_age); 
+              ESP_LOGI("Settings", "Age updated to: %d", new_age);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_age);
+            }          
+
+
+# Weight from Nextion — внутренний сенсор, читает n_weight с дисплея.
+# При корректном значении (40–100 кг) обновляет weight_kg, иначе пишет предупреждение.
+# Используется для учёта веса в расчётах (калории, MET и т.д.).
+  - platform: nextion
+    nextion_id: display_nextion
+    id: weight_sensor
+    name: "Weight from Nextion"
+    internal: true
+    component_name: n_weight  
+    on_value:
+      then:
+        - lambda: |-
+            int new_weight = x; // Значение от Nextion
+            if (new_weight >= 40 && new_weight <= 100) {
+              id(weight_kg).make_call().set_value(new_weight).perform();
+              //id(weight_kg).publish_state(new_weight);
+              ESP_LOGI("Settings", "Weight updated to: %d kg", new_weight);
+            } else {
+              ESP_LOGW("Settings", "Invalid weight value: %d kg", new_weight);
+            }
+
+
+# Time from Nextion — внутренний сенсор, читает n_min (заданное время тренировки).
+# При корректном значении (1–999 мин) обновляет set_run_time, иначе пишет предупреждение.
+# Используется для задания длительности тренировки через интерфейс Nextion.
+  - platform: nextion
+    nextion_id: display_nextion
+    id: time_sensor
+    name: "time from Nextion"
+    internal: true
+    component_name: n_min  
+    on_value:
+      then:
+        - lambda: |-
+            int new_time = x; // Значение от number_sensor
+            if (new_time >= 1 && new_time <= 999) {
+              //id(set_run_time).publish_state(new_time);
+              id(set_run_time).make_call().set_value(new_time).perform();
+              ESP_LOGI("Settings", "Age updated to: %d", new_time);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_time);
+            }    
+
+# Time Warm from Nextion — внутренний сенсор, читает n_warm (разминка).
+# При корректном значении (0–10 мин) обновляет set_warm_up_time, иначе пишет предупреждение.
+# Используется для задания длительности разминки.
+  - platform: nextion
+    nextion_id: display_nextion
+    id: warm_sensor
+    name: "time warm from Nextion"
+    internal: true
+    component_name: n_warm
+    on_value:
+      then:
+        - lambda: |-
+            int new_time_warm = x; // Значение от number_sensor
+            if (new_time_warm >= 0 && new_time_warm <= 10) {
+              //id(set_warm_up_time).publish_state(new_time_warm);
+              id(set_warm_up_time).make_call().set_value(new_time_warm).perform();
+              ESP_LOGI("Settings", "Age updated to: %d", new_time_warm);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_time_warm);
+            }    
+
+# Time Cool from Nextion — внутренний сенсор, читает n_cool (заминка).
+# При корректном значении (0–10 мин) обновляет set_cool_down_time, иначе пишет предупреждение.
+# Используется для задания длительности заминки.
+  - platform: nextion
+    nextion_id: display_nextion
+    id: cool_sensor
+    name: "time cool from Nextion"
+    internal: true
+    component_name: n_cool 
+    on_value:
+      then:
+        - lambda: |-
+            int new_time_cool = x; // Значение от number_sensor
+            if (new_time_cool >= 0 && new_time_cool <= 10) {
+              //id(set_cool_down_time).publish_state(new_time_cool);
+              id(set_cool_down_time).make_call().set_value(new_time_cool).perform();
+              ESP_LOGI("Settings", "Age updated to: %d", new_time_cool);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_time_cool);
+            }    
+
+# Treadmill Speed Feedback — обратная связь по скорости от мотора (UART), км/ч.
+# Делит значение на 10, обновляется каждые 1.2 секунды, категория diagnostic.
+  - platform: template
+    name: "Treadmill Speed Feedback"
+    id: treadmill_speed_feedback_sensor
+    unit_of_measurement: "km/h"
+    accuracy_decimals: 1
+    update_interval: 1s
+    entity_category: diagnostic
+    icon: "mdi:run"
+    lambda: |-
+      return id(treadmill_speed_feedback) / 10.0;
+    filters:
+      - delta: 0.05
+
+# Treadmill Incline Feedback — обратная связь по наклону от мотора (UART), %.
+# Делит значение на 10, обновляется каждые 1.1 секунды, категория diagnostic.
+  - platform: template
+    name: "Treadmill Incline Feedback"
+    id: treadmill_incline_feedback_sensor
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 1s
+    icon: "mdi:angle-acute"
+    lambda: |-
+      return id(treadmill_incline_feedback) / 10.0;
+    filters:
+      - delta: 0.05
+
+
+# Treadmill Speed (Goal) — целевая скорость, отображаемая на дисплее.
+# При паузе показывает сохранённое значение, при работе мотора — текущую цель.
+  # - platform: template
+  #   name: "Treadmill Speed"
+  #   unit_of_measurement: "km/h"
+  #   accuracy_decimals: 1
+  #   update_interval: 1s
+  #   id: treadmill_speed_goal_sensor
+  #   icon: "mdi:run"
+  #   lambda: |-
+  #     if (id(pause_active)) {
+  #       // во время паузы показываем 0.0
+  #       return 0.0;
+
+  #       return id(saved_speed) / 10.0;
+  #     } else if (id(motor_running)) {
+  #       // при работе мотора — текущую цель
+  #       return id(target_speed_goal) / 10.0;
+  #     } else {
+  #       // если мотор выключен и паузы нет — 0
+  #       return 0.0;
+  #     }
+  #   on_value:
+  #     - lambda: |-
+  #         static float last_sent = -100.0f;
+  #         float current = id(treadmill_speed_goal_sensor).state;
+
+  #         // обновляем только при изменении ≥0.05 км/ч
+  #         if (fabs(current - last_sent) >= 0.05f) {
+  #           last_sent = current;
+
+  #           // обновляем Nextion
+  #           if (id(current_page) == 1) {
+  #             char speed_str[10];
+  #             sprintf(speed_str, "%.1f", current);
+  #             id(display_nextion).set_component_text("t1", speed_str);
+  #             ESP_LOGD("Nextion", "Отправка команды на дисплей - скорость");
+  #           }
+
+  #           // синхронизация ползунка
+  #           id(set_speed).publish_state(current);
+  #         }
+# Treadmill Speed (Goal) — целевая скорость, отображаемая на дисплее.
+# При паузе показывает 0, при работе мотора — текущую цель.
+  - platform: template
+    name: "Treadmill Speed"
+    unit_of_measurement: "km/h"
+    accuracy_decimals: 1
+    update_interval: 1s
+    id: treadmill_speed_goal_sensor
+    icon: "mdi:run"
+
+    lambda: |-
+      // 1. Во время паузы всегда показываем 0.0
+      if (id(pause_active)) {
+        return 0.0;
+      }
+
+      // 2. Если мотор работает — показываем целевую скорость
+      if (id(motor_running)) {
+        return id(target_speed_goal) / 10.0;
+      }
+
+      // 3. Если мотор выключен — тоже 0.0
+      return 0.0;
+
+    on_value:
+      - lambda: |-
+          static float last_sent = -100.0f;
+          float current = id(treadmill_speed_goal_sensor).state;
+
+          // Обновляем только при изменении ≥ 0.05 км/ч
+          if (fabs(current - last_sent) >= 0.05f) {
+            last_sent = current;
+
+            // Обновляем Nextion только на странице скорости
+            if (id(current_page) == 1) {
+              char speed_str[10];
+              sprintf(speed_str, "%.1f", current);
+              id(display_nextion).set_component_text("t1", speed_str);
+              ESP_LOGD("Nextion", "Отправка команды на дисплей - скорость");
+            }
+
+            // Синхронизация ползунка
+            id(set_speed).publish_state(current);
+          }
+    filters:
+      - delta: 0.05   # публиковать только если изменилась ≥ 0.05 км/ч (чтобы не спамить в логах)
+
+
+
+# Treadmill Incline — отображает целевой наклон дорожки (%).
+# Значение берётся из target_incline (деление на 10).
+# Обновляется каждую секунду, на дисплей отправляется только при изменении ≥0.5%.
+# Используется для отображения и синхронизации наклона на Nextion (t4).
+  # - platform: template
+  #   name: "Treadmill Incline"
+  #   unit_of_measurement: "%"
+  #   accuracy_decimals: 1
+  #   update_interval: 1s
+  #   id: treadmill_incline_goal_sensor
+  #   icon: "mdi:angle-acute"
+  #   lambda: |-
+  #     return id(target_incline) / 10.0;
+  #   on_value:
+  #     - lambda: |-
+  #         static float last_sent = -100.0f;   // хранит последнее отправленное значение
+  #         float current = id(treadmill_incline_goal_sensor).state;
+
+  #         // обновляем только если разница >= 0.5% (или 1.0%)
+  #         if (fabs(current - last_sent) >= 0.5f) {
+  #           last_sent = current;
+
+  #           if (id(current_page) == 1) {
+  #             char incline_str[10];
+  #             sprintf(incline_str, "%.1f", current);
+  #             id(display_nextion).set_component_text("t4", incline_str);
+  #             ESP_LOGD("Nextion", "Отправка команды на дисплей - наклон");
+  #           }
+  #         }
+  #   filters:
+  #     - delta: 0.05   # публиковать только если изменилась ≥ 0.05 (чтобы не спамить в логах)
+
+  - platform: template
+    name: "Treadmill Incline"
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 1s
+    id: treadmill_incline_goal_sensor
+    icon: "mdi:angle-acute"
+
+    lambda: |-
+      // 1. На паузе всегда 0.0
+      if (id(pause_active)) {
+        return 0.0;
+      }
+
+      // 2. Если мотор работает — показываем целевой наклон
+      if (id(motor_running)) {
+        return id(target_incline_goal) / 10.0;
+      }
+
+      // 3. Если мотор выключен — тоже 0.0
+      return 0.0;
+
+    on_value:
+      - lambda: |-
+          static float last_sent = -100.0f;
+          float current = id(treadmill_incline_goal_sensor).state;
+
+          // обновляем только если разница >= 0.5%
+          if (fabs(current - last_sent) >= 0.5f) {
+            last_sent = current;
+
+            if (id(current_page) == 1) {
+              char incline_str[10];
+              sprintf(incline_str, "%.1f", current);
+              id(display_nextion).set_component_text("t4", incline_str);
+              ESP_LOGD("Nextion", "Отправка команды на дисплей - наклон");
+            }
+          }
+
+    filters:
+      - delta: 0.05
+
+
+
+
+  # - platform: template
+  #   name: "ESP32 Free Memory"
+  #   lambda: |-
+  #     return (float)ESP.getFreeHeap() / 1024.0;
+  #   unit_of_measurement: "kB"
+  #   accuracy_decimals: 1
+  #   update_interval: 60s
+  #   entity_category: diagnostic
+  #   icon: "mdi:memory"
+
+
+
+# ESP32 WiFi Signal — уровень сигнала Wi‑Fi (RSSI, dBm), обновляется раз в 60 секунд.
+  - platform: wifi_signal
+    name: "ESP32 WiFi Signal"
+    update_interval: 60s
+
+
+# Treadmill Time — считает длительность тренировки в минутах.
+# При остановке мотора таймер сбрасывается, при работе — идёт подсчёт от момента старта.
+# Обновляется каждую секунду, точность до сотых.
+# Дополнительно переводит время в формат ММ:СС и отправляет на дисплей (t3).
+  - platform: template
+    name: "Treadmill Time"
+    id: treadmill_time_sec
+    lambda: |-
+      uint32_t now = millis();
+      static uint32_t elapsed_ms = 0;
+
+      if (!id(motor_running) && !id(pause_active)) {
+        elapsed_ms = 0;
+        id(treadmill_time_last) = 0;
+        return 0;
+      }
+
+      if (id(motor_running) && !id(pause_active)) {
+        if (id(treadmill_time_last) != 0) {
+          uint32_t diff = now - id(treadmill_time_last);
+          elapsed_ms += diff;   // накапливаем миллисекунды
+        }
+      }
+
+      id(treadmill_time_last) = now;
+
+      return elapsed_ms / 1000;  // наружу — секунды
+    update_interval: 1s
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    icon: "mdi:timer-play-outline"
+    on_value:
+      - component.update: total_calories
+      - lambda: |-
+          int total = (int)x;
+          int hours = total / 3600;
+          int minutes = (total % 3600) / 60;
+          int seconds = total % 60;
+
+          char buffer[9];
+          sprintf(buffer, "%02d:%02d:%02d", hours, minutes, seconds);
+          //id(treadmill_time_formatted).publish_state(buffer);
+
+          if ((id(motor_running) || id(pause_active)) && (id(current_page) == 1)) {
+            int total_minutes = total / 60;
+            char time_str[8];
+            snprintf(time_str, sizeof(time_str), "%02d:%02d", total_minutes, seconds);
+            id(display_nextion).set_component_text("t3", time_str);
+          }
+    filters:
+      - delta: 0.05   # публиковать только если изменилась ≥ 0.05 (чтобы не спамить в логах)
+
+
+# Treadmill Distance — расчёт пройденной дистанции.
+# При выключенном моторе сбрасывается, при паузе замирает,
+# при работе мотора накапливается каждую секунду (км/ч → км/сек).
+# Значение хранится во внутренней переменной, обновляется раз в секунду
+# и отправляется на дисплей Nextion (t2).
+  - platform: template
+    name: "Treadmill Distance"
+    id: treadmill_distance_km
+    lambda: |-
+      static float current_distance_km = 0.0;
+
+      // Если пауза активна — дистанция замирает
+      if (id(pause_active)) {
+        return current_distance_km;
+      }
+
+      // Если мотор выключен (и не пауза) — сбрасываем дистанцию
+      if (!id(motor_running)) {
+        current_distance_km = 0.0;
+        return current_distance_km;
+      }
+
+      // При работающем моторе и без паузы считаем дистанцию
+      float speed_kph = id(target_speed) / 10.0;
+      float distance_increment_km = speed_kph / 3600.0;  // км/ч → км/сек
+      current_distance_km += distance_increment_km;
+
+      return current_distance_km;
+    on_value:
+      - lambda: |-
+          if (id(current_page) == 1) {
+            char distance_str[10];
+            sprintf(distance_str, "%.2f", id(treadmill_distance_km).state);
+            id(display_nextion).set_component_text("t2", distance_str);
+          }
+    unit_of_measurement: "km"
+    accuracy_decimals: 2
+    update_interval: 1s
+    icon: "mdi:map-marker-distance"
+    state_class: measurement
+    filters:
+      - delta: 0.01   # публиковать только если изменилась ≥ 0.05 км/ч (чтобы не спамить в логах)
+
+# Raw Treadmill Data — счётчик импульсов энкодера (GPIO16).
+# Считает фронты (rising_edge), фильтр 13 мкс от дребезга.
+# Публикует частоту импульсов (pulses/s) каждые 250 мс.
+# Используется как источник для расчёта скорости.
+  - platform: pulse_counter
+    pin:
+      number: GPIO16
+      mode:
+        input: true
+        pullup: true
+    name: "Raw Treadmill Data"
+    id: treadmill_raw_data
+    unit_of_measurement: "pulses/s"
+    accuracy_decimals: 0
+    update_interval: 250ms
+    count_mode:
+      rising_edge: INCREMENT
+      falling_edge: DISABLE
+    internal_filter: 13us
+    entity_category: diagnostic
+    filters:
+     # Публикуем только при изменении значения на 1 импульс.
+     # Это убирает дубли "0 pulses/s" в логе, при стоящей дорожке
+     # значение публикуется только один раз (пока не изменится).
+     - delta: 1
+
+
+# Treadmill Speed Motor — фактическая скорость по данным энкодера.
+# Рассчитывается из частоты импульсов с учётом окружности вала и редуктора.
+# Если импульсов нет → после 2 циклов treadmill_running = false, скорость = 0.
+# Если есть импульсы → treadmill_running = true, скорость пересчитывается.
+# Обновляется каждую секунду, используется для отображения реальной скорости.
+  - platform: template
+    name: "Treadmill Speed Motor"
+    id: treadmill_speed_actual
+    unit_of_measurement: "km/h"
+    accuracy_decimals: 1
+    lambda: |-
+      float rc = id(roller_circumference);
+      float pulses_per_rotation = 144.0;
+      float gr_r = id(gear_ratio);
+      float raw_pulses = id(treadmill_raw_data).state;
+      if (raw_pulses == 0.0) {
+        if (id(treadmill_running)) {
+          id(run_stopped_timer)++;
+          if (id(run_stopped_timer) >= 2) {
+            id(treadmill_running) = false;
+          }
+        }
+        return 0.0;
+      }
+      float speed_kph = (raw_pulses / pulses_per_rotation / gr_r) * rc * 3.6;
+      id(treadmill_running) = true;
+      id(run_stopped_timer) = 0;
+      return speed_kph;
+    update_interval: 1s
+    icon: "mdi:run"
+    filters:
+      - delta: 0.05   # публиковать только если изменилась ≥ 0.05 (чтобы не спамить в логах)
+    # filters:
+    #   - exponential_moving_average:
+    #       alpha: 0.25
+    #       send_every: 1
+
+
+# Датчик пульса по BLE (GATT characteristic 0x2A37, Heart Rate Measurement)
+# 1. Получает данные о пульсе с фитнес-браслета через BLE.
+# 2. Если устройство не подключено — сбрасывает отображение на дисплее (серый значок, "-").
+# 3. При получении значения:
+#    - Определяет текущую зону пульса на основе max_heart_rate:
+#        Зона 0: ниже 50% HRmax
+#        Зона 1: 50–60% HRmax
+#        Зона 2: 60–70% HRmax
+#        Зона 3: 70–80% HRmax
+#        Зона 4: 80–90% HRmax
+#        Зона 5: ≥90% HRmax
+#    - Сохраняет номер зоны в переменную current_zone.
+#    - Подбирает картинку и цветовую заливку для дисплея Nextion в зависимости от зоны.
+#    - Обновляет текст (ЧСС) и иконку только при изменении, чтобы не перегружать дисплей.
+  - platform: ble_client
+    type: characteristic
+    ble_client_id: fit_smart
+    name: "Heart Rate"
+    id: heart_rate_sensor
+    service_uuid: "180d"
+    characteristic_uuid: "2a37"
+    notify: true
+    update_interval: never
+    lambda: |-
+      if (!id(fit_smart).connected() || x.size() < 2) {
+        return NAN; 
+      }
+
+      uint8_t flags = x[0];
+      uint16_t heart_rate = x[1];
+      if (flags & 0x01) {
+        heart_rate = (x[2] << 8) | x[1]; // 16-битное значение
+      }
+      return (float)heart_rate;
+    unit_of_measurement: "bpm"
+    icon: "mdi:heart-pulse"
+    on_value:
+      - lambda: |-
+          static int last_heart_rate = -1;  // кэш текста
+          static int last_zone = -1;        // кэш зоны
+
+          int hr = (int)x;
+          if (isnan(x)) {
+            if (id(current_page) == 1) {        
+              id(display_nextion).send_command_printf("p0.pic=%d;t0.txt=\"-\";t0.bco=%d", 7, 14792);
+              ESP_LOGI("Nextion", "BLE disconnected, reset HR display");
+            }
+            return;
+          }
+
+          // зоны
+          float max_hr = id(max_heart_rate);
+          float min_zone_1 = max_hr * 0.50;
+          float max_zone_1 = max_hr * 0.60;
+          float max_zone_2 = max_hr * 0.70;
+          float max_zone_3 = max_hr * 0.80;
+          float max_zone_4 = max_hr * 0.90;
+
+          int heart_rate_zone = 0;
+          if (hr < min_zone_1) heart_rate_zone = 0;
+          else if (hr < max_zone_1) heart_rate_zone = 1;
+          else if (hr < max_zone_2) heart_rate_zone = 2;
+          else if (hr < max_zone_3) heart_rate_zone = 3;
+          else if (hr < max_zone_4) heart_rate_zone = 4;
+          else heart_rate_zone = 5;
+
+          id(current_zone) = heart_rate_zone;
+
+          // обновляем текст пульса всегда при изменении
+          if (id(current_page) == 1 && hr != last_heart_rate) {
+            id(display_nextion).send_command_printf("t0.txt=\"%d\"", hr);
+            ESP_LOGI("Nextion", "Update HR text: %d", hr);
+            last_heart_rate = hr;
+          }
+
+          // картинка и фон — при смене зоны ИЛИ
+          if ((id(current_page) == 1) && heart_rate_zone != last_zone) {
+            uint16_t picture_ids[] = {7, 2, 3, 4, 5, 6};
+            uint16_t colors[]      = {14792, 15487, 11744, 64992, 64294, 63688};
+
+            uint16_t picture_id = picture_ids[heart_rate_zone];
+            uint16_t t0_bco     = colors[heart_rate_zone];
+
+            id(display_nextion).send_command_printf("p0.pic=%d", picture_id);
+            id(display_nextion).send_command_printf("t0.bco=%d", t0_bco);
+
+            ESP_LOGI("Nextion", "Update HR zone: %d", heart_rate_zone);
+            last_zone = heart_rate_zone;
+          }
+
+# Battery Level (BLE) — уровень заряда устройства fit_smart.
+# Читает характеристику 0x2A19 из сервиса 0x180F через ble_client.
+# Работает по уведомлениям (notify), без активного опроса.
+# Если устройство не подключено или данные пустые → возвращает 0.0.
+# Значение в процентах (%), отображается иконкой батареи.
+  - platform: ble_client
+    type: characteristic
+    ble_client_id: fit_smart
+    name: "Battery Level"
+    id: battery_level_sensor
+    service_uuid: "180F"
+    characteristic_uuid: "2A19"
+    notify: true
+    update_interval: never  # Отключаем активный опрос
+    lambda: |-
+      if (!id(fit_smart).connected()) {
+        return 0.0;  // Изменено с NAN на 0.0
+      }
+      if (x.size() < 1) return 0.0;  // Изменено с NAN на 0.0
+      uint8_t battery_level = x[0];
+      return (float)battery_level;
+    unit_of_measurement: "%"
+    icon: "mdi:battery"
+
+
+# esp32_ble_tracker — включает активное сканирование BLE‑устройств.
+# При необходимости можно задать параметры интервала и окна (закомментированы).

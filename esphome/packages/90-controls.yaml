@@ -1,0 +1,1019 @@
+select:
+# Профиль разгона дорожки (варианты: Soft / Normal / Fast / Technogym)
+  - platform: template
+    name: "Acceleration Profile"
+    id: accel_profile
+    optimistic: true
+    options:
+      - "Soft"
+      - "Normal"
+      - "Fast"
+      - "Technogym"
+    initial_option: "Soft"
+
+# Профиль коррекции скорости (варианты: Soft / Precise / Aggressive)
+  - platform: template
+    name: "Speed Correction Profile"
+    id: speed_corr_profile
+    optimistic: true
+    options:
+      - "Soft"
+      - "Precise"
+      - "Aggressive"
+    initial_option: "Soft"
+
+# Выбор тренировочной программы
+# При смене значения автоматически задаются параметры:
+#   - время тренировки, разминки и заминки
+#   - выбор пульсовой зоны (zone_select)
+#   - сброс/инициализация таймеров и флагов (remaining_run_time, manual_stop, interval_phase)
+# Таким образом, выбор программы сразу подготавливает дорожку к нужному сценарию.
+  - platform: template
+    name: "Workout Program"
+    id: program_select
+    restore_value: no
+    options:
+      - "None"
+      - "Pulse Zone"
+      - "Fat Burn"
+      - "Recovery run"
+      - "HIIT"
+    initial_option: "None"
+    optimistic: true
+    on_value:
+      - lambda: |-
+          std::string program = x;
+
+          if (program == "None") {
+            id(zone_select).publish_state("1");
+            id(set_run_time).publish_state(00.0); //время тренировки 
+            id(set_warm_up_time).publish_state(00.0); //время разминки
+            id(set_cool_down_time).publish_state(00.0); //время заминки
+            //id(stop_program).execute();
+          } else if (program == "Fat Burn") {
+            id(zone_select).publish_state("2");
+            id(set_run_time).publish_state(40.0); //время тренировки 
+            id(set_warm_up_time).publish_state(03.0); //время разминки
+            id(set_cool_down_time).publish_state(03.0); //время заминки
+            id(remaining_run_time) = 40 * 60;
+            id(manual_stop) = false;
+          } else if (program == "Recovery run") {
+            id(zone_select).publish_state("1");
+            id(set_run_time).publish_state(25.0);
+            id(set_warm_up_time).publish_state(03.0); //время разминки
+            id(set_cool_down_time).publish_state(03.0); //время заминки
+            id(remaining_run_time) = 25 * 60;
+            id(manual_stop) = false;
+          } else if (program == "HIIT") {
+            // --- Устанавливаем зону по умолчанию при выборе---
+            id(zone_select).publish_state("4");
+
+            id(set_run_time).publish_state(0.0);      // время тренировки = 0
+            id(remaining_run_time) = 0;               // не отсчитываем время
+            id(set_warm_up_time).publish_state(0.0);  // при желании можно убрать разминку
+            id(set_cool_down_time).publish_state(0.0);// и заминку, если они не нужны
+            id(interval_phase) = "high";
+            id(interval_time) = 0;
+            id(manual_stop) = false;
+          
+          } else if (program == "Pulse Zone") {
+            id(set_run_time).publish_state(30.0);
+            id(set_warm_up_time).publish_state(03.0); //время разминки
+            id(set_cool_down_time).publish_state(03.0); //время заминки
+            id(manual_stop) = false;
+          }
+
+
+# Gender — выбор пола (Male/Female).
+# При изменении обновляет Dual State Button на дисплее Nextion
+# и запускает пересчёт пульсовых зон.
+  - platform: template
+    name: "Gender"
+    id: gender_select
+    restore_value: yes
+    options:
+      - "Male"
+      - "Female"
+    initial_option: "Male"
+    optimistic: true
+    on_value:
+      - lambda: |-
+          bool is_male = (id(gender_select).current_option() == "Male");
+          id(display_nextion).send_command_printf("age.bt0.val=%d", is_male ? 0 : 1);
+          ESP_LOGI("Nextion", "Gender synced: %s", is_male ? "Male" : "Female");
+
+      - script.execute: update_heart_rate_zones
+
+# Heart Rate Zone — выбор зоны пульса (1–5).
+# При изменении запускает скрипт обновления зон.
+  - platform: template
+    name: "Heart Rate Zone"
+    id: zone_select
+    restore_value: no
+    options:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+    initial_option: "1"
+    optimistic: true
+    on_value:
+      - script.execute: update_heart_rate_zones
+
+# Map — выбор маршрута (реальные и Zwift-треки).
+# Используется для отображения и запуска тренировок по заданному маршруту.
+  - platform: template
+    name: "Map"
+    id: map_select
+    restore_value: no
+    options:
+      - "None"
+      - "Russia, Ufa 3.4km"                           #1
+      - "Russia, Ufa Sipailovo 4.4km"                 #2
+      - "Russia, Ufa Kashkadan 1.7km"                 #3
+      - "Zwift Epic Run 6.2km"                        #4
+      - "Zwift 5K loop 5.0km"                         #5
+      - "Zwift Mountain Mash 5.9km"                   #6
+      - "Zwift Chili Pepper 8.0km"                    #7
+      - "Zwift Hilly Route Reverse Run 9.2km"         #8
+      - "Zwift Ocean Blvd 11.2km"                     #9
+      - "Zwift Beach Island Loop 12.8km"              #10
+      - "Zwift Jon’s Route 12.6km"                    #11
+    initial_option: "None"
+    optimistic: true
+    # on_value:
+    #   - script.execute: update_heart_rate_zones
+
+
+  # - platform: template
+  #   name: "UART Data Bits"
+  #   id: uart_data_bits
+  #   options:
+  #     - "5"
+  #     - "6"
+  #     - "7"
+  #     - "8"
+  #   initial_option: "8"
+  #   optimistic: true
+  #   restore_value: true
+  #   entity_category: config
+  #   icon: "mdi:numeric"
+  #   set_action:
+  #     - lambda: |-
+  #         id(uart_bus).flush();
+  #         uint8_t new_data_bits = (uint8_t)stoi(x);
+  #         ESP_LOGI("UART", "Changing data bits from %i to %i", id(uart_bus).get_data_bits(), new_data_bits);
+  #         if (id(uart_bus).get_data_bits() != new_data_bits) {
+  #           id(uart_bus).set_data_bits(new_data_bits);
+  #           id(uart_bus).load_settings();
+  #         }
+
+  # - platform: template
+  #   name: "UART Parity"
+  #   id: uart_parity
+  #   options:
+  #     - "NONE"
+  #     - "EVEN"
+  #     - "ODD"
+  #   initial_option: "NONE"
+  #   optimistic: true
+  #   restore_value: true
+  #   entity_category: config
+  #   icon: "mdi:check-circle"
+  #   set_action:
+  #     - lambda: |-
+  #         id(uart_bus).flush();
+  #         uart::UARTParityOptions new_parity;
+  #         if (x == "NONE") {
+  #           new_parity = uart::UARTParityOptions::UART_CONFIG_PARITY_NONE;
+  #         } else if (x == "EVEN") {
+  #           new_parity = uart::UARTParityOptions::UART_CONFIG_PARITY_EVEN;
+  #         } else {
+  #           new_parity = uart::UARTParityOptions::UART_CONFIG_PARITY_ODD;
+  #         }
+  #         ESP_LOGI("UART", "Changing parity to %s", x.c_str());
+  #         id(uart_bus).set_parity(new_parity);
+  #         id(uart_bus).load_settings();
+
+  # - platform: template
+  #   name: "UART Stop Bits"
+  #   id: uart_stop_bits
+  #   options:
+  #     - "1"
+  #     - "2"
+  #   initial_option: "1"
+  #   optimistic: true
+  #   restore_value: true
+  #   entity_category: config
+  #   icon: "mdi:stop-circle"
+  #   set_action:
+  #     - lambda: |-
+  #         id(uart_bus).flush();
+  #         uint8_t new_stop_bits = (uint8_t)stoi(x);
+  #         ESP_LOGI("UART", "Changing stop bits from %i to %i", id(uart_bus).get_stop_bits(), new_stop_bits);
+  #         if (id(uart_bus).get_stop_bits() != new_stop_bits) {
+  #           id(uart_bus).set_stop_bits(new_stop_bits);
+  #           id(uart_bus).load_settings();
+  #         }
+
+# Number-сенсоры (числовые параметры)
+number:
+  # Температура аварийной остановки двигателя.
+  # Повторный запуск разрешается после охлаждения на 10 C ниже этого порога.
+  - platform: template
+    name: "Overheat Stop Temperature"
+    id: overheat_stop_temperature
+    min_value: 50
+    max_value: 110
+    step: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    entity_category: config
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 85
+
+  # === BEGIN EXPERIMENTAL_KICKR_RUN ===
+  # ------------------------------------------------------------
+  # Настройки сопоставления реального уклона Zwift и уровней дорожки
+  #
+  # 1. Treadmill Maximum Incline Level:
+  #    максимальное число, которое принимает контроллер дорожки.
+  #    Для текущей дорожки это 15. Если у другой дорожки максимум 12,
+  #    пользователь указывает 12.
+  #
+  # 2. Treadmill Real Grade At Maximum:
+  #    реальный уклон полотна в процентах на максимальном уровне.
+  #    Пользователь измеряет подъём полотна и вводит полученное значение.
+  #    Например, если уровень 15 физически даёт 5%, здесь указывается 5.0.
+  #
+  # 3. Zwift Incline Intensity:
+  #    дополнительная регулировка силы автонаклона.
+  #    100% — полное рассчитанное значение, 50% — половина, 0% — всегда 0.
+  #
+  # Формула:
+  #   уровень = уклон Zwift * максимальный уровень / реальный максимум
+  #             * интенсивность / 100
+  # ------------------------------------------------------------
+  - platform: template
+    name: "Treadmill Maximum Incline Level"
+    id: treadmill_max_incline_level
+    min_value: 1
+    max_value: 15
+    step: 1
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: yes
+    initial_value: 15
+
+  - platform: template
+    name: "Treadmill Real Grade At Maximum"
+    id: treadmill_real_max_grade
+    min_value: 0.5
+    max_value: 30
+    step: 0.1
+    unit_of_measurement: "%"
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: yes
+    initial_value: 15
+
+  - platform: template
+    name: "Zwift Incline Intensity"
+    id: zwift_incline_intensity
+    min_value: 0
+    max_value: 100
+    step: 5
+    unit_of_measurement: "%"
+    mode: slider
+    entity_category: config
+    optimistic: true
+    restore_value: yes
+    initial_value: 100
+  # === END EXPERIMENTAL_KICKR_RUN ===
+
+# ============================
+# Параметр HIIT High Zone (через number)
+# ----------------------------
+# Этот параметр задаёт максимальную зону пульса для HIIT.
+# Вместо выбора из списка (select) теперь можно напрямую указать число.
+# ============================
+  # - platform: template
+  #   name: "HIIT High Zone"
+  #   id: hiit_high_zone
+  #   optimistic: true
+  #   min_value: 1       # минимальная зона
+  #   max_value: 5       # максимальная зона
+  #   step: 1            # шаг изменения
+  #   unit_of_measurement: "zone"
+  #   initial_value: 4   # по умолчанию зона 4
+
+
+  # ============================
+  # Параметры для обычных пульсовых программ
+  # ----------------------------
+  # Pulse Adjust Interval — задаёт, как часто (в секундах) 
+  # будет выполняться коррекция скорости по пульсу 
+  # в обычных программах (Pulse Zone, Fat Burn, Recovery run).
+  # Не влияет на HIIT.
+  # ============================
+  - platform: template
+    name: "Pulse Adjust Interval"
+    id: pulse_adjust_interval
+    optimistic: true
+    min_value: 2       # минимум 2 секунды
+    max_value: 12      # максимум 12 секунд
+    step: 2            # шаг изменения
+    unit_of_measurement: "s"
+    initial_value: 4   # по умолчанию 4 секунды
+
+  # ============================
+  # Параметры HIIT (можно менять из интерфейса)
+  # ----------------------------
+  # Эти параметры управляют логикой интервальной тренировки:
+  # - HIIT High Duration — длительность фазы высокой интенсивности.
+  # - HIIT Low Duration  — длительность фазы низкой интенсивности.
+  # - HIIT Low Speed     — скорость в фазе низкой интенсивности.
+  # - HIIT Cycles        — количество повторов (high+low).
+  # ============================
+  - platform: template
+    name: "HIIT High Duration"
+    id: hiit_high_duration
+    optimistic: true
+    min_value: 30
+    max_value: 600
+    step: 30
+    unit_of_measurement: "s"
+    initial_value: 120   # по умолчанию 2 минуты
+
+  - platform: template
+    name: "HIIT Low Duration"
+    id: hiit_low_duration
+    optimistic: true
+    min_value: 30
+    max_value: 600
+    step: 30
+    unit_of_measurement: "s"
+    initial_value: 120   # по умолчанию 2 минуты
+
+  - platform: template
+    name: "HIIT Low Speed"
+    id: hiit_low_speed
+    optimistic: true
+    min_value: 3.0
+    max_value: 8.0
+    step: 0.5
+    unit_of_measurement: "km/h"
+    initial_value: 5.0   # по умолчанию 5 км/ч
+
+  - platform: template
+    name: "HIIT Cycles"
+    id: hiit_cycles
+    optimistic: true
+    min_value: 1
+    max_value: 20
+    step: 1
+    initial_value: 6     # по умолчанию 6 повторов
+
+
+# Free Run Step — шаг изменения скорости в свободном режиме (0.1–1.0 км/ч).
+  - platform: template
+    name: "Free Run Step"
+    id: free_run_step
+    optimistic: true
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    unit_of_measurement: "км/ч"
+    initial_value: 0.2   # по умолчанию 0.2 км/ч за секунду
+
+# Age — возраст пользователя (16–100 лет).
+# При изменении обновляет поле на дисплее и пересчитывает пульсовые зоны.
+  - platform: template
+    name: "Age"
+    id: age_number
+    min_value: 16
+    max_value: 100
+    step: 1
+    initial_value: 30
+    optimistic: true
+    restore_value: yes
+    on_value:
+      - lambda: |-
+          //if (id(age).state) {
+          id(display_nextion).send_command_printf("age.n_age.val=%d", (int)id(age_number).state);
+          ESP_LOGI("Nextion", "Sending command for age.n_age.val");
+          //}
+      - script.execute: update_heart_rate_zones
+
+# Weight — вес пользователя (40–100 кг).
+# При изменении отправляется на дисплей Nextion.
+  - platform: template
+    name: "weight"
+    id: weight_kg
+    min_value: 40
+    max_value: 100
+    step: 1
+    initial_value: 70
+    optimistic: true
+    restore_value: yes
+    on_value:
+      - lambda: |-
+          // Отправляем вес на дисплей 
+          id(display_nextion).send_command_printf("age.n_weight.val=%d", (int)id(weight_kg).state);
+          ESP_LOGI("Nextion", "Sending weight to age.n_weight: %d kg", (int)id(weight_kg).state);
+          //ESP_LOGI("Settings", "Weight updated to: %d kg", (int)id(weight_kg).state);
+
+# Set Speed — целевая скорость (0.6–18.0 км/ч).
+# При изменении обновляет goal и отправляет уведомление FTMS (Target Speed Changed).
+  - platform: template
+    name: "Set Speed"
+    id: set_speed
+    min_value: 0.6
+    max_value: 18.0
+    step: 0.1
+    unit_of_measurement: "km/h"
+    icon: "mdi:speedometer"
+    optimistic: true
+    restore_value: no
+    initial_value: 0.0
+    on_value:
+      - lambda: |-
+          if (id(auto_mode)) return;
+
+          float speed = x;
+          int target = static_cast<int>(speed * 10);  // десятые км/ч
+          if (target < 6 && target != 0) target = 6;
+          if (target > 180) target = 180;
+
+          if (id(target_speed_goal) != target) {
+            id(target_speed_goal) = target;
+
+            // --- FTMS: Target Speed Changed (0x05) ---
+            uint16_t ftms_speed = target * 10;  // значение в 0.01 км/ч
+            uint8_t low  = ftms_speed & 0xFF;
+            uint8_t high = ftms_speed >> 8;
+
+            id(ftms_status_char).set_value({0x05, low, high});
+            id(ftms_status_char).notify();
+            id(last_ftms_status) = {0x05, low, high};
+            id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x05));
+
+            ESP_LOGI("treadmill", "Set Speed → %.1f км/ч (FTMS Target Speed Changed 0x05)", speed);
+          }
+
+        
+# Set Incline — целевой наклон (0–15%).
+# При изменении обновляет goal и отправляет уведомление FTMS (Target Incline Changed).
+  - platform: template
+    name: "Set Incline"
+    id: set_incline
+    min_value: 0
+    max_value: 15
+    step: 1
+    unit_of_measurement: "%"
+    icon: "mdi:angle-acute"
+    optimistic: true
+    on_value:
+      - lambda: |-
+          float incline = x;
+          int16_t incline_value = static_cast<int16_t>(incline * 10);  // 0.1% шаг, signed (может быть отрицательным в теории)
+
+          if (id(target_incline) != incline_value) {
+            id(target_incline_goal) = incline_value;
+            id(target_incline) = incline_value;
+
+            // --- FTMS: Target Incline Changed (0x06) ---
+            uint8_t low  = static_cast<uint8_t>(incline_value & 0xFF);
+            uint8_t high = static_cast<uint8_t>(incline_value >> 8);
+
+            id(ftms_status_char).set_value({0x06, low, high});
+            id(ftms_status_char).notify();
+            id(last_ftms_status) = {0x06, low, high};
+            id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x06));
+
+            ESP_LOGI("treadmill", "Set Incline → %.1f%% (FTMS Target Incline Changed 0x06)", incline);
+          }
+
+# Set Warm-up Time — длительность разминки (0–10 мин).
+# При изменении обновляет поле на дисплее.
+  - platform: template
+    name: "Set Warm-up Time"
+    id: set_warm_up_time
+    min_value: 0
+    max_value: 10
+    step: 1
+    unit_of_measurement: "min"
+    icon: "mdi:timer-play-outline"
+    optimistic: true
+    restore_value: yes
+    initial_value: 0  # По умолчанию 5 минут
+    on_value:
+      - lambda: |-
+          //if (id(age).state) {
+          id(display_nextion).send_command_printf("Time.n_warm.val=%d", (int)id(set_warm_up_time).state);
+          ESP_LOGI("Nextion", "Sending command for Time.n_warm.val");
+          //}
+
+# Set Run Time — длительность основной тренировки (0–240 мин).
+# При изменении обновляет оставшееся время (remaining_run_time) и поле на дисплее.
+  - platform: template
+    name: "Set Run Time"
+    id: set_run_time
+    min_value: 0
+    max_value: 240
+    step: 1
+    unit_of_measurement: "min"
+    icon: "mdi:timer"
+    optimistic: true
+    restore_value: yes
+    initial_value: 0
+    on_value:
+      - lambda: |- 
+          int new_time_seconds = (int)(x * 60);  // Преобразуем минуты в секунды
+          if (id(motor_running)) {
+            if (id(remaining_warm_up_time) <= 0 && !id(warm_up_active)) {
+              // Обновляем только во время основной программы
+              id(remaining_run_time) = new_time_seconds;
+            } else if (id(remaining_warm_up_time) > 0 || id(warm_up_active)) {
+              // Если идет разминка, восстанавливаем исходное значение ползунка
+              id(set_run_time).publish_state(id(set_run_time).state);
+            }
+          } else {
+            // Если мотор не работает, задаем начальное значение
+            id(remaining_run_time) = new_time_seconds;
+          }
+
+          //if (id(age).state) {
+          id(display_nextion).send_command_printf("Time.n_min.val=%d", (int)id(set_run_time).state);
+          ESP_LOGI("Nextion", "Sending command for Time.n_min.val");
+          //}
+
+# Set Cool-down Time — длительность заминки (0–10 мин).
+# При изменении обновляет поле на дисплее.
+  - platform: template
+    name: "Set Cool-down Time"
+    id: set_cool_down_time
+    min_value: 0
+    max_value: 10
+    step: 1
+    unit_of_measurement: "min"
+    icon: "mdi:timer-stop-outline"
+    optimistic: true
+    restore_value: yes
+    initial_value: 0  # По умолчанию 5 минут
+    on_value:
+      - lambda: |-
+          //if (id(age).state) {
+          id(display_nextion).send_command_printf("Time.n_cool.val=%d", (int)id(set_cool_down_time).state);
+          ESP_LOGI("Nextion", "Sending command for Time.n_cool.val");
+          //}
+
+#Компонент number для эмуляции пульса для отладки
+  - platform: template
+    name: "Test Heart Rate"
+    id: test_heart_rate
+    min_value: 60
+    max_value: 200
+    step: 1
+    unit_of_measurement: "bpm"
+    icon: "mdi:heart-pulse"
+    entity_category: diagnostic
+    optimistic: true
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(emulate_ble_connected);'
+            then:
+              - sensor.template.publish:
+                  id: heart_rate_sensor
+                  state: !lambda 'return x;'
+              - lambda: |-
+                  ESP_LOGI("TEST", "Test Heart Rate set to: %.0f bpm", x);
+                  // Эмуляция обработки BLE-логики
+                  float heart_rate = x;
+                  float max_hr = id(max_heart_rate);
+                  float min_zone_1 = max_hr * 0.50;
+                  float max_zone_1 = max_hr * 0.60;
+                  float min_zone_2 = max_hr * 0.60;
+                  float max_zone_2 = max_hr * 0.70;
+                  float min_zone_3 = max_hr * 0.70;
+                  float max_zone_3 = max_hr * 0.80;
+                  float min_zone_4 = max_hr * 0.80;
+                  float max_zone_4 = max_hr * 0.90;
+                  float min_zone_5 = max_hr * 0.90;
+                  float max_zone_5 = max_hr;
+
+                  // Определяем текущую зону
+                  int heart_rate_zone = 0;
+                  if (heart_rate < min_zone_1) {
+                    heart_rate_zone = 0;
+                  } else if (heart_rate < max_zone_1) {
+                    heart_rate_zone = 1;
+                  } else if (heart_rate < max_zone_2) {
+                    heart_rate_zone = 2;
+                  } else if (heart_rate < max_zone_3) {
+                    heart_rate_zone = 3;
+                  } else if (heart_rate < max_zone_4) {
+                    heart_rate_zone = 4;
+                  } else {
+                    heart_rate_zone = 5;
+                  }
+                  id(current_zone) = heart_rate_zone;
+                  ESP_LOGI("TEST", "Heart Rate: %.0f, Current Zone: %d", heart_rate, heart_rate_zone);
+
+                  // Обновление дисплея
+                  if (id(current_page) == 1) {
+                    char heart_str[10];
+                    sprintf(heart_str, "%.0f", heart_rate);
+                    id(display_nextion).send_command_printf("t0.txt=\"%s\"", heart_str);
+                    ESP_LOGI("Nextion", "Sending command for t0.txt");
+
+                    uint16_t picture_id = 7; // Серый по умолчанию
+                    uint16_t t0_bco = 21162; // Серый по умолчанию
+                    if (heart_rate < min_zone_1) {
+                      picture_id = 7; // Серый
+                    } else if (heart_rate < max_zone_1) {
+                      picture_id = 2; // Голубой
+                      t0_bco = 15487;
+                    } else if (heart_rate < max_zone_2) {
+                      picture_id = 3; // Зелёный
+                      t0_bco = 11744;
+                    } else if (heart_rate < max_zone_3) {
+                      picture_id = 4; // Жёлтый
+                      t0_bco = 64992;
+                    } else if (heart_rate < max_zone_4) {
+                      picture_id = 5; // Оранжевый
+                      t0_bco = 64294;
+                    } else {
+                      picture_id = 6; // Красный
+                      t0_bco = 64040;
+                    }
+                    id(display_nextion).send_command_printf("p0.pic=%d", picture_id);
+                    id(display_nextion).send_command_printf("t0.bco=%d", t0_bco);
+                    ESP_LOGI("Nextion", "Sending command for p0.pic and t0.bco");
+                  }
+
+  - platform: template
+    name: "UART Baud Rate"
+    id: uart_baud_rate
+    min_value: 1000
+    max_value: 115200
+    step: 100
+    initial_value: 4800
+    optimistic: true
+    restore_value: no
+    entity_category: config
+    icon: "mdi:swap-horizontal"
+    on_value:
+      - lambda: |-
+          id(uart_bus).flush();  // Очищаем буфер перед сменой скорости
+          uint32_t new_baud_rate = (uint32_t)x;  // Преобразуем значение ползунка в uint32_t
+          ESP_LOGI("UART", "Changing baud rate from %i to %i", id(uart_bus).get_baud_rate(), new_baud_rate);
+          if (id(uart_bus).get_baud_rate() != new_baud_rate) {
+            id(uart_bus).set_baud_rate(new_baud_rate);
+            id(uart_bus).load_settings();
+          }
+
+
+  - platform: template
+    id: treadmill_slider_max
+    name: TM slider max
+    min_value: 60
+    max_value: 120
+    step: 1
+    unit_of_measurement: "cm"
+    entity_category: config
+    mode: slider
+    restore_value: yes
+    optimistic: true
+    initial_value: 85
+    on_value:
+      then:
+        - lambda: |-
+            id(display_nextion).send_command_printf("speed.h_position.maxval=%d", (int)id(treadmill_slider_max).state);
+            id(display_nextion).send_command_printf("speed.h_position1.maxval=%d", (int)id(treadmill_slider_max).state);
+            id(display_nextion).send_command_printf("caldistspeed.h_position.maxval=%d", (int)id(treadmill_slider_max).state);
+            ESP_LOGI("Nextion", "Sending command for speed.h_position.maxval and speed.h_position1.maxval and caldistspeed.h_position.maxval");
+
+
+  - platform: template
+    id: treadmill_slider_min
+    name: TM slider min
+    min_value: 0
+    max_value: 40
+    step: 1
+    unit_of_measurement: "cm"
+    entity_category: config
+    mode: slider
+    restore_value: yes
+    optimistic: true
+    initial_value: 25
+    on_value:
+      then:
+        - lambda: |-
+            id(display_nextion).send_command_printf("speed.h_position.minval=%d", (int)id(treadmill_slider_min).state);
+            id(display_nextion).send_command_printf("speed.h_position1.minval=%d", (int)id(treadmill_slider_min).state);
+            id(display_nextion).send_command_printf("caldistspeed.h_position.minval=%d", (int)id(treadmill_slider_min).state);
+            ESP_LOGI("Nextion", "Sending command for speed.h_position.minval and speed.h_position1.minval and caldistspeed.h_position.minval");
+
+
+  - platform: template
+    id: treadmill_length
+    name: TM Length
+    min_value: 80
+    max_value: 140
+    step: 1
+    unit_of_measurement: "cm"
+    entity_category: config
+    mode: slider
+    restore_value: yes
+    optimistic: true
+    initial_value: 100
+    on_value:
+      then:
+        - lambda: |-
+            id(display_nextion).set_component_text_printf("caldistspeed.t_lenght", "%d", (int)id(treadmill_length).state);
+  - platform: template
+    id: accel_strong_cm
+    name: TM Strong Accel
+    min_value: 10
+    max_value: 50
+    step: 1
+    unit_of_measurement: "cm"
+    entity_category: config
+    mode: slider
+    restore_value: yes
+    optimistic: true
+    initial_value: 20
+  - platform: template
+    id: accel_cm
+    name: TM Accel
+    min_value: 20
+    max_value: 60
+    step: 1
+    unit_of_measurement: "cm"
+    entity_category: config
+    mode: slider
+    optimistic: true
+    restore_value: yes
+    initial_value: 35
+    on_value:
+      then:
+        - lambda: |-
+            id(display_nextion).set_component_text_printf("caldistspeed.t_speed_up", "%d", (int)id(accel_cm).state);
+  - platform: template
+    id: decel_cm
+    name: TM Decel
+    min_value: 60
+    max_value: 90
+    step: 1
+    unit_of_measurement: "cm"
+    entity_category: config
+    mode: slider
+    optimistic: true
+    restore_value: yes
+    initial_value: 62
+    on_value:
+      then:
+        - lambda: |-
+            id(display_nextion).set_component_text_printf("caldistspeed.t_speed_down", "%d", (int)id(decel_cm).state);
+  - platform: template
+    id: decel_strong_cm
+    name: TM Strong Decel
+    min_value: 30
+    max_value: 100
+    step: 1
+    unit_of_measurement: "cm"
+    restore_value: yes
+    entity_category: config
+    mode: slider
+    optimistic: true
+    initial_value: 70
+
+switch:
+  # === BEGIN EXPERIMENTAL_KICKR_RUN ===
+  # Zwift Auto Incline — разрешает физическое управление наклоном по трассе.
+  # При выключении входящие команды продолжают отображаться в сенсорах
+  # Zwift Requested Incline и Zwift Mapped Treadmill Incline, но значение
+  # Set Incline не меняется. Состояние сохраняется после перезагрузки.
+  - platform: template
+    name: "Zwift Auto Incline"
+    id: zwift_auto_incline
+    icon: "mdi:slope-uphill"
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+  # === END EXPERIMENTAL_KICKR_RUN ===
+
+  - platform: template
+    name: "Diagnostic Mode"
+    id: diagnostic_mode_switch
+    lambda: |-
+      return id(diagnostic_mode);   
+    turn_on_action:
+      - globals.set:
+          id: diagnostic_mode
+          value: 'true'
+    turn_off_action:
+      - globals.set:
+          id: diagnostic_mode
+          value: 'false'
+
+# Gender Switch — переключатель пола с дисплея Nextion (bt0).
+# При значении 1 устанавливает "Female", при 0 — "Male".
+# При изменении обновляет gender_select и запускает пересчёт пульсовых зон.
+  - platform: nextion
+    id: gender_switch
+    name: "Gender Switch"
+    internal: true
+    component_name: bt0  # Соответствует имени в Nextion
+    on_turn_on:  # bt0.val = 1 (Female)
+      - lambda: |-
+          if (id(gender_select).current_option() != "Female") {
+            id(gender_select).publish_state("Female");
+            ESP_LOGI("Settings", "Gender set to Female from bt0");
+            id(update_heart_rate_zones).execute();
+          }
+    on_turn_off:  # bt0.val = 0 (Male)
+      - lambda: |-
+          if (id(gender_select).current_option() != "Male") {
+            id(gender_select).publish_state("Male");
+            ESP_LOGI("Settings", "Gender set to Male from bt0");
+            id(update_heart_rate_zones).execute();
+          }
+
+
+  # - platform: template
+  #   name: "Emulate Heart Rate"
+  #   id: emulate_heart_rate_switch
+  #   entity_category: diagnostic
+  #   optimistic: true
+  #   restore_mode: RESTORE_DEFAULT_OFF
+  #   icon: "mdi:heart-pulse"
+  #   turn_on_action:
+  #     - lambda: |-
+  #         id(emulate_ble_connected) = true;
+  #         ESP_LOGI("SWITCH", "Heart rate emulation enabled");
+  #   turn_off_action:
+  #     - lambda: |-
+  #         id(emulate_ble_connected) = false;
+  #         ESP_LOGI("SWITCH", "Heart rate emulation disabled");
+  #         // Сбрасываем heart_rate_sensor при выключении
+  #         id(heart_rate_sensor).publish_state(NAN);
+  #         // Очищаем дисплей Nextion
+  #         if (id(speed).state) {
+  #           id(display_nextion).send_command_printf("t0.txt=\"--\"");
+  #           id(display_nextion).send_command_printf("p0.pic=7"); // Серый по умолчанию
+  #           id(display_nextion).send_command_printf("t0.bco=21162"); // Серый по умолчанию
+  #           ESP_LOGI("Nextion", "Sending command for t0.txt and p0.pic=7 and t0.bco=21162");
+  #         }
+
+#кнопка nextion для вкл/выкл дисплея по датчику растояния через 1 минуту
+  - platform: nextion
+    name: "Disp. auto on-off"
+    id: bt_display_off
+    component_name: display.bt_display_off
+    on_turn_on:
+      - globals.set:
+          id: bt_display_off_state
+          value: !lambda 'return id(bt_display_off).state;'
+    on_turn_off:
+      - globals.set:
+          id: bt_display_off_state
+          value: !lambda 'return id(bt_display_off).state;'
+
+#кнопка nextion для вкл/выкл безопасного режима по датчику растояния TOF
+  - platform: nextion
+    name: "Safety stop"
+    id: safe_mode_switch
+    component_name: system.bt_savemode
+    on_turn_on:
+      - globals.set:
+          id: safe_mode_switch_state
+          value: !lambda 'return id(safe_mode_switch).state;'
+    on_turn_off:
+      - globals.set:
+          id: safe_mode_switch_state
+          value: !lambda 'return id(safe_mode_switch).state;'
+
+#кнопка nextion для вкл/выкл режима авто отстановки беговой дорожки при перегрева
+  - platform: nextion
+    name: "Overheat stop"
+    id: bt_tempmode
+    component_name: system.bt_tempmode
+    on_turn_on:
+      - globals.set:
+          id: bt_tempmode_state
+          value: 'true'
+      - lambda: |-
+          ESP_LOGI("Overheat", "Protection enabled");
+    on_turn_off:
+      - globals.set:
+          id: bt_tempmode_state
+          value: 'false'
+      - lambda: |-
+          id(overheat_lockout) = false;
+          id(overheat_sensor_fault) = false;
+          ESP_LOGI("Overheat", "Protection disabled");
+          
+
+# кнопка Nextion для вкл/выкл режима автокоррекции скорости по энкодеру
+  - platform: nextion
+    name: "Speed Correction Mode"
+    id: bt_speed_correction
+    component_name: system.bt_speed_corr
+    on_turn_on:
+      - globals.set:
+          id: bt_speed_correction_state
+          value: !lambda 'return id(bt_speed_correction).state;'
+      - lambda: |-
+          ESP_LOGI("Adaptive Correction", "enabled");
+          // При включении адаптива сбрасываем накопитель в текущую цель
+          id(target_speed_goal_float) = id(target_speed) / 10.0;
+          id(display_nextion).send_command_printf("speed.p_sync.pic=96");
+
+    on_turn_off:
+      - globals.set:
+          id: bt_speed_correction_state
+          value: !lambda 'return id(bt_speed_correction).state;'
+      - lambda: |-
+          ESP_LOGI("Adaptive Correction", "disable");
+          // При выключении тоже можно синхронизировать
+          id(target_speed_goal_float) = id(target_speed) / 10.0;
+          id(display_nextion).send_command_printf("speed.p_sync.pic=95");
+
+
+# кнопка режима Free Run (шаблонный switch)
+  - platform: template
+    name: "Free Running Mode"
+    id: free_running_mode_switch
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: |-
+          // Сохраняем текущий режим управления, если он не Free Run
+          if (id(control_mode) != 1) {
+            id(previous_control_mode) = id(control_mode);
+          }
+          // Переключаемся в режим Free Run
+          id(control_mode) = 1;
+          id(free_running_active) = true;
+          ESP_LOGI("FreeRun", "Free Run включён, предыдущий режим: %d", id(previous_control_mode));
+          id(display_nextion).send_command_printf("speed.p_icon_mode.pic=58"); // иконка
+      - script.execute: free_running_mode
+    on_turn_off:
+      - lambda: |-
+          // Восстанавливаем предыдущий режим управления
+          id(control_mode) = id(previous_control_mode);
+          id(free_running_active) = false;
+          ESP_LOGI("FreeRun", "Free Run выключен, восстановлен режим: %d", id(control_mode));
+          // Если активна программа Pulse Zone, возвращаем управление по пульсу
+          if (id(control_mode) == 2) {
+            id(auto_mode) = true;
+            id(display_nextion).send_command_printf("speed.p_icon_mode.pic=59"); // иконка пульс
+            ESP_LOGI("FreeRun", "Возвращено управление по пульсу");
+          } else {
+            id(auto_mode) = false;
+            id(display_nextion).send_command_printf("speed.p_icon_mode.pic=62"); // иконка убрать
+            ESP_LOGI("FreeRun", "Возвращено ручное управление");
+          }
+
+# ***************** Display (Nextion) *****************
+# 1. Подключение Nextion по UART (uart_0)
+#    • Автоматическая загрузка TFT-прошивки по HTTP
+#    • update_interval: 1s — гарантирует вызов lambda ровно раз в секунду
+#    • При переполнении очереди команд — предупреждение в лог
+#
+# 2. Инициализация при старте (on_setup):
+#    • Устанавливает минимальную яркость 20% и синхронизирует слайдер hbright + команда dim
+#    • Настраивает пределы слайдеров скорости (min/max) на всех нужных страницах
+#    • Обновляет текстовые поля калибровки (ускорение, замедление, длина полотна)
+#    • Синхронизирует состояние всех переключателей (display_off, safe_mode, speed_correction, tempmode)
+#    • Между командами — задержки 500 мс для стабильной работы Nextion
+#
+# 3. Отслеживание текущей страницы (on_page):
+#    • Сохраняет номер страницы в глобальную переменную id(current_page)
+#    • По switch(x) выполняет действия **только один раз при открытии страницы**:
+#        – page 0  → сброс выбора карты и программы
+#        – page 1  → показ температуры мотора + запрос нового измерения
+#        – page 3  → отправка возраста, веса, пола
+#        – page 5  → отправка времени тренировки, разминки, заминки
+#        – page 16 → отображение версии ESPHome
+#        – page 17 → показ температуры мотора (страница Motor)
+#
+# 4. Периодическое обновление (lambda вызывается каждую секунду благодаря update_interval: 1s):
+#    • page 1 (Speed)      → обновление поля speed.tstatus (статус программы, кроме HIIT)
+#    • page 19 (Bluetooth) → обновление батареи, пульса и имени устройства при подключении,
+#                             очистка полей при отключении
+#
+# В результате:
+# • Инициализация при входе на страницу — мгновенная и без дублирования
+# • Часто меняющиеся данные (статус, пульс, батарея) — обновляются ровно раз в секунду
+# • Полная совместимость с goto_page() и физическим переключением страниц
+# • Код чистый, соответствует официальным рекомендациям ESPHome 2025+

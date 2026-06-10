@@ -44,6 +44,7 @@ Everything below **Unreleased** is already present in the published GitHub versi
 
 ### Changed
 
+- Split the monolithic ESPHome YAML into 11 local packages without changing the configuration logic.
 - Pause, resume, normal operation, and stop commands now use the common UART queue.
 - Stop now queues both `[SETSPD:000]` and `[SETINC:000]`.
 - Manual mode, workout programs, Free Run, calibration, and resume are blocked by active overheat protection.

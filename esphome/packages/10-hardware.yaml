@@ -1,0 +1,286 @@
+i2c:
+  sda: GPIO12
+  scl: GPIO11
+  scan: true
+  id: bus_a
+  frequency: 400kHz
+
+
+uart:
+  # --- UART 0: дисплей Nextion ---
+  # Используется для связи с дисплеем Nextion.
+  # Скорость — 921600 бод, только передача/приём команд дисплея.
+  - id: uart_0
+    rx_pin: GPIO1
+    tx_pin: GPIO2
+    baud_rate: 921600
+
+# --- UART BUS: плата беговой дорожки ---
+# Основной рабочий UART для обмена с контроллером дорожки.
+# Используется для получения команд обратной связи скорости и наклона.
+#
+# Подключение:
+#   TX → GPIO17 (от ESP к плате)
+#   RX → GPIO18 (от платы к ESP)
+#
+# Настройки:
+#   - Скорость: 4800 бод
+#   - Формат: 8N1 (8 бит данных, без чётности, 1 стоп-бит)
+#   - Буфер: 512 байт
+#
+# Логика работы (реализована в блоке interval):
+#   1. Принимаем данные и собираем строку (до 30 байт).
+#   2. Ищем команды в формате [КОМАНДА:ЗНАЧЕНИЕ].
+#   3. Поддерживаемые команды:
+#        • [SETSPD:x] → обновляет скорость дорожки (treadmill_speed_feedback).
+#        • [SETINC:x] → обновляет наклон дорожки (treadmill_incline_feedback).
+#          * Значения ≤1 интерпретируются как 0 (игнорируем «0.1%»).
+#   4. Некорректные данные логируются как предупреждение.
+#   5. Неизвестные команды просто выводятся в лог.
+#
+# ⚠️ Отладка:
+#   - Блок debug ниже можно включить временно, чтобы видеть «сырые» данные.
+#   - Для постоянной работы он не нужен, достаточно interval + парсер.
+  - id: uart_bus
+    tx_pin: 
+      number: GPIO17
+      inverted: false
+    rx_pin: 
+      number: GPIO18
+      mode: 
+        input: true
+        pullup: true
+      inverted: false
+    baud_rate: 4800
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+    rx_buffer_size: 512
+    # debug:
+    #   direction: RX
+    #   dummy_receiver: false
+    #   after:
+    #     timeout: 100ms
+    #     bytes: 30
+    #   sequence:
+    #     - lambda: |-
+    #         char message[31] = {0};
+    #         int len = 0;
+    #         for (size_t i = 0; i < std::min(bytes.size(), size_t(30)); i++) {
+    #           if (bytes[i] != 0x00) {
+    #             message[len++] = bytes[i];
+    #           }
+    #         }
+    #         if (len > 0) {
+    #           ESP_LOGD("UART", "Получено: %s", message);
+
+    #           // Функция для парсинга команды между [ и ]
+    #           auto parse_command = [&](const char* start) {
+    #             if (start == nullptr || *start != '[') return;
+    #             const char* end = strchr(start, ']');
+    #             if (end == nullptr || end <= start + 1) return; // Нет закрывающей скобки или пустая команда
+
+    #             // Извлекаем имя команды и значение
+    #             const char* colon = strchr(start + 1, ':');
+    #             if (colon == nullptr || colon >= end) return; // Нет двоеточия
+
+    #             char command_name[16] = {0}; // Максимум 15 символов для имени команды + '\0'
+    #             char command_value[16] = {0}; // Максимум 15 символов для значения + '\0'
+
+    #             int name_len = colon - (start + 1);
+    #             int value_len = end - (colon + 1);
+    #             if (name_len >= sizeof(command_name) || value_len >= sizeof(command_value)) {
+    #               ESP_LOGW("UART", "Слишком длинная команда или значение: %s", start);
+    #               return;
+    #             }
+
+    #             memcpy(command_name, start + 1, name_len);
+    #             memcpy(command_value, colon + 1, value_len);
+
+    #             ESP_LOGD("UART", "Команда: %s, Значение: %s", command_name, command_value);
+
+    #             // Обработка известных команд
+    #             if (strcmp(command_name, "SETSPD") == 0) {
+    #               int speed = 0;
+    #               bool valid = true;
+    #               for (int i = 0; command_value[i] != '\0' && i < 5; i++) { // Ограничение 5 цифр
+    #                 if (command_value[i] < '0' || command_value[i] > '9') {
+    #                   valid = false;
+    #                   break;
+    #                 }
+    #                 speed = speed * 10 + (command_value[i] - '0');
+    #               }
+    #               if (valid) {
+    #                 id(treadmill_speed_feedback) = speed;
+    #                 ESP_LOGD("UART", "Скорость обновлена: %d", speed);
+    #               } else {
+    #                 ESP_LOGW("UART", "Некорректная скорость: %s", command_value);
+    #               }
+    #             }
+    #             else if (strcmp(command_name, "SETINC") == 0) {
+    #               int incline = 0;
+    #               bool valid = true;
+    #               for (int i = 0; command_value[i] != '\0' && i < 5; i++) {
+    #                 if (command_value[i] < '0' || command_value[i] > '9') {
+    #                   valid = false;
+    #                   break;
+    #                 }
+    #                 incline = incline * 10 + (command_value[i] - '0');
+    #               }
+    #               if (valid) {
+    #                 if (incline <= 1) incline = 0;  // Игнорируем 0.1% и устанавливаем 0
+    #                 id(treadmill_incline_feedback) = incline;
+    #                 ESP_LOGD("UART", "Наклон обновлен: %d", incline);
+    #               } else {
+    #                 ESP_LOGW("UART", "Некорректный наклон: %s", command_value);
+    #               }
+    #             }
+    #             // Другие команды просто логируются
+    #             else {
+    #               ESP_LOGD("UART", "Неизвестная команда обработана: %s=%s", command_name, command_value);
+    #             }
+    #           };
+
+    #           // Поиск первой команды в message
+    #           const char* start = strchr(message, '[');
+    #           parse_command(start);
+
+    #           // Если нет команды
+    #           if (start == nullptr) {
+    #             ESP_LOGD("UART", "Не найдено команд в формате [КОМАНДА:ЗНАЧЕНИЕ]: %s", message);
+    #           }
+    #         }
+
+            
+# --- UART debug с фильтрацией ---
+# Использовался для отладки обмена с платой (PMS/дорожка).
+# Особенности:
+#  - Скорость 4800 бод.
+#  - Отбрасывает "мусорные" байты 0x00 (часто встречаются в потоке).
+#  - Собирает строку и ищет команды в формате [SETSPD:XXX], [SETINC:XXX].
+#  - При нахождении сразу обновляет сенсоры обратной связи скорости и наклона.
+#  - Удобно для тестов: в логах видно не только «сырые» данные, но и сразу результат парсинга.
+#
+# ⚠️ Важно:
+#  - Это отладочный режим, в рабочей конфигурации можно держать закомментированным.
+#  - Для постоянной работы лучше использовать блок interval + read_byte(),
+#    так как debug предназначен только для диагностики.
+#  - Этот вариант отличается от "без фильтрации" тем, что:
+#      • убирает нули (0x00),
+#      • сразу парсит команды и обновляет глобальные переменные.
+
+# uart:
+#   - id: uart_bus
+#     tx_pin: 
+#       number: GPIO17
+#       inverted: false
+#     rx_pin: 
+#       number: GPIO18
+#       mode: 
+#         input: true
+#         pullup: true
+#       inverted: false
+#     baud_rate: 4800
+#     data_bits: 8
+#     parity: NONE
+#     stop_bits: 1
+#     rx_buffer_size: 512
+#     debug:
+#       direction: RX
+#       dummy_receiver: false  # Отключаем dummy_receiver
+#       after:
+#         timeout: 100ms  # Оставляем увеличенный таймаут
+#         bytes: 12  # Исправляем на 12 байт, чтобы вместить [SETSPD:XXX]
+#       sequence:
+#         - lambda: |-
+#             std::vector<uint8_t> filtered_bytes;
+#             filtered_bytes.reserve(30); // Ограничить размер
+#             for (auto byte : bytes) {
+#               if (byte != 0x00) {
+#                 filtered_bytes.push_back(byte);
+#               }
+#             }
+#             if (!filtered_bytes.empty()) {
+#               // Преобразуем байты в строку
+#               std::string message(filtered_bytes.begin(), filtered_bytes.end());
+#               UARTDebug::log_string(direction, filtered_bytes);  // Логируем для отладки
+
+#               // Парсинг скорости [SETSPD:XXX]
+#               size_t spd_pos = message.find("[SETSPD:");
+#               if (spd_pos != std::string::npos) {
+#                 std::string spd_str = message.substr(spd_pos + 8, 3);
+#                 int speed = std::stoi(spd_str);
+#                 id(treadmill_speed_feedback) = speed;
+#                 ESP_LOGI("UART", "Скорость обратной связи обновлена: %d", speed);
+#               }
+
+#               // Парсинг наклона [SETINC:XXX]
+#               size_t inc_pos = message.find("[SETINC:");
+#               if (inc_pos != std::string::npos) {
+#                 std::string inc_str = message.substr(inc_pos + 8, 3);
+#                 int incline = std::stoi(inc_str);
+#                 id(treadmill_incline_feedback) = incline;
+#                 ESP_LOGI("UART", "Наклон обратной связи обновлен: %d", incline);
+#               }
+#             }
+
+# --- UART debug без фильтрации ---
+# Чисто отладочный режим для просмотра "сырых" данных.
+# Особенности:
+#  - Скорость 4800 бод.
+#  - Не фильтрует байты 0x00, выводит весь поток как есть.
+#  - Использовался для анализа протокола и диагностики шума.
+#  - Значения не парсятся, только логируются.
+#
+# ⚠️ Важно:
+#  - Этот блок нужен только для отладки, в рабочей конфигурации его можно держать закомментированным.
+#  - Для нормальной работы сенсоров скорости/наклона используется блок interval + парсер.
+#  - Debug можно включить временно, если нужно глазами посмотреть поток или проверить шум.
+#
+# Пример использования:
+#  - Раскомментировать этот блок.
+#  - Перепрошить ESPHome.
+#  - В логах будут видны все байты, приходящие по UART.
+#  - После анализа снова закомментировать, чтобы не дублировать обработку.
+
+# uart:
+  # - id: uart_bus
+  #   tx_pin: 
+  #     number: GPIO18
+  #     inverted: false
+  #   rx_pin: 
+  #     number: GPIO17
+  #     mode: 
+  #       input: true
+  #       pullup: true
+  #     inverted: false
+  #   baud_rate: 4800
+  #   data_bits: 8
+  #   parity: NONE
+  #   stop_bits: 1
+  #   rx_buffer_size: 1024
+  #   debug:
+  #     direction: RX
+  #     dummy_receiver: false  # Отключаем dummy_receiver
+  #     after:
+  #       timeout: 100ms  # Оставляем увеличенный таймаут
+  #       bytes: 30  # Исправляем на 12 байт, чтобы вместить [SETSPD:XXX]
+  #     sequence:
+  #       - lambda: |-
+  #           std::vector<uint8_t> filtered_bytes;
+  #           for (auto byte : bytes) {
+  #             if (byte != 0x00) {
+  #               filtered_bytes.push_back(byte);
+  #             }
+  #           }
+  #           if (!filtered_bytes.empty()) {
+  #             UARTDebug::log_string(direction, filtered_bytes);
+  #           }
+
+
+# SNTP — синхронизация времени по интернету
+time:
+  - platform: sntp
+    id: sntp_time
+
+# Глобальные переменные 

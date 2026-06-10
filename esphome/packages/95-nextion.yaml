@@ -1,0 +1,215 @@
+display:
+  - platform: nextion
+    uart_id: uart_0
+    id: display_nextion
+    update_interval: 1s
+    tft_url: !secret nextion_tft_url
+    # command_spacing: 20ms        # Быстрее, но безопасно
+    # max_queue_size: 50           # очередь — до 50 команд
+    # max_commands_per_loop: 10    # Обрабатываем всё за раз
+    on_buffer_overflow:
+      then:
+        - logger.log: "⚠️ Переполнение очереди Nextion!"
+    # --- Синхронизация при старте ---
+    on_setup:
+      then:
+        - delay: 500ms
+        - lambda: |-
+            int brightness = id(brightness_level);
+            if (brightness < 20) {
+              brightness = 20;
+              id(brightness_level) = 20;
+            }
+            ESP_LOGI("Nextion", "Setting value for hbright");
+            id(display_nextion).set_component_value("display.hbright", brightness);
+            ESP_LOGI("Nextion", "Setting dim value");
+            id(display_nextion).send_command_printf("dim=%d", brightness);
+        - delay: 500ms
+        - switch.nextion.publish:
+            id: bt_tempmode
+            state: !lambda 'return id(bt_tempmode_state);'
+            publish_state: true
+            send_to_nextion: true
+
+  # - delay: 500ms
+  # - switch.nextion.publish:
+  #     id: bt_display_off
+  #     state: !lambda 'return id(bt_display_off_state);'
+  #     publish_state: true
+  #     send_to_nextion: false
+  # - delay: 500ms
+  # - switch.nextion.publish:
+  #     id: safe_mode_switch
+  #     state: !lambda 'return id(safe_mode_switch_state);'
+  #     publish_state: true
+  #     send_to_nextion: false
+  # - delay: 500ms
+  # - switch.nextion.publish:
+  #     id: bt_speed_correction
+  #     state: !lambda 'return id(bt_speed_correction_state);'
+  #     publish_state: true
+  #     send_to_nextion: false
+  # - delay: 500ms
+  # - switch.nextion.publish:
+  #     id: bt_tempmode
+  #     state: !lambda 'return id(bt_tempmode_state);'
+  #     publish_state: true
+  #     send_to_nextion: false
+
+
+    # Глобальное отслеживание всех страниц — всё в одном месте
+    on_page:
+      then:
+        - delay: 100ms
+        - lambda: |-
+            id(current_page) = x;                                    // сохраняем текущую страницу
+            ESP_LOGI("Nextion", "Переход на страницу → %d", x);
+
+            switch (x) {
+
+              case 0:   // mainPage — главная
+                id(map_select).publish_state("None");
+                id(program_select).publish_state("None");
+                break;
+
+              case 1:   // speed — страница Speed
+                id(display_nextion).send_command_printf("speed.h_position.maxval=%d",  (int)id(treadmill_slider_max).state);
+                id(display_nextion).send_command_printf("speed.h_position.minval=%d",  (int)id(treadmill_slider_min).state);
+                id(display_nextion).send_command_printf("speed.h_position1.maxval=%d", (int)id(treadmill_slider_max).state);
+                id(display_nextion).send_command_printf("speed.h_position1.minval=%d", (int)id(treadmill_slider_min).state);
+
+                {
+                  int tempmotor = (int)id(temp).state;
+                  if (tempmotor > 0) {
+                    id(display_nextion).set_component_value("speed.ntemp", tempmotor);
+                  }
+                  id(temp).update();
+                }
+                break;
+
+              case 2:   // pulsezone
+                break;
+
+              case 3:   // age
+                {
+                  id(display_nextion).send_command_printf("n_age.val=%d", (int)id(age_number).state);
+                  id(display_nextion).send_command_printf("n_weight.val=%d", (int)id(weight_kg).state);
+                  bool is_male = (id(gender_select).current_option() == "Male");
+                  id(display_nextion).send_command_printf("age.bt0.val=%d", is_male ? 0 : 1);
+                }
+                break;
+
+              case 5:   // Time
+                id(display_nextion).send_command_printf("n_min.val=%d", (int)id(set_run_time).state);
+                id(display_nextion).send_command_printf("n_warm.val=%d", (int)id(set_warm_up_time).state);
+                id(display_nextion).send_command_printf("n_cool.val=%d", (int)id(set_cool_down_time).state);
+                break;
+
+              case 7:   // info
+                //id(update_info_display).execute();
+                break;
+
+              case 8:   // avgsummary
+                //id(update_info_display).execute();
+                break;
+
+              case 9:   // delayPage
+                break;
+
+              case 10:  // map
+                break;
+
+              case 11:  // modeselect
+                break;
+
+              case 12:  // mapmain
+                break;
+
+              case 13:  // settings
+                break;
+
+              case 14:  // display
+                id(display_nextion).set_component_value("bt_display_off", id(bt_display_off_state) ? 1 : 0);
+                break;
+
+              case 15:  // caldistspeed
+                id(display_nextion).send_command_printf("caldistspeed.h_position.maxval=%d", (int)id(treadmill_slider_max).state);
+                id(display_nextion).send_command_printf("caldistspeed.h_position.minval=%d", (int)id(treadmill_slider_min).state);
+                id(display_nextion).set_component_text_printf("caldistspeed.t_speed_up", "%d", (int)id(accel_cm).state);
+                id(display_nextion).set_component_text_printf("caldistspeed.t_speed_down", "%d", (int)id(decel_cm).state);
+                id(display_nextion).set_component_text_printf("caldistspeed.t_lenght", "%d", (int)id(treadmill_length).state);
+                break;
+
+              case 16:  // info_page
+                id(display_nextion).set_component_text_printf("tVersion", id(ESPHomeVersion).state.c_str());
+                break;
+
+              case 17:  // motor_page
+                {
+                  int tempmotor = (int)id(temp).state;
+                  if (tempmotor > 0) {
+                    id(display_nextion).set_component_value("motor.ntemp", tempmotor);
+                  }
+                  id(temp).update();
+                }
+                break;
+
+              case 18:  // zwift
+                break;
+
+              case 19:  // bluetooth
+                break;
+
+              case 20:  // zwift1
+                break;
+
+              case 21:  // calibration
+                break;
+
+              case 22:  // system
+                id(display_nextion).set_component_value("system.bt_savemode", id(safe_mode_switch_state) ? 1 : 0);
+                id(display_nextion).set_component_value("system.bt_speed_corr", id(bt_speed_correction_state) ? 1 : 0);
+                id(display_nextion).set_component_value("system.bt_tempmode", id(bt_tempmode_state) ? 1 : 0);
+                break;
+
+
+              case 23:  // calspeed
+                break;
+
+              case 24:  // temp_alert
+                break;
+
+              case 25:  // pause/resume_page
+                break;
+
+
+              default:
+                break;
+            }
+
+        - lambda: |-
+            // 1. Обновляем tstatus на странице Speed (page 1)
+            if (id(current_page) == 1) {
+              if (id(program_select).current_option() != "HIIT") {
+                id(display_nextion).set_component_text("speed.tstatus", id(program_status).state.c_str());
+              }
+            }
+
+            // 2. Обновляем Bluetooth-страницу (page 19) каждую секунду
+            if (id(current_page) == 19) {
+              if (id(fit_smart).connected()) {
+                char buf[12];
+                sprintf(buf, "%.0f%%", id(battery_level_sensor).state);
+                id(display_nextion).set_component_text("bluetooth.battery", buf);
+
+                char hr_str[10];
+                sprintf(hr_str, "%.0f", id(heart_rate_sensor).state);
+                id(display_nextion).set_component_text("bluetooth.bpm", hr_str);
+
+                id(display_nextion).set_component_text("bluetooth.name_bt", id(name_bt_sensor).state.c_str());
+              } else {
+                id(display_nextion).set_component_text("bluetooth.bpm", "");
+                id(display_nextion).set_component_text("bluetooth.name_bt", "-");
+                id(display_nextion).set_component_text("bluetooth.battery", "-");
+              }
+            }

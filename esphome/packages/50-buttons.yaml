@@ -1,0 +1,146 @@
+button:
+
+# Pause Training — ставит тренировку на паузу (вызов скрипта pause_training).
+  - platform: template
+    name: "Pause Training"
+    id: pause_button
+    icon: "mdi:pause"
+    on_press:
+      - script.execute: pause_training
+
+# Resume Training — продолжает тренировку после паузы (вызов скрипта resume_training).
+  - platform: template
+    name: "Resume Training"
+    id: resume_button
+    icon: "mdi:play"
+    on_press:
+      - script.execute: resume_training
+
+# Update Nextion — обновляет прошивку дисплея Nextion (загрузка TFT‑файла).
+  - platform: template
+    id: update_nextion_button
+    name: Update Nextion
+    entity_category: diagnostic
+    on_press:
+      then:
+        - lambda: 'id(display_nextion)->upload_tft();'
+
+# Start Calibration — запускает процедуру авто‑калибровки беговой дорожки (скрипт start_calibration).
+  - platform: template
+    id: calibration_button
+    name: "Start Calibration"
+    on_press:
+      then:
+        - script.execute: start_calibration
+        - lambda: |- 
+            ESP_LOGI("Nextion", "Кнопка калибровки нажата");
+
+# Start Treadmill — запускает дорожку:
+#   - Если выбран режим программы (program_select ≠ "None") → выполняется start_program.
+#   - Если программа не выбрана → выполняется start_manual (ручной запуск).
+  - platform: template
+    name: "Start Treadmill"
+    id: start_treadmill_button
+    on_press:
+      - if:
+          condition:
+            lambda: return id(program_select).current_option() != "None";
+          then:
+            - script.execute: start_program
+          else:
+            - script.execute: start_manual
+
+# Stop Treadmill — останавливает дорожку (скрипт stop_program).
+  - platform: template
+    name: "Stop Treadmill"
+    id: stop_treadmill_button
+    on_press:
+      - script.execute: stop_program
+
+
+# Кнопки изменения скорости беговой дорожки
+
+# Speed +0.1 — увеличивает целевую скорость на 0.1 км/ч (если мотор работает и скорость < 18.0 км/ч).
+  - platform: template
+    name: "Speed +0.1"
+    internal: true
+    id: speed_up_button
+    on_press:
+      - lambda: |-
+          if (id(motor_running) && id(target_speed_goal) < 180) {
+            id(target_speed_goal) += 1;  // +0.1 км/ч
+          }
+
+# Speed +0.5 — увеличивает целевую скорость на 0.5 км/ч (если мотор работает и скорость < 18.0 км/ч).
+  - platform: template
+    name: "Speed +0.5"
+    internal: true
+    id: speed_up_button_large
+    on_press:
+      - lambda: |-
+          if (id(motor_running) && id(target_speed_goal) < 180) {
+            id(target_speed_goal) += 5;  // +0.5 км/ч
+          }
+
+# Speed -0.1 — уменьшает целевую скорость на 0.1 км/ч (если мотор работает и скорость > 0.6 км/ч).
+#     - Дополнительно есть защита: скорость не может быть меньше 0.6 км/ч (значение 6 в целых единицах).
+  - platform: template
+    name: "Speed -0.1"
+    internal: true
+    id: speed_down_button
+    on_press:
+      - lambda: |-
+          if (id(motor_running) && id(target_speed_goal) > 6) {
+            id(target_speed_goal) -= 1;  // -0.1 км/ч
+            if (id(target_speed_goal) < 6) id(target_speed_goal) = 6; // защита от <0.6 км/ч
+          }
+
+#  Speed -0.5 — уменьшает целевую скорость на 0.5 км/ч (если мотор работает и скорость > 0.6 км/ч).
+#    - Также с защитой от выхода ниже минимального порога.
+  - platform: template
+    name: "Speed -0.5"
+    internal: true
+    id: speed_down_button_large
+    on_press:
+      - lambda: |-
+          if (id(motor_running) && id(target_speed_goal) > 6) {
+            id(target_speed_goal) -= 5;  // -0.5 км/ч
+            if (id(target_speed_goal) < 6) id(target_speed_goal) = 6; // защита от <0.6 км/ч
+          }
+
+
+# Кнопки изменения наклона беговой дорожки
+
+# Incline +1 — увеличивает наклон на 1% (если мотор работает и новый наклон ≤ 15%).
+  - platform: template
+    name: "Incline +1"
+    internal: true
+    id: incline_up_button
+    on_press:
+      - lambda: |-
+          if (id(motor_running)) {
+            float current_incline = id(set_incline).state;
+            float new_incline = current_incline + 1.0;
+            if (new_incline <= 15.0) {
+              id(set_incline).publish_state(new_incline);
+              ESP_LOGI("treadmill", "Incline increased to %.1f%%", new_incline);
+            }
+          }
+
+# Incline -1 — уменьшает наклон на 1% (если мотор работает и новый наклон ≥ 0%).
+  - platform: template
+    name: "Incline -1"
+    internal: true
+    id: incline_down_button
+    on_press:
+      - lambda: |-
+          if (id(motor_running)) {
+            float current_incline = id(set_incline).state;
+            float new_incline = current_incline - 1.0;
+            if (new_incline >= 0.0) {
+              id(set_incline).publish_state(new_incline);
+              ESP_LOGI("treadmill", "Incline decreased to %.1f%%", new_incline);
+            }
+          }
+
+# Подключение шины OneWire (датчик DS18B20)
