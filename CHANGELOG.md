@@ -1,12 +1,10 @@
 # Changelog
 
-This changelog lists only completed changes that are already included in the `main` branch.
-
 ## June 10, 2026
 
 ### Added
 
-- Added the optional Home Assistant workout recorder with one-second CSV sampling, JSON summaries, and Garmin FIT export.
+- Added the optional Home Assistant workout recorder with one-second CSV sampling, JSON summaries, and export to the universal FIT format supported by Garmin, Strava, and other services.
 - A local unauthenticated ESPHome web status and control interface on port `80`; Web OTA remains disabled.
 - Native `KICKR RUN` identity for Zwift, including the BLE advertising name and FTMS service data.
 - A Zwift compatibility profile for separate `RUN SPEED` and `CONTROLLABLE` connections:
