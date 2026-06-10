@@ -1,3 +1,91 @@
+# Changelog
+
+Everything below **Unreleased** is already present in the published GitHub version. **Unreleased** describes the difference between `esphome/config.yaml` on `main` and the current working configuration.
+
+## Unreleased - June 10, 2026
+
+### Added
+
+- Native `KICKR RUN` identity for Zwift, including the BLE advertising name and FTMS service data.
+- A Zwift compatibility profile for separate `RUN SPEED` and `CONTROLLABLE` connections:
+  - support for two BLE server clients;
+  - Device Information Service;
+  - Running Speed and Cadence Service;
+  - RSC Measurement, Feature, Sensor Location, and Control Point;
+  - Indoor Bike Data and Supported Resistance Level Range;
+  - proprietary Wahoo Run Service for receiving route grade.
+- Native physical incline control from Zwift route grade.
+- Configurable mapping from real grade to treadmill level:
+  - `Treadmill Maximum Incline Level`;
+  - `Treadmill Real Grade At Maximum`;
+  - `Zwift Incline Intensity`;
+  - `Zwift Auto Incline`.
+- `Zwift Requested Incline` and `Zwift Mapped Treadmill Incline` diagnostic sensors.
+- One-second RSC speed and distance updates for Zwift Companion.
+- A local `esp32_ble_server` component preserving confirmed Indicate responses for FTMS Control Point on ESPHome 2026.5.3.
+- A FIFO `uart_send` queue for motor-controller commands:
+  - ordered `SETSPD` and `SETINC` delivery;
+  - 50 ms delay between commands;
+  - queue limit of 10 commands;
+  - stale-command cancellation before stopping.
+- A persistent UART receive buffer that keeps partial packets between read cycles:
+  - packet collection until the closing `]`;
+  - binary-noise filtering;
+  - `SETSPD` and `SETINC` processing only after a complete packet;
+  - automatic reset when the buffer exceeds 128 bytes.
+- Global motor overheat protection:
+  - configurable `Overheat Stop Temperature`;
+  - two-second checks independent of the active Nextion page;
+  - emergency stop above the configured threshold;
+  - emergency stop when the temperature sensor is unavailable or invalid;
+  - restart lockout;
+  - automatic lockout reset after cooling 10 C below the threshold.
+
+### Changed
+
+- Pause, resume, normal operation, and stop commands now use the common UART queue.
+- Stop now queues both `[SETSPD:000]` and `[SETINC:000]`.
+- Manual mode, workout programs, Free Run, calibration, and resume are blocked by active overheat protection.
+- FTMS `Start/Resume` now distinguishes a fresh start from resuming a paused workout.
+- FTMS `Stop/Pause` now handles the Stop and Pause parameters separately.
+- FTMS control ownership is tracked after `Request Control`.
+- FTMS Control Point now uses confirmed Indicate responses with corrected error codes and packet-length validation.
+- The declared FTMS speed range is now `0.6-18.0 km/h`.
+- FTMS Feature and Target Feature values were updated for the Zwift compatibility profile.
+- Heart-rate speed adjustment now supports `2-12 seconds` with a default of `4 seconds`.
+- Target speed and incline sensors now report zero while paused or stopped.
+- The Nextion speed page explicitly displays zero speed and incline during pause.
+- Nextion workout duration now displays values beyond 59 minutes correctly.
+- Nextion switch states are synchronized when their corresponding pages open.
+- Delta filters were added to debug, temperature, distance, speed, and calculated sensors to reduce duplicate updates and log noise.
+- `select.current_option()` string formatting now uses the compatible C++ `.c_str()` API.
+
+### Fixed
+
+- UART packets split across two 200 ms read cycles are no longer lost.
+- Multiple motor-controller commands are no longer sent without the required delay.
+- Incline reset now checks direct UART feedback instead of a delayed template sensor.
+- Overheat protection no longer depends on the active Nextion page.
+- Starting is blocked when the temperature sensor is invalid and protection is enabled.
+- FTMS behavior is more consistent after manual stop, overheat, pause, and client reconnection.
+
+### Removed
+
+- Obsolete commented implementations of smooth speed control, FTMS Treadmill Data, timers, heart-rate handling, and Nextion updates.
+- Duplicate and unused display synchronization blocks.
+
+### Documentation
+
+- Rebuilt both Russian and English README files.
+- Added an architecture diagram, quick start, safety warnings, and precise compatibility notes.
+- Added dedicated Zwift pairing and incline-calibration guides:
+  - `docs/guides/ZWIFT.ru.md`;
+  - `docs/guides/ZWIFT.md`.
+- Moved native Zwift automatic incline from the roadmap to implemented features.
+- Corrected UART guide links and the Nextion display model.
+
+## Published History
+
 - January 21, 2026:  
   - Compatibility with **ESPHome 2026.1.0**
   
