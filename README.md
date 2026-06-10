@@ -1,6 +1,6 @@
 # Smart ESPHome Treadmill with FTMS and Zwift
 
-[Русская версия](README.ru.md) | [Changelog](CHANGELOG.md) | [Telegram community](https://t.me/TreadmillSmart)
+[Русская версия](README.ru.md) | [Releases and history](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram community](https://t.me/TreadmillSmart)
 
 A complete ESP32-S3 and ESPHome replacement for a treadmill's original console. The project controls the treadmill motor board over UART, exposes workout data and controls through Bluetooth FTMS, and integrates with Home Assistant, a Nextion display, heart-rate training programs, safety sensors, and automatic incline control.
 
@@ -224,7 +224,7 @@ Videos:
 - [`PCB/`](PCB/) - future PCB design materials;
 - [`docs/guides/`](docs/guides/) - detailed setup guides;
 - [`docs/specs/FTMS_v1.0.pdf`](docs/specs/FTMS_v1.0.pdf) - FTMS specification;
-- [`CHANGELOG.md`](CHANGELOG.md) - project history.
+- [GitHub Releases](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) - versions and project history.
 
 ## Roadmap
 
@@ -234,7 +234,7 @@ Videos:
 - additional routes and workout programs;
 - cadence measurement.
 
-Completed work is removed from the roadmap and recorded in the [changelog](CHANGELOG.md).
+Completed work is removed from the roadmap and recorded in the [release notes](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases).
 
 ## Author and Community
 

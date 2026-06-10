@@ -1,6 +1,6 @@
 # Умная беговая дорожка на ESPHome с FTMS и Zwift
 
-[English version](README.md) | [История изменений](CHANGELOG.RU.md) | [Telegram-сообщество](https://t.me/TreadmillSmart)
+[English version](README.md) | [Версии и история изменений](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram-сообщество](https://t.me/TreadmillSmart)
 
 Полная замена штатного бортового компьютера беговой дорожки на базе ESP32-S3 и ESPHome. Проект управляет нижней платой дорожки по UART, передаёт данные в фитнес-приложения по Bluetooth FTMS, поддерживает Home Assistant, дисплей Nextion, пульсовые программы, датчики безопасности и автоматический наклон.
 
@@ -224,7 +224,7 @@ ESP32-S3 становится центральным контроллером. �
 - [`PCB/`](PCB/) — материалы будущей печатной платы;
 - [`docs/guides/`](docs/guides/) — подробные инструкции;
 - [`docs/specs/FTMS_v1.0.pdf`](docs/specs/FTMS_v1.0.pdf) — спецификация FTMS;
-- [`CHANGELOG.RU.md`](CHANGELOG.RU.md) — история изменений.
+- [GitHub Releases](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) — версии и история изменений.
 
 ## Планы
 
@@ -234,7 +234,7 @@ ESP32-S3 становится центральным контроллером. �
 - дополнительные маршруты и тренировочные программы;
 - измерение каденса.
 
-Уже реализованные функции удаляются из планов и фиксируются в [истории изменений](CHANGELOG.RU.md).
+Уже реализованные функции удаляются из планов и фиксируются в [описаниях версий](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases).
 
 ## Автор и сообщество
 
