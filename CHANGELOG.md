@@ -6,6 +6,7 @@ Everything below **Unreleased** is already present in the published GitHub versi
 
 ### Added
 
+- Added the optional Home Assistant workout recorder with one-second CSV sampling, JSON summaries, and Garmin FIT export.
 - A local unauthenticated ESPHome web status and control interface on port `80`; Web OTA remains disabled.
 - Native `KICKR RUN` identity for Zwift, including the BLE advertising name and FTMS service data.
 - A Zwift compatibility profile for separate `RUN SPEED` and `CONTROLLABLE` connections:
@@ -64,6 +65,7 @@ Everything below **Unreleased** is already present in the published GitHub versi
 
 ### Fixed
 
+- The workout recorder now invokes the FIT exporter through the current Python interpreter instead of a hard-coded executable path.
 - UART packets split across two 200 ms read cycles are no longer lost.
 - Multiple motor-controller commands are no longer sent without the required delay.
 - Incline reset now checks direct UART feedback instead of a delayed template sensor.
@@ -78,6 +80,8 @@ Everything below **Unreleased** is already present in the published GitHub versi
 
 ### Documentation
 
+- Added English and Russian setup guides plus Home Assistant configuration and automation examples for workout recording.
+- Removed the prominent README warning block at the project owner's request.
 - Rebuilt both Russian and English README files.
 - Added an architecture diagram, quick start, safety warnings, and precise compatibility notes.
 - Added dedicated Zwift pairing and incline-calibration guides:

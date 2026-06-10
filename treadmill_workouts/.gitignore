@@ -1,0 +1,18 @@
+# Private Home Assistant token
+secrets/*
+!secrets/.gitkeep
+
+# Runtime state and logs
+state/*
+!state/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Personal workout exports
+workouts/*
+!workouts/.gitkeep
+
+# Python cache and local backups
+__pycache__/
+*.py[cod]
+*.bak*

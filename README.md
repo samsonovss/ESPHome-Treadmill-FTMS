@@ -4,9 +4,6 @@
 
 A complete ESP32-S3 and ESPHome replacement for a treadmill's original console. The project controls the treadmill motor board over UART, exposes workout data and controls through Bluetooth FTMS, and integrates with Home Assistant, a Nextion display, heart-rate training programs, safety sensors, and automatic incline control.
 
-> [!WARNING]
-> This project directly controls the treadmill motor and incline mechanism. Before the first run, verify emergency stop behavior, speed and incline limits, UART commands, and thermal protection. Do not test a new configuration while standing on a moving belt.
-
 <p align="center">
   <img src="docs/images/hassio.png" alt="Treadmill control dashboard in Home Assistant" width="80%">
 </p>
@@ -24,6 +21,7 @@ A complete ESP32-S3 and ESPHome replacement for a treadmill's original console. 
 - distance-based Free Run and safe-zone control using VL53L1X;
 - motor temperature monitoring and restart lockout after overheating;
 - workout statistics including duration, distance, calories, pace, MET, VO2, fat, and HR zones;
+- optional Home Assistant workout recording to CSV, JSON, and Garmin FIT;
 - printable enclosure and sensor mounts.
 
 ## Architecture
@@ -179,6 +177,8 @@ Speed correction profiles include `Soft`, `Precise`, and `Aggressive`. Accelerat
 
 The local ESPHome web interface is available on port `80` without authentication. It does not provide Web OTA. Keep it inside a trusted LAN and do not expose it to the internet.
 
+Workout recording to CSV and Garmin FIT is available through the optional [Home Assistant workout recorder](treadmill_workouts/README.md).
+
 <details>
   <summary><b>Home Assistant</b></summary>
   <p align="center">
@@ -217,6 +217,7 @@ Videos:
 - [`esphome/config.yaml`](esphome/config.yaml) - short entry point loading the local packages;
 - [`esphome/packages/`](esphome/packages/) - core, hardware, globals, scripts, sensors, BLE/FTMS, controls, and Nextion configuration;
 - [`esphome/incline_profiles.h`](esphome/incline_profiles.h) - generated route incline profiles;
+- [`treadmill_workouts/`](treadmill_workouts/) - Home Assistant CSV recorder and FIT exporter;
 - [`nextion_display/`](nextion_display/) - display source, HMI, and compiled TFT;
 - [`incline_data/`](incline_data/) - GPX data, route profiles, and conversion scripts;
 - [`3d-models/`](3d-models/) - printable enclosure and sensor mounts;
@@ -229,7 +230,6 @@ Videos:
 
 - universal custom PCB;
 - dedicated ESPHome component;
-- web interface without Home Assistant;
 - MQTT integration;
 - additional routes and workout programs;
 - cadence measurement.

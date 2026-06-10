@@ -1,0 +1,37 @@
+- id: treadmill_workout_recorder_start
+  alias: "Treadmill - workout recording: start"
+  description: Start recording when the treadmill starts and recording is enabled.
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.treadmill_treadmill_usage
+      to: "on"
+  conditions:
+    - condition: state
+      entity_id: input_boolean.treadmill_recording_enabled
+      state: "on"
+  actions:
+    - action: shell_command.treadmill_recorder_start
+  mode: single
+
+- id: treadmill_workout_recorder_stop
+  alias: "Treadmill - workout recording: stop"
+  description: Stop recording when the treadmill stops.
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.treadmill_treadmill_usage
+      to: "off"
+  conditions: []
+  actions:
+    - action: shell_command.treadmill_recorder_stop
+  mode: single
+- id: treadmill_workout_recorder_disable_stop
+  alias: "Treadmill - workout recording: disable switch"
+  description: Stop an active recorder when workout recording is disabled.
+  triggers:
+    - trigger: state
+      entity_id: input_boolean.treadmill_recording_enabled
+      to: "off"
+  conditions: []
+  actions:
+    - action: shell_command.treadmill_recorder_stop
+  mode: single

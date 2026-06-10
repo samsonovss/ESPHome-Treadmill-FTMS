@@ -1,0 +1,18 @@
+# Add these sections to Home Assistant configuration.yaml.
+# Merge them with existing input_boolean and shell_command sections.
+
+input_boolean:
+  treadmill_recording_enabled:
+    name: Record treadmill workouts
+    icon: mdi:record-rec
+    initial: true
+
+shell_command:
+  treadmill_recorder_start: >-
+    sh -c "/usr/local/bin/python3
+    /config/treadmill_workouts/scripts/treadmill_recorder.py start
+    >> /config/treadmill_workouts/logs/recorder.log 2>&1 &"
+  treadmill_recorder_stop: >-
+    /usr/local/bin/python3
+    /config/treadmill_workouts/scripts/treadmill_recorder.py stop
+    >> /config/treadmill_workouts/logs/recorder.log 2>&1
