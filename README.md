@@ -228,10 +228,6 @@ Videos:
 
 ## Roadmap
 
-- universal custom PCB;
-- dedicated ESPHome component;
-- MQTT integration;
-- additional routes and workout programs;
 - cadence measurement.
 
 Completed work is removed from the roadmap and recorded in the [release notes](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases).
