@@ -176,6 +176,8 @@ Speed correction profiles include `Soft`, `Precise`, and `Aggressive`. Accelerat
 
 ## Interfaces
 
+The local ESPHome web interface is available on port `80` without authentication. It does not provide Web OTA. Keep it inside a trusted LAN and do not expose it to the internet.
+
 <details>
   <summary><b>Home Assistant</b></summary>
   <p align="center">

@@ -162,6 +162,11 @@ ota:
   - platform: esphome
     password: !secret ota_password
 
+# Local status and control interface. Keep port 80 inside a trusted LAN.
+# Web OTA is intentionally not enabled.
+web_server:
+  port: 80
+
 # safe_mode:
 #   num_attempts: 1
 

@@ -6,6 +6,7 @@ Everything below **Unreleased** is already present in the published GitHub versi
 
 ### Added
 
+- A local unauthenticated ESPHome web status and control interface on port `80`; Web OTA remains disabled.
 - Native `KICKR RUN` identity for Zwift, including the BLE advertising name and FTMS service data.
 - A Zwift compatibility profile for separate `RUN SPEED` and `CONTROLLABLE` connections:
   - support for two BLE server clients;
