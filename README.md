@@ -166,7 +166,10 @@ The configuration is a working example for one installation, not a universal fir
 - precomputed route elevation profiles;
 - native Zwift incline control.
 
-Speed correction profiles include `Soft`, `Precise`, and `Aggressive`. Acceleration profiles include `Soft`, `Normal`, `Fast`, and `Technogym`.
+Configurable treadmill behavior profiles:
+
+- **Speed correction:** `Soft`, `Precise`, and `Aggressive` control how actively the system compensates for differences between the target and measured belt speed;
+- **Acceleration and deceleration:** `Soft`, `Normal`, `Fast`, and `Technogym` control how smoothly and quickly the belt changes speed.
 
 ## Interfaces
 
