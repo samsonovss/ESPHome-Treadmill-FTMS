@@ -2,25 +2,19 @@
 
 [Русская версия](README.ru.md) | [Releases and history](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram community](https://t.me/TreadmillSmart)
 
-A complete ESP32-S3 and ESPHome replacement for a treadmill's original console. The project controls the treadmill motor board over UART, exposes workout data and controls through Bluetooth FTMS, and integrates with Home Assistant, a Nextion display, heart-rate training programs, safety sensors, and automatic incline control.
+Turn an older treadmill into a modern smart training machine. This project completely replaces the original console with an ESP32-S3 and ESPHome solution, controls the lower motor board directly over UART, and connects to Zwift and other fitness applications through Bluetooth FTMS without bridges or companion apps. It supports native incline control from Zwift, Home Assistant, a Nextion display, heart-rate programs, built-in workout modes, and safety sensors. The current configuration was developed for PSA(xx)-family boards but can be adapted to other treadmills after their control protocol has been investigated.
 
 https://github.com/user-attachments/assets/f829769c-47f4-4251-8f99-d2f9a6cf358a
 
-## Features
+## Highlights
 
-- direct Bluetooth FTMS connection to Zwift and other fitness applications;
-- native Zwift route-grade reception and physical treadmill incline control;
-- calibration between real Zwift grade and treadmill-specific incline levels;
-- standalone elevation profiles for real-world and Zwift routes;
-- speed and incline control through Home Assistant and Nextion;
-- manual, heart-rate, warm-up, cool-down, and HIIT workout modes;
-- BLE heart-rate monitor with heart-rate zone calculation;
-- adaptive speed correction using an FC-33 optical sensor;
-- distance-based Free Run and safe-zone control using VL53L1X;
-- motor temperature monitoring and restart lockout after overheating;
-- workout statistics including duration, distance, calories, pace, MET, VO2, fat, and HR zones;
-- optional Home Assistant workout recording to CSV, JSON, and Garmin FIT;
-- printable enclosure and sensor mounts.
+- **Direct Bluetooth FTMS** - no bridges or companion apps;
+- **Native Zwift incline control** - route grade physically controls the treadmill;
+- **Home Assistant integration**;
+- **Nextion touchscreen interface**;
+- **Heart-rate workouts, HIIT, warm-up, and cool-down**;
+- **ESPHome-based and fully local** - no cloud required;
+- **Safety, distance, speed, and motor-temperature sensors**.
 
 ## Architecture
 
@@ -51,8 +45,7 @@ Tested applications:
 - Zwift;
 - Kinomap on Android and iOS;
 - FitShow;
-- Kinni;
-- Qdomyos-Zwift.
+- Kinni.
 
 Other FTMS applications may behave differently. FTMS support alone does not guarantee that every application uses the same characteristics and control commands.
 
