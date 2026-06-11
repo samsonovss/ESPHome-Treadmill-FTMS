@@ -42,10 +42,10 @@ The ESP32-S3 acts as the central controller. It receives commands from the UI, w
 
 Tested applications:
 
-- Zwift;
-- Kinomap on Android and iOS;
-- FitShow;
-- Kinni.
+- **Zwift**
+- **Kinomap** on Android and iOS
+- **FitShow**
+- **Kinni**
 
 Other FTMS applications may behave differently. FTMS support alone does not guarantee that every application uses the same characteristics and control commands.
 
