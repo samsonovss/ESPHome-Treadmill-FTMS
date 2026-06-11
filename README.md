@@ -11,6 +11,7 @@ https://github.com/user-attachments/assets/f829769c-47f4-4251-8f99-d2f9a6cf358a
 - **Direct Bluetooth FTMS** - no bridges or companion apps;
 - **Native Zwift incline control** - route grade physically controls the treadmill;
 - **Home Assistant integration**;
+- **Custom Home Assistant workout automations** - create and run your own speed and incline programs;
 - **Nextion touchscreen interface**;
 - **Heart-rate workouts, HIIT, warm-up, and cool-down**;
 - **ESPHome-based and fully local** - no cloud required;
