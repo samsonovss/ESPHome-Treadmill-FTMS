@@ -177,12 +177,11 @@ The local ESPHome web interface is available on port `80` without authentication
 
 Workout recording to CSV and Garmin FIT is available through the optional [Home Assistant workout recorder](treadmill_workouts/README.md).
 
-<details>
-  <summary><b>Home Assistant</b></summary>
-  <p align="center">
-    <img src="docs/images/hassio.png" alt="Home Assistant interface" width="80%">
-  </p>
-</details>
+### Home Assistant
+
+<p align="center">
+  <img src="docs/images/hassio.png" alt="Home Assistant treadmill control interface" width="80%">
+</p>
 
 <details>
   <summary><b>Nextion</b></summary>

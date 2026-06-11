@@ -177,12 +177,11 @@ ESP32-S3 становится центральным контроллером. �
 
 Запись тренировок в CSV и Garmin FIT доступна через дополнительный [рекордер для Home Assistant](treadmill_workouts/README.ru.md).
 
-<details>
-  <summary><b>Home Assistant</b></summary>
-  <p align="center">
-    <img src="docs/images/hassio.png" alt="Интерфейс Home Assistant" width="80%">
-  </p>
-</details>
+### Home Assistant
+
+<p align="center">
+  <img src="docs/images/hassio.png" alt="Интерфейс управления беговой дорожкой в Home Assistant" width="80%">
+</p>
 
 <details>
   <summary><b>Nextion</b></summary>
