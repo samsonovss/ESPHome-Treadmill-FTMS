@@ -90,6 +90,9 @@ Another treadmill can be adapted when its control interface is accessible, but t
 
 See the [UART parsing guide](docs/guides/UART_PARSING.md).
 
+> [!IMPORTANT]
+> Reverse-engineering the control protocol is usually the most difficult part of adapting this project to another treadmill board.
+
 ## Hardware
 
 Core components:
