@@ -4,15 +4,7 @@
 
 A complete ESP32-S3 and ESPHome replacement for a treadmill's original console. The project controls the treadmill motor board over UART, exposes workout data and controls through Bluetooth FTMS, and integrates with Home Assistant, a Nextion display, heart-rate training programs, safety sensors, and automatic incline control.
 
-<p align="center">
-  <img src="docs/images/hassio.png" alt="Treadmill control dashboard in Home Assistant" width="80%">
-</p>
-
-
-
 https://github.com/user-attachments/assets/f829769c-47f4-4251-8f99-d2f9a6cf358a
-
-
 
 ## Features
 

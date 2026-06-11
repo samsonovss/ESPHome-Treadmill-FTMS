@@ -4,9 +4,7 @@
 
 Полная замена штатного бортового компьютера беговой дорожки на базе ESP32-S3 и ESPHome. Проект управляет нижней платой дорожки по UART, передаёт данные в фитнес-приложения по Bluetooth FTMS, поддерживает Home Assistant, дисплей Nextion, пульсовые программы, датчики безопасности и автоматический наклон.
 
-<p align="center">
-  <img src="docs/images/hassio.png" alt="Панель управления беговой дорожкой в Home Assistant" width="80%">
-</p>
+https://github.com/user-attachments/assets/f829769c-47f4-4251-8f99-d2f9a6cf358a
 
 ## Возможности
 
