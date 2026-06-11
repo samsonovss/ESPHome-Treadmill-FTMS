@@ -173,7 +173,7 @@ Configurable treadmill behavior profiles:
 
 ## Interfaces
 
-The local ESPHome web interface is available on port `80` without authentication. It does not provide Web OTA. Keep it inside a trusted LAN and do not expose it to the internet.
+The local ESPHome web interface is available on port `80` without authentication.
 
 Workout recording to CSV and Garmin FIT is available through the optional [Home Assistant workout recorder](treadmill_workouts/README.md).
 
