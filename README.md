@@ -2,7 +2,7 @@
 
 [Русская версия](README.ru.md) | [Releases and history](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram community](https://t.me/TreadmillSmart)
 
-Turn an older treadmill into a modern smart training machine. This project completely replaces the original console with an ESP32-S3 and ESPHome solution, controls the lower motor board directly over UART, and connects to Zwift and other fitness applications through Bluetooth FTMS without bridges or companion apps. It supports native incline control from Zwift, Home Assistant, a Nextion display, heart-rate programs, built-in workout modes, and safety sensors. The current configuration was developed for PSA(xx)-family boards but can be adapted to other treadmills after their control protocol has been investigated.
+Turn an older treadmill into a modern smart training machine. This project completely replaces the original console with an ESP32-S3 and ESPHome solution, controls the lower motor board directly over UART, and connects to Zwift and other fitness applications through Bluetooth [Fitness Machine Service (FTMS)](docs/specs/FTMS_v1.0.pdf) without bridges or companion apps. It supports native incline control from Zwift, Home Assistant, a Nextion display, heart-rate programs, built-in workout modes, and safety sensors. The current configuration was developed for PSA(xx)-family boards but can be adapted to other treadmills after their control protocol has been investigated.
 
 https://github.com/user-attachments/assets/f829769c-47f4-4251-8f99-d2f9a6cf358a
 
