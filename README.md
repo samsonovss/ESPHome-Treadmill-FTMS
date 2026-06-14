@@ -50,6 +50,35 @@ Tested applications:
 
 Other FTMS applications may behave differently. FTMS support alone does not guarantee that every application uses the same characteristics and control commands.
 
+### Application Compatibility Matrix
+
+| Feature | Zwift | Kinomap | FitShow | Kinni |
+|---|---:|---:|---:|---:|
+| Treadmill discovery over BLE | ✅ | ✅ | ✅ | ✅ |
+| Speed reporting | ✅ | ✅ | ✅ | ✅ |
+| Distance reporting | ✅ | ✅ | ✅ | ✅ |
+| Heart-rate reporting | ✅ | ✅ | ✅ | ✅ |
+| Start / pause / stop from the application | ✅ | ✅ | ✅ | ✅ |
+| Target-speed control from the application | ✅ | ✅ | ✅ | ✅ |
+| Incline control from the application | ✅ | ✅ | ✅ | ✅ |
+| Automatic route-grade incline control | ✅ | ✅ | ✅ | ✅ |
+| Native Zwift route-grade incline control | ✅ | ➖ | ➖ | ➖ |
+
+✅ — tested and working; ➖ — not applicable.
+
+> This matrix reflects practical testing with the current firmware version. Behavior may depend on the application version.
+
+### FTMS and Zwift Compatibility
+
+For standard fitness applications, the treadmill uses Bluetooth FTMS to report workout data and control speed and incline.
+
+Native automatic incline in Zwift additionally uses a Wahoo KICKR RUN compatibility profile. Zwift sends route grade through the proprietary Wahoo Run service rather than through the standard FTMS incline-control command.
+
+Therefore:
+
+- standard FTMS provides primary compatibility with Zwift, Kinomap, FitShow, Kinni, and other applications;
+- the Wahoo KICKR RUN profile provides native route-grade incline control in Zwift.
+
 ## Zwift Automatic Incline
 
 The project supports two independent incline modes:
