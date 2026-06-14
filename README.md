@@ -59,8 +59,8 @@ Other FTMS applications may behave differently. FTMS support alone does not guar
 | Distance reporting | ✅ | ✅ | ✅ | ✅ |
 | Heart-rate reporting | ✅ | ✅ | ✅ | ✅ |
 | Start / pause / stop from the application | ➖ | ✅ | ✅ | ✅ |
-| Target-speed control from the application | ✅ | ✅ | ✅ | ✅ |
-| Incline control from the application | ✅ | ✅ | ✅ | ✅ |
+| Target-speed control from the application | ➖ | ✅ | ✅ | ✅ |
+| Incline control from the application | ➖ | ✅ | ✅ | ✅ |
 | Automatic route-grade incline control | ✅ | ✅ | ✅ | ✅ |
 | Native Zwift route-grade incline control | ✅ | ➖ | ➖ | ➖ |
 
