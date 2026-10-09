@@ -1,10 +1,10 @@
 # Route profiles
 
-Zwift running routes for the treadmill web UI («Routes → Zwift» catalog).
+Zwift running routes (≤ 42 km) for the treadmill web UI («Routes → Zwift» catalog).
 
 ```
 zwift/
-  index.json          route list: slug, name, world, km, elevation gain (up), lap, locked, e = elevation every 100 m
+  index.json          route list: slug, name, world, km, elevation gain (up), lap, locked, run (running-only route), e = elevation every 100 m
   routes/<slug>.json  route with map and elevation: pts = [[lat, lon, ele_m], …] (≤1500 points)
   gpx/<slug>.gpx      full-resolution GPX for manual download/import
 tools/
