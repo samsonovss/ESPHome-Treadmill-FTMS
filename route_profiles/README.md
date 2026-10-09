@@ -9,6 +9,7 @@ zwift/
   gpx/<slug>.gpx      full-resolution GPX for manual download/import
 tools/
   gen-zwift.mjs       regenerates zwift/ (npm i zwift-data && node tools/gen-zwift.mjs)
+  fill-flat.mjs       fills routes whose source altitude is flat from neighbouring roads (run after gen-zwift)
 ```
 
 The web UI loads the catalog directly from

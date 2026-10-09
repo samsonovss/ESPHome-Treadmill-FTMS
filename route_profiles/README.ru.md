@@ -9,6 +9,7 @@ zwift/
   gpx/<slug>.gpx      полный GPX для скачивания/импорта вручную
 tools/
   gen-zwift.mjs       пересборка zwift/ (npm i zwift-data && node tools/gen-zwift.mjs)
+  fill-flat.mjs       высота для маршрутов с «плоскими» данными — с соседних дорог (после gen-zwift)
 ```
 
 Веб-интерфейс грузит каталог прямо отсюда:
