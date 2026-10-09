@@ -245,7 +245,7 @@ Videos:
 - [`esphome/incline_profiles.h`](esphome/incline_profiles.h) - generated route incline profiles;
 - [`treadmill_workouts/`](treadmill_workouts/) - Home Assistant CSV recorder and FIT exporter;
 - [`nextion_display/`](nextion_display/) - display source, HMI, and compiled TFT;
-- [`route_profiles/`](route_profiles/) - optional GPX sources, saved route profiles, and profile-generation tools;
+- [`route_profiles/`](route_profiles/) - Zwift running routes (map + elevation, GPX) loaded by the web UI catalog;
 - [`3d-models/`](3d-models/) - printable enclosure and sensor mounts;
 - [`PCB/`](PCB/) - future PCB design materials;
 - [`docs/guides/`](docs/guides/) - detailed setup guides;
