@@ -6,8 +6,8 @@ const OUT='zwift',MAXP=1500;
 const esc=s=>String(s).replace(/[<&"]/g,c=>({'<':'&lt;','&':'&amp;','"':'&quot;'}[c]));
 const title=w=>w.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 const index=[],fail=[];
-// Elevation every 100 m along the route (m, integer): enough for catalog cards/levels without loading the route file.
-const coarse=(dist,alt)=>{const e=[];let j=0;for(let k=0;k<=dist.at(-1);k+=100){while(j<dist.length-2&&dist[j+1]<k)j++;const t=dist[j+1]>dist[j]?(k-dist[j])/(dist[j+1]-dist[j]):0;e.push(Math.round(alt[j]+(alt[j+1]-alt[j])*Math.max(0,Math.min(1,t))));}return e;};
+// Elevation every 50 m along the route (m, integer): enough for catalog cards/levels without loading the route file.
+const coarse=(dist,alt)=>{const e=[];let j=0;for(let k=0;k<=dist.at(-1);k+=50){while(j<dist.length-2&&dist[j+1]<k)j++;const t=dist[j+1]>dist[j]?(k-dist[j])/(dist[j+1]-dist[j]):0;e.push(Math.round((alt[j]+(alt[j+1]-alt[j])*Math.max(0,Math.min(1,t)))*10)/10);}return e;};
 for(const r of routes){if(!r.sports?.includes('running')||!r.stravaSegmentId||r.eventOnly||r.distance>42)continue; // treadmill: ≤ marathon
  try{const g=async s=>{const x=await fetch(`https://zwiftmap.com/strava-segments/${r.stravaSegmentId}/${s}.json`);if(!x.ok||!/json/.test(x.headers.get('content-type')||''))throw Error(s+' '+x.status);return x.json();};
   const [alt,ll,dist]=await Promise.all([g('altitude'),g('latlng'),g('distance')]);
@@ -21,5 +21,5 @@ for(const r of routes){if(!r.sports?.includes('running')||!r.stravaSegmentId||r.
  }catch(e){fail.push(r.slug+': '+e.message);}
  await new Promise(r=>setTimeout(r,120));}
 index.sort((a,b)=>a.world.localeCompare(b.world)||a.km-b.km);
-fs.writeFileSync(`${OUT}/index.json`,JSON.stringify({v:1,source:'zwiftmap.com + zwift-data',generated:new Date().toISOString().slice(0,10),routes:index},null,0));
+fs.writeFileSync(`${OUT}/index.json`,JSON.stringify({v:1,source:'zwiftmap.com + zwift-data',generated:new Date().toISOString().slice(0,10),estep:50,routes:index},null,0));
 console.log('ok',index.length,'fail',fail.length,fail.slice(0,10).join('\n'));

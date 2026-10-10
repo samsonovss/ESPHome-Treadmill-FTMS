@@ -4,11 +4,12 @@ Zwift running routes (≤ 42 km) for the treadmill web UI («Routes → Zwift» 
 
 ```
 zwift/
-  index.json          route list: slug, name, world, km, elevation gain (up), lap, locked, run (running-only route), e = elevation every 100 m
+  index.json          route list: slug, name, world, km, elevation gain (up), lap, locked, run (running-only route), e = elevation every estep m (50)
   routes/<slug>.json  route with map and elevation: pts = [[lat, lon, ele_m], …] (≤1500 points)
   gpx/<slug>.gpx      full-resolution GPX for manual download/import
 tools/
   gen-zwift.mjs       regenerates zwift/ (npm i zwift-data && node tools/gen-zwift.mjs)
+  dedupe.mjs          drops "X"/"X Run" twins with the same road (run after fill-flat)
   fill-flat.mjs       fills routes whose source altitude is flat from neighbouring roads (run after gen-zwift)
 ```
 

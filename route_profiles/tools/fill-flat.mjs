@@ -11,7 +11,7 @@ const all=idx.routes.map(r=>({meta:r,rec:load(r.slug)})),grid={};
 for(const {meta,rec} of all){if(flat(rec))continue;const g=grid[meta.world]??={};for(const p of rec.pts){const k=Math.floor(p[0]/CELL)+','+Math.floor(p[1]/CELL);(g[k]??=[]).push(p);}}
 // Nearest road point; with prev elevation known, prefer continuity (bridges/underpasses: same lat/lon, other height).
 const near=(g,p,prev=null)=>{const a=Math.floor(p[0]/CELL),b=Math.floor(p[1]/CELL);let best=null,bs=Infinity;for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++)for(const q of g[(a+i)+','+(b+j)]??[]){const d=hav(p,q);if(d>MAXD)continue;const sc=d+(prev==null?0:Math.abs(q[2]-prev)*4);if(sc<bs){bs=sc;best=q;}}return best;};
-const coarse=(pts)=>{const d=[0];for(let i=1;i<pts.length;i++)d.push(d[i-1]+hav(pts[i-1],pts[i]));const e=[];let j=0;for(let k=0;k<=d.at(-1);k+=100){while(j<d.length-2&&d[j+1]<k)j++;const t=d[j+1]>d[j]?(k-d[j])/(d[j+1]-d[j]):0;e.push(Math.round(pts[j][2]+(pts[j+1][2]-pts[j][2])*Math.max(0,Math.min(1,t))));}return e;};
+const coarse=(pts)=>{const d=[0];for(let i=1;i<pts.length;i++)d.push(d[i-1]+hav(pts[i-1],pts[i]));const e=[];let j=0;for(let k=0;k<=d.at(-1);k+=50){while(j<d.length-2&&d[j+1]<k)j++;const t=d[j+1]>d[j]?(k-d[j])/(d[j+1]-d[j]):0;e.push(Math.round((pts[j][2]+(pts[j+1][2]-pts[j][2])*Math.max(0,Math.min(1,t)))*10)/10);}return e;};
 for(const {meta,rec} of all){if(!flat(rec))continue;const g=grid[meta.world]??{};let hit=0,prev=null;const ele=rec.pts.map(p=>{const q=near(g,p,prev);if(q){hit++;prev=q[2];return q[2];}return null;});
  const cov=hit/rec.pts.length;if(cov<0.85){console.log('skip',meta.slug,(cov*100).toFixed(0)+'%');meta.noele=true;continue;}
  // gaps → linear between known neighbours
