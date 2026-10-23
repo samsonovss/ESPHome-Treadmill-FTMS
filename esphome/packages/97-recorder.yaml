@@ -1,0 +1,127 @@
+# Recorder observes explicit lifecycle only; no motor commands or control decisions.
+esphome:
+  on_boot:
+    - priority: 250
+      then:
+        - lambda: 'treadmill_recorder::register_handler(); treadmill_routes::register_handler(); treadmill_mcp::register_handler();'
+    - priority: -110
+      then:
+        - lambda: 'treadmill_recorder::initialize();'
+        # HR Zones для веб-интерфейса сразу после загрузки (а не только после смены настроек).
+        - script.execute: update_heart_rate_zones
+script:
+  - id: recorder_event
+    mode: single
+    parameters:
+      kind: int
+    then:
+      - lambda: |-
+          // Read-only STOP gate also covers calibration and a recording failure
+          // while the existing controller/motor is still active.
+          treadmill_recorder::control_busy = kind == 6 || id(motor_running) ||
+              id(pause_active) || id(calibration_active) || id(free_running_active);
+          // Actual configured NumberTraits; no hard-coded hardware maxima.
+          const auto speed_traits = id(set_speed).traits;
+          const auto incline_traits = id(set_incline).traits;
+          treadmill_recorder::plan_speed_min = speed_traits.get_min_value();
+          treadmill_recorder::plan_speed_max = speed_traits.get_max_value();
+          treadmill_recorder::plan_speed_step = speed_traits.get_step();
+          treadmill_recorder::plan_incline_min = incline_traits.get_min_value();
+          treadmill_recorder::plan_incline_max = incline_traits.get_max_value();
+          treadmill_recorder::plan_incline_step = incline_traits.get_step();
+          treadmill_recorder::plan_gate_ms = millis();
+          if (kind == 6) return;
+          treadmill_recorder::Snapshot s;
+          s.ms = millis();
+          const auto now = id(sntp_time).now();
+          s.epoch = now.is_valid() ? now.timestamp : 0;
+          s.hr = id(fit_smart).connected() && id(heart_rate_sensor).has_state() && id(heart_rate_sensor).state > 0 ? id(heart_rate_sensor).state : NAN;
+          s.speed = id(target_speed_goal) / 10.0f;
+          s.level = id(target_incline_goal) / 10.0f;
+          s.max_level = id(treadmill_max_incline_level).state;
+          s.max_grade = id(treadmill_real_max_grade).state;
+          s.calories = id(total_calories).state;
+          // Energy and profile snapshot for the workout summary (fat/carbs, MET, VO₂, profile).
+          { const float gz = id(treadmill_real_zero_grade).state; s.zero_grade = (gz >= 0.0f && gz <= 10.0f) ? gz : 0.0f; }
+          s.fat_kcal = id(fat_kcal);
+          s.met_avg = id(met_count) > 0 ? id(total_met_sum) / id(met_count) : NAN;
+          s.vo2_avg = id(met_count) > 0 ? id(vo2_sum) / id(met_count) : NAN;
+          s.weight = id(weight_kg).state;
+          s.age = id(age_number).state;
+          s.male = id(gender_select).current_option() == "Male" ? 1 : 0;
+          s.hrmax = id(max_heart_rate);
+          s.zone = std::isfinite(s.hr) ? id(current_zone) : 0;
+          s.target_zone = atoi(id(zone_select).current_option().c_str());
+          // Raw road grade from Zwift while an app is connected (History → «Save Zwift route»).
+          s.zgrade = id(ble_client_connected) && id(zwift_requested_incline).has_state() && std::isfinite(id(zwift_requested_incline).state)
+                         ? id(zwift_requested_incline).state : NAN;
+          const auto &phase = id(pause_active) ? id(saved_program_status) : id(program_status).state;
+          const std::string program = phase == "Manual Mode" ? std::string("Manual") :
+              (id(free_running_active) ? std::string("Free Running") :
+               std::string(id(program_select).current_option().c_str()));
+          std::string pname = program;
+          if (program == "Fartlek" && !id(fartlek_name).state.empty()) pname = "Fartlek: " + id(fartlek_name).state;
+          if (pname.size() > 63) { size_t n = 63; while (n > 0 && (static_cast<unsigned char>(pname[n]) & 0xC0) == 0x80) n--; pname.resize(n); }
+          snprintf(s.program, sizeof(s.program), "%s", pname.c_str());
+          {
+            // Route at the time of the sample (History shows the map): built-in name or the Custom route slot name.
+            const std::string m = id(map_select).current_option().c_str();
+            const std::string r = m == "None" ? std::string() : (m == treadmill_routes::CUSTOM_NAME ? treadmill_routes::active_name : m);
+            snprintf(s.route, sizeof(s.route), "%.191s", r.c_str());
+          }
+          s.paused = kind == 4 ? true : (kind == 5 ? false : id(pause_active));
+          {
+            // Program phase from the Status text (the same strings the display shows) → History bands.
+            const std::string &st = phase; char ph = 0;
+            if (st.rfind("Warm-up", 0) == 0) ph = st.find("Done") != std::string::npos ? 'R' : 'W';
+            else if (st.rfind("Cool-down", 0) == 0) ph = 'C';
+            else if (st.rfind("High ", 0) == 0 || st.rfind("HIIT High ", 0) == 0) ph = 'H';
+            else if (st.rfind("Recovery ", 0) == 0) ph = 'L';
+            else if (st.rfind("Fartlek ", 0) == 0 && st.find(" Fast ") != std::string::npos) ph = 'H';   // 16.10: fartlek fast segment = work
+            else if (st.rfind("Fartlek ", 0) == 0 && st.find(" Easy ") != std::string::npos) ph = 'L';   // 16.10: fartlek easy segment = rest
+            else if (st.find(", Run (") != std::string::npos ||
+                     (st.size() > 3 && st[0] == 'Z' && st[1] >= '1' && st[1] <= '5' && st[2] == ':')) ph = 'R';  // "Z2: 108-126 bpm (12:00)" = Pulse Zone main part
+            s.phase = ph;
+          }
+          if (kind == 1) {
+            if (!id(calibration_active)) treadmill_recorder::start(s);
+          } else if (kind == 3) {
+            treadmill_recorder::finish(s);
+          } else if (kind == 4 || kind == 5) {
+            treadmill_recorder::transition(s);
+          } else {
+            treadmill_recorder::sample(s);
+          }
+interval:
+  - interval: 1s
+    then:
+      - script.execute:
+          id: recorder_event
+          kind: 2
+text_sensor:
+  - platform: template
+    id: workout_recorder_status
+    name: "Workout Recorder Status"
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: |-
+      if (treadmill_recorder::fault.load()) return std::string(treadmill_recorder::fault_text());
+      return std::string(treadmill_recorder::recording ? "recording" : (treadmill_recorder::io_busy ? "finalizing_or_recovering" : "idle"));
+
+number:
+  # Do not keep workouts shorter than this (workout time without pauses), minutes; 0 = keep all (12.10).
+  # Test starts of a few seconds were filling the history.
+  - platform: template
+    name: "Min Workout To Save"
+    id: min_workout_save
+    min_value: 0
+    max_value: 10
+    step: 1
+    unit_of_measurement: "min"
+    entity_category: config
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 2
+    on_value:
+      - lambda: 'treadmill_recorder::min_save_sec = (int) lroundf(x * 60);'

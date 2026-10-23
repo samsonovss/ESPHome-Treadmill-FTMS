@@ -1,0 +1,5 @@
+# Smart treadmill: private build (your own Wi-Fi/API/OTA secrets).
+# Shared logic lives in packages/00-core.yaml; public release build is treadmill-public.yaml.
+packages:
+  core: !include packages/00-core.yaml
+  net: !include packages/91-net-private.yaml

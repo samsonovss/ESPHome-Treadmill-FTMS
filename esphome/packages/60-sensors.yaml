@@ -1,5 +1,13 @@
 # Сенсоры
 sensor:
+  # 13.10: км, пройденные до конца разминки маршрута (веб вычитает их из позиции на трассе)
+  - platform: template
+    name: "Route Km Offset"
+    id: route_km_offset_sensor
+    unit_of_measurement: "km"
+    accuracy_decimals: 3
+    update_interval: never
+
   # === BEGIN EXPERIMENTAL_KICKR_RUN ===
   # Zwift Requested Incline — исходный реальный градиент трассы, который
   # присылает Zwift через фирменную характеристику KICKR RUN.
@@ -212,29 +220,8 @@ sensor:
     on_value:
       then:
         - lambda: |-
-            if (x == 1) {
-              id(map_select).publish_state("Russia, Ufa 3.4km");
-            } else if (x == 2) {
-              id(map_select).publish_state("Russia, Ufa Sipailovo 4.4km");
-            } else if (x == 3) {
-              id(map_select).publish_state("Russia, Ufa Kashkadan 1.7km");
-            } else if (x == 4) {
-              id(map_select).publish_state("Zwift Epic Run 6.2km");
-            } else if (x == 5) {
-              id(map_select).publish_state("Zwift 5K loop 5.0km");
-            } else if (x == 6) {
-              id(map_select).publish_state("Zwift Mountain Mash 5.9km");
-            } else if (x == 7) {
-              id(map_select).publish_state("Zwift Chili Pepper 8.0km");
-            } else if (x == 8) {
-              id(map_select).publish_state("Zwift Hilly Route Reverse Run 9.2km");
-            } else if (x == 9) {
-              id(map_select).publish_state("Zwift Ocean Blvd 11.2km");
-            } else if (x == 10) {
-              id(map_select).publish_state("Zwift Beach Island Loop 12.8km");
-            } else if (x == 11) {
-              id(map_select).publish_state("Zwift Jon’s Route 12.6km");
-            }
+            // 17.10: встроенные трассы убраны из прошивки — маршруты только «свои» (веб-UI, Custom route)
+            (void) x;
 
 
 # Brightness Slider — ползунок яркости с дисплея Nextion.
@@ -326,15 +313,33 @@ sensor:
 #            - На дисплее переключается страница 24 (страница аварии).
 #            - В program_status публикуется "Overheat Emergency Stop".
 #            - Выполняется аварийная остановка дорожки (stop_program).
+  - platform: template
+    name: "Motor Temp Read Errors"
+    id: temp_read_errors_sensor
+    icon: "mdi:thermometer-alert"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: 'return id(temp_read_errors);'
   - platform: dallas_temp
-    address: !secret motor_temperature_sensor_address
     name: "Motor"
     id: temp
     force_update: false
     update_interval: 5s
     filters:
       - lambda: |-
-          if (x == 0.0) return NAN;   // игнорируем ложные нули
+          // A DS18B20 misses a read now and then (CRC / bus noise, ~1 per 40 min on some builds). One miss used to
+          // make the value NAN and the overheat guard stop the belt at once. Keep the last good value for up to
+          // N-1 misses in a row (N = "Motor Temp Fault Reads", default 3 ≈ 15 s); only N misses give NAN (12.10).
+          static float last = NAN; static int bad = 0;
+          if (isnan(x) || x == 0.0f) {   // 0.0 = false zero, as before
+            bad++; id(temp_read_errors) += 1;
+            float n = id(temp_fault_reads).state; int lim = isnan(n) || n < 1 ? 3 : (int) n;
+            if (bad < lim && !isnan(last)) { ESP_LOGW("Overheat", "Motor temp read failed (%d/%d), keeping %.1f C", bad, lim, last); return last; }
+            ESP_LOGE("Overheat", "Motor temp read failed %d times in a row", bad);
+            return NAN;
+          }
+          bad = 0; last = x;
           return x;
     on_value:
       then:
@@ -382,68 +387,9 @@ sensor:
     accuracy_decimals: 0
     update_interval: 1s
     lambda: |-
-      // Если мотор выключен — тренировка закончена, сбрасываем калории
-      //if (!id(motor_running)) {
-        //return 0.0f;
-      //}
-
-      // Если активна пауза — калории замирают, возвращаем предыдущее значение
-      if (id(pause_active)) {
-        return id(total_calories).state;
-      }
-
-      // --- 1. Базовые данные пользователя ---
-      float weight = id(weight_kg).state;                          // Вес в кг
-      int age = id(age_number).state;                              // Возраст
-      bool is_male = (id(gender_select).current_option() == "Male");
-      // формула для максимального пульса (разные для мужчин и женщин)
-      float max_hr = (is_male) ? (214 - 0.8 * age) : (209 - 0.7 * age); 
-
-      // --- 2. Средние значения за тренировку ---
-      float time_sec = id(treadmill_time_sec).state;                                                             // Время в секундах
-      float avg_speed = (id(speed_count) > 0) ? (id(total_speed_sum) / id(speed_count)) : 0;                     // средняя скорость
-      float avg_incline = (id(incline_count) > 0) ? (id(total_incline_sum) / id(incline_count)) : 0;             // средний наклон
-      float avg_heart_rate = (id(heart_rate_count) > 0) ? (id(total_heart_rate_sum) / id(heart_rate_count)) : 0; // средний пульс
-
-      // --- 3. Пересчёт наклона дорожки в реальный наклон ---
-      float real_incline = avg_incline / 3.0f;                     // 15% дорожки ≈ 5% реального уклона
-
-      // --- 4. Пересчёт скорости и уклона ---
-      float speed_m_per_min = avg_speed * 1000.0f / 60.0f;         // км/ч → м/мин
-      float grade = real_incline / 100.0f;                         // % → доля
-
-      // --- 5. Уравнение ACSM для VO₂ (мл/кг/мин) ---
-      // формула учитывает горизонтальную составляющую, наклон и базовый обмен
-      float vo2 = 0.1f * speed_m_per_min
-                + 1.8f * speed_m_per_min * grade
-                + 3.5f;
-
-      // --- 6. Перевод VO₂ в MET ---
-      // 1 MET = 3.5 мл/кг/мин
-      float met = vo2 / 3.5f;
-
-      // --- 7. Коррекция по пульсу ---
-      // если пульс выше 70% от максимального, добавляем до +10% к MET
-      float hr_ratio = avg_heart_rate / max_hr;
-      if (hr_ratio > 0.7f) {
-        float hr_factor = 1.0f + (hr_ratio - 0.7f) * 0.2f;         // рост до 10% при 90% HR
-        if (hr_factor > 1.1f) hr_factor = 1.1f;
-        met *= hr_factor;
-      }
-
-      // --- 8. Перевод MET в калории ---
-      float calories_per_hour = met * weight;                      // ккал/час
-      float calories = (calories_per_hour * time_sec) / 3600.0f; // ккал за прошедшее время
-
-      // --- 9. Ограничение на отрицательные значения ---
-      if (calories < 0) calories = 0;
-
-      // --- 10. Логирование для отладки ---
-      //ESP_LOGI("Calories",
-        //"VO₂: %.2f, MET: %.2f, Weight: %.1f, Time: %.2f min, Avg Speed: %.2f, Avg Incline: %.2f, Real Incline: %.2f, Avg HR: %.0f, Calories: %.0f",
-        //vo2, met, weight, time_sec / 60.0f, avg_speed, avg_incline, real_incline, avg_heart_rate, calories);
-
-      return calories;
+      // Калории копятся посекундно в 40-intervals (energy_kcal): ACSM по реальному
+      // (откалиброванному) уклону, ходьба/бег, поправка по пульсу. Пауза — не растут.
+      return id(energy_kcal);
 # Average Heart Rate — средний пульс за тренировку.
 # Считает сумму всех замеров и делит на их количество.
 # Если замеров нет → возвращает 0. Используется для отображения средней нагрузки.
@@ -589,6 +535,8 @@ sensor:
     entity_category: diagnostic
     icon: "mdi:run"
     lambda: |-
+      // the board does not report 0 after a stop: show 0 while the motor is off
+      if (!id(motor_running)) return 0.0;
       return id(treadmill_speed_feedback) / 10.0;
 
 # Treadmill Incline Feedback — обратная связь по наклону от мотора (UART), %.
@@ -597,7 +545,7 @@ sensor:
     name: "Treadmill Incline Feedback"
     id: treadmill_incline_feedback_sensor
     unit_of_measurement: "%"
-    accuracy_decimals: 0
+    accuracy_decimals: 1  # tenths: motor-format tests (10.10)
     entity_category: diagnostic
     update_interval: 1s
     icon: "mdi:angle-acute"
@@ -800,12 +748,45 @@ sensor:
 
       id(treadmill_time_last) = now;
 
-      return elapsed_ms / 1000;  // наружу — секунды
+      // 22.10: rounded, not floored: ticks come every ~998-1002 ms, floor of n*1000-2 ms stalled a second and then jumped by 2
+      return (elapsed_ms + 500) / 1000;  // наружу — секунды
     update_interval: 1s
     unit_of_measurement: "s"
     accuracy_decimals: 0
     icon: "mdi:timer-play-outline"
     on_value:
+      # 22.10: warm-up and cool-down count down on this clock (were separate 1 s intervals in 40-intervals.yaml):
+      # a 1 min warm-up now ends exactly at T=60, the program starts at the same second
+      - lambda: |-
+          static int last = -1;
+          int T = (int) x;
+          if (last < 0 || T < last) last = T;
+          int dT = T - last;
+          last = T;
+          for (int i = 0; i < dT; i++) {
+            if (id(motor_running) && id(warm_up_active)) {
+              if (id(remaining_warm_up_time) > 0) {
+                id(remaining_warm_up_time)--;
+                if (id(remaining_warm_up_time) % 60 == 0) id(set_warm_up_time).publish_state((float) (id(remaining_warm_up_time) / 60));
+              }
+              id(warm_up).execute();
+            } else if (id(motor_running) && id(remaining_cool_down_time) > 0 && id(remaining_run_time) <= 0) {
+              id(remaining_cool_down_time)--;
+              if (id(remaining_cool_down_time) % 60 == 0) id(set_cool_down_time).publish_state((float) (id(remaining_cool_down_time) / 60));
+              id(cool_down).execute();
+            }
+          }
+      # 22.10: HIIT ticks on this clock's update (was a separate 1 s interval in 40-intervals.yaml)
+      - if:
+          condition:
+            lambda: 'return id(motor_running) && id(program_select).current_option() == "HIIT" && !id(warm_up_active) && id(remaining_cool_down_time) <= 0;'
+          then:
+            - script.execute: interval_training
+      - if:
+          condition:
+            lambda: 'return id(motor_running) && id(program_select).current_option() == "Fartlek" && !id(warm_up_active) && id(remaining_cool_down_time) <= 0;'
+          then:
+            - script.execute: fartlek_tick
       - component.update: total_calories
       - lambda: |-
           int total = (int)x;
@@ -813,13 +794,13 @@ sensor:
           int minutes = (total % 3600) / 60;
           int seconds = total % 60;
 
-          char buffer[9];
-          sprintf(buffer, "%02d:%02d:%02d", hours, minutes, seconds);
+          char buffer[40];
+          snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", hours, minutes, seconds);
           //id(treadmill_time_formatted).publish_state(buffer);
 
           if ((id(motor_running) || id(pause_active)) && (id(current_page) == 1)) {
             int total_minutes = total / 60;
-            char time_str[8];
+            char time_str[32];
             snprintf(time_str, sizeof(time_str), "%02d:%02d", total_minutes, seconds);
             id(display_nextion).set_component_text("t3", time_str);
           }
@@ -876,6 +857,8 @@ sensor:
         pullup: true
     name: "Raw Treadmill Data"
     id: treadmill_raw_data
+    # Raw encoder pulses (4x/s): needed only by "Treadmill Speed Motor"; not sent to HA/web to cut Wi-Fi traffic.
+    internal: true
     unit_of_measurement: "pulses/s"
     accuracy_decimals: 0
     update_interval: 250ms
@@ -897,9 +880,11 @@ sensor:
     unit_of_measurement: "km/h"
     accuracy_decimals: 1
     lambda: |-
-      float rc = id(roller_circumference);
-      float pulses_per_rotation = 144.0;
-      float gr_r = id(gear_ratio);
+      float rc = id(speed_sensor_roller_mm).state / 1000.0f;   // 12.10: number вместо global
+      float pulses_per_rotation = id(speed_sensor_ppr).state;
+      float gr_r = id(speed_sensor_gear_ratio).state;
+      float corr = id(speed_sensor_correction).state / 100.0f;
+      if (!(corr > 0)) corr = 1.0f;
       float raw_pulses = id(treadmill_raw_data).state;
       if (raw_pulses == 0.0) {
         if (id(treadmill_running)) {
@@ -910,7 +895,7 @@ sensor:
         }
         return 0.0;
       }
-      float speed_kph = (raw_pulses / pulses_per_rotation / gr_r) * rc * 3.6;
+      float speed_kph = (rc > 0 && pulses_per_rotation > 0 && gr_r > 0) ? (raw_pulses / pulses_per_rotation / gr_r) * rc * 3.6f * corr : 0.0f;
       id(treadmill_running) = true;
       id(run_stopped_timer) = 0;
       return speed_kph;
@@ -973,12 +958,13 @@ sensor:
           }
 
           // зоны
-          float max_hr = id(max_heart_rate);
-          float min_zone_1 = max_hr * 0.50;
-          float max_zone_1 = max_hr * 0.60;
-          float max_zone_2 = max_hr * 0.70;
-          float max_zone_3 = max_hr * 0.80;
-          float max_zone_4 = max_hr * 0.90;
+          // те же границы, что в update_heart_rate_zones (с учётом Карвонена)
+          float zb = id(hr_zone_base), zs = id(max_heart_rate) - zb;
+          float min_zone_1 = zb + zs * 0.50f;
+          float max_zone_1 = zb + zs * 0.60f;
+          float max_zone_2 = zb + zs * 0.70f;
+          float max_zone_3 = zb + zs * 0.80f;
+          float max_zone_4 = zb + zs * 0.90f;
 
           int heart_rate_zone = 0;
           if (hr < min_zone_1) heart_rate_zone = 0;

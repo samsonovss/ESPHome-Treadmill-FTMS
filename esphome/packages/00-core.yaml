@@ -1,0 +1,173 @@
+# Smart treadmill base configuration.
+# Functional logic is grouped into packages below.
+packages:
+  10_hardware: !include 10-hardware.yaml
+  20_globals: !include 20-globals.yaml
+  30_scripts: !include 30-scripts.yaml
+  40_intervals: !include 40-intervals.yaml
+  50_buttons: !include 50-buttons.yaml
+  60_sensors: !include 60-sensors.yaml
+  70_ble_ftms: !include 70-ble-ftms.yaml
+  80_binary_text: !include 80-binary-text.yaml
+  90_controls: !include 90-controls.yaml
+  95_nextion: !include 95-nextion.yaml
+  96_storage: !include 96-storage.yaml
+  97_recorder: !include 97-recorder.yaml
+  98_hr_select: !include 98-hr-select.yaml
+  98_fartlek: !include 98-fartlek.yaml
+  99_diagnostics: !include 99-diagnostics.yaml
+  99_motor_cmd: !include 99-motor-cmd.yaml
+  94_nextion_routes: !include 94-nextion-routes.yaml
+  94_nextion_presets: !include 94-nextion-presets.yaml
+  93_fw_update: !include 93-fw-update.yaml
+
+esphome:
+  name: treadmill
+  friendly_name: treadmill
+  project:
+    name: samsonovss.treadmill
+    version: "1.0.0-beta.4"
+  includes:
+    - treadmill_dashboard.h
+    - treadmill_storage.h
+    - gzlite.h
+    - recorder_core.h
+    - treadmill_recorder.h
+    - treadmill_programs.h
+    - treadmill_presets.h
+    - treadmill_mcp.h
+    - treadmill_routes.h
+    - treadmill_motor.h
+
+  # Initialize runtime state and publish the KICKR RUN service data.
+  on_boot:
+    # Claim only root before native WebServer setup (priority 249).
+    - priority: 250
+      then:
+        - lambda: 'treadmill_web::register_web_handler();'
+    - priority: 600
+      then:
+        - script.execute: update_heart_rate_zones
+        - globals.set:
+            id: ble_client_connected
+            value: 'false'
+        - text_sensor.template.publish:
+            id: ble_server_status
+            state: "Отключен"
+        - text_sensor.template.publish:
+            id: connection_status
+            state: "Отключено"
+        - sensor.template.publish:
+            id: heart_rate_sensor
+            state: 0
+        - sensor.template.publish:
+            id: battery_level_sensor
+            state: 0
+        - globals.set:
+            id: treadmill_running
+            value: 'false'
+        - globals.set:
+            id: current_distance_km
+            value: '0.0'
+        - globals.set:
+            id: current_speed
+            value: '0.0'
+        - lambda: |-
+            // Инициализация Training Status: Idle (0x01)
+            id(training_status_char).set_value({0x00, 0x01});
+            id(last_training_status) = {0x00, 0x01};
+            id(ftms_training_status_sensor).publish_state(
+                id(training_status_to_string)(0x01));
+            ESP_LOGI("FTMS",
+                     "Инициализация при старте: Training Status = Idle (0x01)");
+
+    # Set FTMS service data after BLE setup so Zwift can validate CONTROLLABLE.
+    - priority: -100
+      then:
+        - lambda: 'treadmill_web::register_web_handler();'
+        - lambda: 'treadmill_storage::mount();'
+        - lambda: |-
+            if (esphome::esp32_ble::global_ble != nullptr) {
+              esphome::esp32_ble::global_ble
+                  ->advertising_set_service_data_and_name(
+                      std::vector<uint8_t>{0x01, 0x01, 0x00}, true);
+              ESP_LOGI("KICKR_RUN",
+                       "FTMS advertising name and service data set: 01 01 00");
+            } else {
+              ESP_LOGW("KICKR_RUN",
+                       "BLE component unavailable; service data not set");
+            }
+
+external_components:
+  - source: github://mrtoy-me/esphome-vl53l1x@main
+    components: [vl53l1x]
+    refresh: 0s
+
+  # ESPHome 2026.5.3 downgrades indications to unconfirmed notifications.
+  # Zwift requires confirmed FTMS Control Point responses to pair CONTROLLABLE.
+  - source:
+      type: local
+      path: components
+    components: [esp32_ble_server, nextion]
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  partitions:
+    - name: workouts_archive
+      type: data
+      subtype: littlefs
+      size: 0x700000
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+    advanced:
+      disable_vfs_support_dir: false
+    components:
+      - joltwallet/littlefs^1.22.3
+    sdkconfig_options:
+      # Performance
+      COMPILER_OPTIMIZATION_PERF: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_32B: "y"
+
+      # Octal PSRAM for data
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: "n"
+      CONFIG_SPIRAM_RODATA: "n"
+      CONFIG_SPIRAM_MODE_OCT: "y"
+      CONFIG_SPIRAM_USE_MALLOC: "y"
+      CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY: "y"
+      CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY: "y"
+
+
+esp32_ble:
+  # GAP advertising name used by the KICKR RUN compatibility profile.
+  name: "KICKR RUN"
+  max_connections: 3
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+safe_mode:
+  num_attempts: 1
+
+logger:
+  level: INFO
+  hardware_uart: USB_SERIAL_JTAG  # native USB port (/dev/ttyACM*); UART0 stays free for the display/motor
+
+
+# Local status and control interface. Web OTA is intentionally disabled.
+web_server:
+  port: 80
+
+# System diagnostics update interval.
+debug:
+  update_interval: 5s
+
+# Internet time synchronization used for workout timestamps.
+time:
+  - platform: sntp
+    id: sntp_time
+
+

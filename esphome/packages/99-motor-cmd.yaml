@@ -1,0 +1,457 @@
+# Motor-board incline command format and test (10.10) — Settings → Incline → «Формат команды мотора».
+# Template: the command the firmware sends for incline; value = round(incline % × scale).
+# Default = the original console protocol: "[SETINC:%03d]" × 10 (4.3 % → [SETINC:043]).
+# Raw test: one SETINC command sent as typed, repeated instead of the regular one for 15 s, belt running only.
+text:
+  - platform: template
+    id: incline_pos_query
+    name: "Incline Position Query"
+    icon: "mdi:code-brackets"
+    entity_category: config
+    mode: text
+    min_length: 0
+    max_length: 24
+    optimistic: true
+    restore_value: true
+    initial_value: "[ZT]"
+    on_value:
+      - lambda: 'treadmill_motor::pos_query = x;'
+  - platform: template
+    id: motor_incline_template
+    name: "Motor Incline Template"
+    icon: "mdi:code-brackets"
+    entity_category: config
+    mode: text
+    min_length: 11
+    max_length: 24
+    optimistic: true
+    restore_value: true
+    initial_value: "[SETINC:%03d]"
+    on_value:
+      - lambda: |-
+          if (treadmill_motor::valid_tpl(x)) { treadmill_motor::tpl = x; ESP_LOGI("motor", "Incline template -> %s", x.c_str()); }
+          else { treadmill_motor::tpl = treadmill_motor::DEFAULT_TPL; ESP_LOGW("motor", "Bad incline template '%s' -> default", x.c_str()); }
+          id(motor_test_status).publish_state(treadmill_motor::valid_tpl(x) ? ("Шаблон: " + x) : std::string("Шаблон неверный — используется [SETINC:%03d]"));
+
+  - platform: template
+    id: motor_raw_command
+    name: "Motor Raw Command"
+    icon: "mdi:console-line"
+    entity_category: config
+    mode: text
+    min_length: 0
+    max_length: 24
+    optimistic: true
+    initial_value: "[SETINC:010]"
+
+  - platform: template
+    id: motor_speed_template
+    name: "Motor Speed Template"
+    icon: "mdi:code-brackets"
+    entity_category: config
+    mode: text
+    min_length: 11
+    max_length: 24
+    optimistic: true
+    restore_value: true
+    initial_value: "[SETSPD:%03d]"
+    on_value:
+      - lambda: |-
+          if (treadmill_motor::valid_spd_tpl(x)) { treadmill_motor::spd_tpl = x; ESP_LOGI("motor", "Speed template -> %s", x.c_str()); }
+          else { treadmill_motor::spd_tpl = treadmill_motor::DEFAULT_SPD_TPL; ESP_LOGW("motor", "Bad speed template '%s' -> default", x.c_str()); }
+
+select:
+  - platform: template
+    id: incline_pos_source
+    name: "Incline Position Source"
+    icon: "mdi:map-marker-path"
+    entity_category: config
+    options: ["Авто", "Датчик [ZT]", "Обратная связь [SETINC]"]
+    initial_option: "Авто"
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: 'treadmill_motor::pos_src = (int) i;'
+  - platform: template
+    id: motor_speed_scale
+    name: "Motor Speed Scale"
+    icon: "mdi:multiplication"
+    entity_category: config
+    options: ["1", "10", "100"]
+    initial_option: "10"
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          treadmill_motor::spd_scale = atoi(x.c_str());
+
+  - platform: template
+    id: motor_incline_scale
+    name: "Motor Incline Scale"
+    icon: "mdi:multiplication"
+    entity_category: config
+    options: ["1", "10", "100"]
+    initial_option: "10"
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          treadmill_motor::scale = atoi(x.c_str());
+          ESP_LOGI("motor", "Incline scale -> x%d", treadmill_motor::scale);
+
+# Board limits (stored in the motor board itself; the board only echoes them, so the last written value is kept here).
+number:
+  - platform: template
+    id: board_max_speed
+    name: "Board Max Speed"
+    unit_of_measurement: "km/h"
+    min_value: 1
+    max_value: 25
+    step: 0.1
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 18
+  - platform: template
+    id: board_min_speed
+    name: "Board Min Speed"
+    unit_of_measurement: "km/h"
+    min_value: 0.1
+    max_value: 5
+    step: 0.1
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 1
+  - platform: template
+    id: board_descent_comp
+    name: "Board Descent Compensation"
+    unit_of_measurement: "lvl"
+    min_value: 0
+    max_value: 1.5
+    step: 0.1
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 0.6
+    on_value:
+      - lambda: 'treadmill_motor::comp_tenths = (int) lroundf(x * 10);'
+  - platform: template
+    id: board_wsize
+    name: "Board Wheel Size"
+    min_value: 150
+    max_value: 350
+    step: 1
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 183
+  - platform: template
+    id: board_ns1
+    name: "Board NS1"
+    min_value: 10
+    max_value: 600
+    step: 1
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 250
+  - platform: template
+    id: board_ns3
+    name: "Board NS3"
+    min_value: 10
+    max_value: 100
+    step: 1
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 20
+  - platform: template
+    id: board_gc3
+    name: "Board GC3"
+    min_value: 10
+    max_value: 100
+    step: 1
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 20
+  - platform: template
+    id: board_max_incline
+    name: "Board Max Incline"
+    min_value: 1
+    max_value: 100  # console menu range 10–100; >15 = finer board levels (11.10)
+    step: 1
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 15
+
+script:
+  # Service commands paced like the original console: 200 ms apart (the board stores each one and drops bytes meanwhile).
+  - id: board_send_settings
+    mode: single
+    parameters:
+      with_fadj: bool
+    then:
+      - lambda: |-
+          treadmill_motor::svc_busy = true;  // hold regular speed/incline traffic
+      # GC3 went out right behind a regular frame and its echo was sometimes lost: let the line go quiet first
+      - delay: 400ms
+      - lambda: |-
+          treadmill_motor::board_acks.clear();
+          char b[24]; snprintf(b, sizeof(b), "[GC3:%03d]", (int) lroundf(id(board_gc3).state)); id(uart_bus).write_str(b);
+      - delay: 200ms
+      - lambda: 'char b[24]; snprintf(b, sizeof(b), "[NS1:%04d]", (int) lroundf(id(board_ns1).state)); id(uart_bus).write_str(b);'
+      - delay: 200ms
+      - lambda: 'char b[24]; snprintf(b, sizeof(b), "[NS3:%04d]", (int) lroundf(id(board_ns3).state)); id(uart_bus).write_str(b);'
+      - delay: 200ms
+      - lambda: 'char b[24]; snprintf(b, sizeof(b), "[WSIZE:%d]", (int) lroundf(id(board_wsize).state)); id(uart_bus).write_str(b);'
+      - delay: 200ms
+      - lambda: 'char b[24]; snprintf(b, sizeof(b), "[SPDMAX:%03d]", (int) lroundf(id(board_max_speed).state * 10)); id(uart_bus).write_str(b);'
+      - delay: 200ms
+      - lambda: 'char b[24]; snprintf(b, sizeof(b), "[SPDMIN:%02d]", (int) lroundf(id(board_min_speed).state * 10)); id(uart_bus).write_str(b);'
+      - delay: 200ms
+      - lambda: 'char b[24]; snprintf(b, sizeof(b), "[INCMAX:%d]", (int) lroundf(id(board_max_incline).state)); id(uart_bus).write_str(b);'
+      - delay: 200ms
+      - if:
+          condition:
+            lambda: 'return with_fadj;'
+          then:
+            - lambda: |-
+                id(uart_bus).write_str("[FADJ]");
+                treadmill_motor::zt_min = treadmill_motor::zt_max = -1; treadmill_motor::zt_flag = 0;
+                treadmill_motor::cal_active = true; treadmill_motor::cal_start = millis();
+                ESP_LOGW("motor", "Incline auto-calibration started (console sequence)");
+                id(board_cal_status).publish_state("Калибровка: дека едет вниз…");
+      - delay: 1s
+      # still no GC3 echo: send it once more (same value, harmless)
+      - if:
+          condition:
+            lambda: 'return treadmill_motor::board_acks.find("GC3:") == std::string::npos;'
+          then:
+            - lambda: 'char b[24]; snprintf(b, sizeof(b), "[GC3:%03d]", (int) lroundf(id(board_gc3).state)); id(uart_bus).write_str(b); ESP_LOGW("motor", "GC3 not echoed, resent");'
+            - delay: 500ms
+      - lambda: |-
+          treadmill_motor::svc_busy = false;
+          id(board_acks_text).publish_state(treadmill_motor::board_acks.empty() ? std::string("нет подтверждений") : treadmill_motor::board_acks);
+
+button:
+  - platform: template
+    name: "Board Write Settings"
+    icon: "mdi:content-save-cog"
+    entity_category: config
+    on_press:
+      - lambda: |-
+          if (id(motor_running)) { id(motor_test_status).publish_state("Запись в плату — только при стоящей ленте"); return; }
+          if (id(board_send_settings)->is_running()) return;
+          id(board_send_settings)->execute(false);
+          ESP_LOGW("motor", "Board settings written (paced)");
+          id(motor_test_status).publish_state("Настройки отправлены в плату");
+  - platform: template
+    name: "Board Calibrate Incline"
+    icon: "mdi:arrow-up-down-bold"
+    entity_category: config
+    on_press:
+      - lambda: |-
+          if (id(motor_running)) { id(board_cal_status).publish_state("Только при стоящей ленте"); return; }
+          if (treadmill_motor::cal_active) return;
+          if (id(board_send_settings)->is_running()) return;
+          id(board_send_settings)->execute(true);   // 7 settings 200 ms apart, then [FADJ] — like the console
+  - platform: template
+    name: "Board Read Position"
+    icon: "mdi:angle-acute"
+    entity_category: config
+    on_press:
+      - lambda: 'id(uart_send)->execute(std::string("[ZT]"));'
+  - platform: template
+    name: "Board Read Version"
+    icon: "mdi:information"
+    entity_category: config
+    on_press:
+      - lambda: 'id(uart_send)->execute(std::string("[VER:000]"));'
+  - platform: template
+    name: "Board Reset"
+    icon: "mdi:restart-alert"
+    entity_category: config
+    on_press:
+      - lambda: |-
+          if (id(motor_running)) { id(motor_test_status).publish_state("RESET — только при стоящей ленте"); return; }
+          id(uart_send)->execute(std::string("[RESET:000]"));
+          ESP_LOGW("motor", "Board reset sent");
+          id(motor_test_status).publish_state("Плата мотора перезагружается");
+
+  - platform: template
+    name: "Motor Raw Send"
+    icon: "mdi:send"
+    entity_category: config
+    on_press:
+      - lambda: |-
+          const std::string c = id(motor_raw_command).state;
+          // Command search: any [NAME:value] except SETSPD/SETINC, sent ONCE, belt stopped; replies collected for 4 s.
+          if (c.rfind("[SETINC:", 0) != 0) {
+            if (!treadmill_motor::valid_probe(c)) { id(motor_test_status).publish_state("Формат: [ИМЯ] или [ИМЯ:значение], ИМЯ — латинские заглавные/цифры; SETSPD нельзя"); return; }
+            // Belt may run, but slowly (≤ 2 km/h); RESET only on a stopped belt.
+            if (id(motor_running) && (id(target_speed_goal) > 20 || treadmill_motor::is_reset(c))) { id(motor_test_status).publish_state(treadmill_motor::is_reset(c) ? "RESET — только при стоящей ленте" : "Поиск на ходу — только до 2 км/ч"); return; }
+            treadmill_motor::probe_log.clear(); treadmill_motor::probe_n = 0;
+            treadmill_motor::probe_until = millis() + 4000; if (treadmill_motor::probe_until == 0) treadmill_motor::probe_until = 1;
+            id(uart_send)->execute(c);
+            ESP_LOGW("motor", "Probe command %s", c.c_str());
+            id(motor_test_status).publish_state("Поиск: отправлено " + c + ", жду ответ 4 с");
+            id(motor_probe_replies).publish_state("…");
+            return;
+          }
+          if (!id(motor_running)) { id(motor_test_status).publish_state("Лента стоит — запустите её на малой скорости"); return; }
+          if (!treadmill_motor::valid_raw(c)) { id(motor_test_status).publish_state("Только [SETINC:…] с цифрами, точкой или минусом"); return; }
+          treadmill_motor::raw_cmd = c;
+          treadmill_motor::raw_until = millis() + 15000;
+          if (treadmill_motor::raw_until == 0) treadmill_motor::raw_until = 1;
+          id(uart_send)->execute(c);
+          ESP_LOGI("motor", "Raw test command %s for 15 s", c.c_str());
+          id(motor_test_status).publish_state("Отправляю " + c + " 15 с");
+      - delay: 4s
+      - lambda: |-
+          if (treadmill_motor::probe_until != 0) {
+            const std::string r = treadmill_motor::probe_log.empty() ? std::string("нет ответа") : treadmill_motor::probe_log;
+            id(motor_probe_replies).publish_state(id(motor_raw_command).state + " → " + r);
+            id(motor_test_status).publish_state(treadmill_motor::probe_echoed(id(motor_raw_command).state) ? "ЗАПИСЬ: плата повторила команду — значение сохранено в плате" : "Поиск закончен");
+            ESP_LOGW("motor", "Probe %s -> %s", id(motor_raw_command).state.c_str(), r.c_str());
+            treadmill_motor::probe_until = 0;
+          }
+      - delay: 11s
+      - lambda: |-
+          if (treadmill_motor::raw_until != 0) {
+            treadmill_motor::raw_until = 0;
+            id(motor_test_status).publish_state("Тест закончен — снова обычная команда " + treadmill_motor::incline_cmd(id(target_incline_goal)));
+          }
+
+switch:
+  - platform: template
+    id: motor_listen_mode
+    name: "Motor Listen Mode"
+    icon: "mdi:ear-hearing"
+    entity_category: config
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    turn_on_action:
+      - lambda: |-
+          treadmill_motor::listen_log.clear(); treadmill_motor::listen_t0 = millis(); treadmill_motor::listen = true; treadmill_motor::listen_ver++;
+          ESP_LOGW("motor", "Listen mode ON — ESP is silent on the UART");
+    turn_off_action:
+      - lambda: |-
+          treadmill_motor::listen = false;
+          ESP_LOGW("motor", "Listen mode OFF");
+
+interval:
+  - interval: 200ms
+    then:
+      - lambda: |-
+          static bool was = false;
+          if (!treadmill_motor::cal_active) {
+            // the console resets the board right after calibration — that applies the new range
+            if (was && treadmill_motor::zt_flag == 1) { id(uart_send)->execute(std::string("[RESET:000]")); ESP_LOGW("motor", "Calibration done -> board reset"); }
+            was = false; return;
+          }
+          was = true;
+          if (millis() - treadmill_motor::cal_start > 120000) {
+            treadmill_motor::cal_active = false;
+            id(board_cal_status).publish_state("Калибровка не завершилась за 2 мин");
+            return;
+          }
+          id(uart_send)->execute(std::string("[ZT]"));
+          static uint32_t last = 0;
+          if (millis() - last > 1000 && treadmill_motor::zt_pos >= 0) {
+            last = millis();
+            char m[80]; snprintf(m, sizeof(m), "Калибровка… положение %d (мин %d, макс %d)", treadmill_motor::zt_pos, treadmill_motor::zt_min, treadmill_motor::zt_max);
+            id(board_cal_status).publish_state(m);
+          }
+  - interval: 1s
+    then:
+      - lambda: |-
+          // finer board levels: divider = INCMAX written to the board / our max level (60 / 15 = 4); 1 = off
+          {
+            float our = id(treadmill_max_incline_level).state, bm = id(board_max_incline).state;
+            float d = (our >= 1 && bm > our) ? bm / our : 1.0f;
+            if (d != treadmill_motor::board_div) { treadmill_motor::board_div = d; ESP_LOGI("motor", "Board level divider -> %.2f", d); }
+            treadmill_motor::comp_tenths = d > 1.0f ? (int) lroundf(id(board_descent_comp).state * 10) : 0;
+          }
+          // real deck position while running (also tells a descent from a climb)
+          if ((id(motor_running) || treadmill_motor::returning) && !treadmill_motor::cal_active && !treadmill_motor::listen && !treadmill_motor::svc_busy
+              && !treadmill_motor::pos_query.empty() && id(incline_pos_source).active_index().value_or(0) != 2)
+            id(uart_send)->execute(treadmill_motor::pos_query);
+          static uint32_t shown = 0;
+          if (treadmill_motor::listen_ver != shown) { shown = treadmill_motor::listen_ver; id(motor_listen_log).publish_state(treadmill_motor::listen_text()); }
+
+sensor:
+  - platform: template
+    id: treadmill_incline_position
+    name: "Treadmill Incline Position"
+    unit_of_measurement: "lvl"
+    icon: "mdi:angle-acute"
+    accuracy_decimals: 1
+    update_interval: 1s
+    lambda: |-
+      // real deck position in our levels: [ZT] from the calibration zero, else the board's [SETINC] echo
+      if (treadmill_motor::use_zt(millis())) return treadmill_motor::cur_tenths < 0 ? NAN : treadmill_motor::cur_tenths / 10.0f;
+      return id(treadmill_incline_feedback) / 10.0f;
+  - platform: template
+    id: board_incline_zero_sensor
+    name: "Board Incline Zero"
+    icon: "mdi:angle-acute"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: 'return id(board_incline_zero);'
+  - platform: template
+    id: board_incline_pos
+    name: "Board Incline Position"
+    icon: "mdi:angle-acute"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: never
+
+text_sensor:
+  - platform: template
+    id: board_acks_text
+    name: "Board Acks"
+    icon: "mdi:check-all"
+    entity_category: diagnostic
+  - platform: template
+    id: board_cal_status
+    name: "Board Calibration Status"
+    icon: "mdi:progress-wrench"
+    entity_category: diagnostic
+  - platform: template
+    id: motor_listen_log
+    name: "Motor Listen Log"
+    icon: "mdi:text-box-search"
+    entity_category: diagnostic
+  - platform: template
+    id: board_version
+    name: "Board Version"
+    icon: "mdi:chip"
+    entity_category: diagnostic
+  - platform: template
+    id: board_reply
+    name: "Board Reply"
+    icon: "mdi:message-reply"
+    entity_category: diagnostic
+  - platform: template
+    id: motor_probe_replies
+    name: "Motor Probe Replies"
+    icon: "mdi:message-reply-text-outline"
+    entity_category: diagnostic
+
+  - platform: template
+    id: motor_test_status
+    name: "Motor Test Status"
+    icon: "mdi:information-outline"
+    entity_category: diagnostic

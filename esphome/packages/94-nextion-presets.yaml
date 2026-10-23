@@ -1,0 +1,146 @@
+# Nextion pages 18 (HIIT presets) and 20 (Fartlek presets): copies of page 12 (rows r0..r4 ids 7..11, Up id 12, Down id 4).
+# Rows come from the board preset store (/workouts/presets/<kind>.json); tapping a row applies the preset and sets the program.
+# Components are addressed without page prefix (valid for the page currently shown).
+globals:
+  - {id: nx_pre_kind, type: int, initial_value: '0'}
+
+switch:
+  - platform: template
+    name: "Display Sound"
+    id: nx_sound_switch
+    icon: "mdi:volume-high"
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+script:
+  - id: nx_beep
+    then:
+      - lambda: |-
+          if (id(nx_sound_switch).state) id(display_nextion).send_command_printf("play 0,1,0");
+
+  - id: nx_pre_render
+    then:
+      - lambda: |-
+          using namespace treadmill_recorder;
+          const int n = (int) nx_pre_items.size();
+          if (nx_pre_off >= n) nx_pre_off = 0;
+          const int off = nx_pre_off;
+          auto *d = id(display_nextion);
+          d->set_component_text("tMsg", "");
+          d->send_command_printf("vis tEmpty,%d", n == 0 ? 1 : 0);
+          for (int i = 0; i < 5; i++) {
+            char comp[8];
+            snprintf(comp, sizeof comp, "r%d", i);
+            const int k = off + i;
+            if (k < n) {
+              std::string line = treadmill_routes::utf8_cut(nx_pre_items[k].name, id(nx_pre_kind) == 0 ? 24 : 34);
+              if (id(nx_pre_kind) == 0) {
+                char b[32];
+                snprintf(b, sizeof b, " \xc2\xb7 %dx%d/%d", nx_pre_items[k].cycles, nx_pre_items[k].hi, nx_pre_items[k].lo);
+                line += b;
+              }
+              for (auto &ch : line) if (ch == '"' || ch == '\\') ch = '\'';
+              d->set_component_text(comp, line.c_str());
+            } else {
+              d->set_component_text(comp, "");
+            }
+            d->send_command_printf("vis r%d,%d", i, k < n ? 1 : 0);
+          }
+          if (n == 0) d->set_component_text("tCount", "");
+          else d->set_component_text_printf("tCount", "%d-%d of %d", off + 1, off + 5 < n ? off + 5 : n, n);
+
+  - id: nx_pre_load
+    parameters:
+      kind: int
+    then:
+      - lambda: |-
+          id(nx_pre_kind) = kind;
+          treadmill_recorder::nx_pre_load(kind == 0 ? "hiit" : "fartlek");
+      - script.execute: nx_pre_render
+
+  - id: nx_pre_pick
+    parameters:
+      kind: int
+      row: int
+    then:
+      - lambda: |-
+          using namespace treadmill_recorder;
+          const int idx = nx_pre_off + row;
+          if (idx >= (int) nx_pre_items.size()) return;
+          const NxPre &p = nx_pre_items[idx];
+          if (kind == 0) {
+            id(program_select).publish_state("HIIT");
+            id(hiit_work_mode).publish_state(p.manual ? "Manual" : "Pulse");
+            id(hiit_high_duration).publish_state(p.hi);
+            id(hiit_low_duration).publish_state(p.lo);
+            id(hiit_cycles).publish_state(p.cycles);
+            id(set_warm_up_time).publish_state(p.warm);
+            id(set_cool_down_time).publish_state(p.cool);
+            if (!std::isnan(p.low)) id(hiit_low_speed).publish_state(p.low);
+            if (!std::isnan(p.high)) id(hiit_high_speed).publish_state(p.high);
+          } else {
+            id(program_select).publish_state("Fartlek");
+            id(fartlek_plan).publish_state(p.plan);
+            id(fartlek_name).publish_state(treadmill_routes::utf8_cut(p.name, 30));
+            if (p.hasWC) {   // 22.10: preset keeps its warm-up/cool-down (choosing Fartlek resets them to 3+3)
+              id(set_warm_up_time).publish_state(p.warm);
+              id(set_cool_down_time).publish_state(p.cool);
+            }
+          }
+
+binary_sensor:
+  - {platform: nextion, page_id: 18, component_id: 7, id: nx_hl0, internal: true, on_press: {then: [{lambda: 'id(nx_hl0).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 0}}]}}
+  - {platform: nextion, page_id: 18, component_id: 8, id: nx_hl1, internal: true, on_press: {then: [{lambda: 'id(nx_hl1).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 1}}]}}
+  - {platform: nextion, page_id: 18, component_id: 9, id: nx_hl2, internal: true, on_press: {then: [{lambda: 'id(nx_hl2).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 2}}]}}
+  - {platform: nextion, page_id: 18, component_id: 10, id: nx_hl3, internal: true, on_press: {then: [{lambda: 'id(nx_hl3).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 3}}]}}
+  - {platform: nextion, page_id: 18, component_id: 11, id: nx_hl4, internal: true, on_press: {then: [{lambda: 'id(nx_hl4).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 4}}]}}
+  - {platform: nextion, page_id: 20, component_id: 7, id: nx_fl0, internal: true, on_press: {then: [{lambda: 'id(nx_fl0).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 0}}]}}
+  - {platform: nextion, page_id: 20, component_id: 8, id: nx_fl1, internal: true, on_press: {then: [{lambda: 'id(nx_fl1).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 1}}]}}
+  - {platform: nextion, page_id: 20, component_id: 9, id: nx_fl2, internal: true, on_press: {then: [{lambda: 'id(nx_fl2).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 2}}]}}
+  - {platform: nextion, page_id: 20, component_id: 10, id: nx_fl3, internal: true, on_press: {then: [{lambda: 'id(nx_fl3).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 3}}]}}
+  - {platform: nextion, page_id: 20, component_id: 11, id: nx_fl4, internal: true, on_press: {then: [{lambda: 'id(nx_fl4).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 4}}]}}
+  - platform: nextion
+    page_id: 18
+    component_id: 12
+    id: nx_hl_up
+    internal: true
+    on_press:
+      then:
+        - lambda: |-
+            id(nx_hl_up).publish_state(false);
+            treadmill_recorder::nx_pre_off = treadmill_recorder::nx_pre_off >= 5 ? treadmill_recorder::nx_pre_off - 5 : 0;
+        - script.execute: nx_pre_render
+  - platform: nextion
+    page_id: 18
+    component_id: 4
+    id: nx_hl_down
+    internal: true
+    on_press:
+      then:
+        - lambda: |-
+            id(nx_hl_down).publish_state(false);
+            if (treadmill_recorder::nx_pre_off + 5 < (int) treadmill_recorder::nx_pre_items.size()) treadmill_recorder::nx_pre_off += 5;
+        - script.execute: nx_pre_render
+  - platform: nextion
+    page_id: 20
+    component_id: 12
+    id: nx_fl_up
+    internal: true
+    on_press:
+      then:
+        - lambda: |-
+            id(nx_fl_up).publish_state(false);
+            treadmill_recorder::nx_pre_off = treadmill_recorder::nx_pre_off >= 5 ? treadmill_recorder::nx_pre_off - 5 : 0;
+        - script.execute: nx_pre_render
+  - platform: nextion
+    page_id: 20
+    component_id: 4
+    id: nx_fl_down
+    internal: true
+    on_press:
+      then:
+        - lambda: |-
+            id(nx_fl_down).publish_state(false);
+            if (treadmill_recorder::nx_pre_off + 5 < (int) treadmill_recorder::nx_pre_items.size()) treadmill_recorder::nx_pre_off += 5;
+        - script.execute: nx_pre_render

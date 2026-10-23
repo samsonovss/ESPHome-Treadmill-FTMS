@@ -1,0 +1,4 @@
+# Public build for GitHub releases (no personal secrets). Build this one for fw-release.sh.
+packages:
+  core: !include packages/00-core.yaml
+  net: !include packages/91-net-public.yaml

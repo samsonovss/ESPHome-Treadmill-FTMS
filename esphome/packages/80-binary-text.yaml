@@ -18,7 +18,15 @@ binary_sensor:
     name: "Speed Up Button"
     entity_category: diagnostic
     on_press:
-      - button.press: speed_up_button_large
+      - lambda: |-
+          // шаг из Handrail Speed Step (12.10)
+          if (!id(motor_running)) return;
+          int st = (int) lroundf(id(handrail_speed_step).state * 10);
+          if (st < 1) st = 5;
+          int g = id(target_speed_goal) + st;
+          if (g < 6) g = 6;
+          if (g > 180) g = 180;
+          id(target_speed_goal) = g;
     filters:
       - delayed_on: 50ms
       - delayed_off: 50ms
@@ -33,7 +41,15 @@ binary_sensor:
     name: "Speed Down Button"
     entity_category: diagnostic
     on_press:
-      - button.press: speed_down_button_large
+      - lambda: |-
+          // шаг из Handrail Speed Step (12.10)
+          if (!id(motor_running)) return;
+          int st = (int) lroundf(id(handrail_speed_step).state * 10);
+          if (st < 1) st = 5;
+          int g = id(target_speed_goal) - st;
+          if (g < 6) g = 6;
+          if (g > 180) g = 180;
+          id(target_speed_goal) = g;
     filters:
       - delayed_on: 50ms
       - delayed_off: 50ms
@@ -48,7 +64,15 @@ binary_sensor:
     name: "Incline Up Button"
     entity_category: diagnostic
     on_press:
-      - button.press: incline_up_button
+      - lambda: |-
+          // шаг из Handrail Incline Step (12.10)
+          if (!id(motor_running)) return;
+          float st = id(handrail_incline_step).state;
+          if (!(st > 0)) st = 1.0f;
+          float v = roundf((id(set_incline).state + st) * 10.0f) / 10.0f;
+          if (v < 0) v = 0;
+          if (v > 15) v = 15;
+          id(set_incline).publish_state(v);
     filters:
       - delayed_on: 50ms
       - delayed_off: 50ms
@@ -62,7 +86,15 @@ binary_sensor:
     name: "Incline Down Button"
     entity_category: diagnostic
     on_press:
-      - button.press: incline_down_button
+      - lambda: |-
+          // шаг из Handrail Incline Step (12.10)
+          if (!id(motor_running)) return;
+          float st = id(handrail_incline_step).state;
+          if (!(st > 0)) st = 1.0f;
+          float v = roundf((id(set_incline).state - st) * 10.0f) / 10.0f;
+          if (v < 0) v = 0;
+          if (v > 15) v = 15;
+          id(set_incline).publish_state(v);
     filters:
       - delayed_on: 50ms
       - delayed_off: 50ms
@@ -138,19 +170,15 @@ binary_sensor:
             id(program_select).publish_state("None");
             id(bquick_start).publish_state(false);
 
-  # bfree_run — кнопка Free Run на главной странице.
-  # Включает режим свободного бега, запускает ручной режим, сбрасывает программу.
+  # bfree_run — плитка Fartlek на главной странице (как bhiit): выбирает программу Fartlek.
   - platform: nextion
     page_id: 0
     component_id: 7
     id: bfree_run
     on_press:
       then:
-        - delay: 3400ms
-        - switch.turn_on: free_running_mode_switch
-        - script.execute: start_manual
         - lambda: |-
-            id(program_select).publish_state("None");
+            id(program_select).publish_state("Fartlek");
             id(bfree_run).publish_state(false);
 
   # bfree_run1 — кнопка Free Run на странице выбора карты.
@@ -279,6 +307,7 @@ binary_sensor:
         - lambda: |-
             id(zone_select).publish_state("1");
         - lambda: id(bzone1).publish_state(false);
+        - script.execute: nx_zone_route_fix
 
   # bzone2 — кнопка выбора зоны 2.
   # Устанавливает зону 2, сбрасывает кнопку.
@@ -291,6 +320,7 @@ binary_sensor:
         - lambda: |-
             id(zone_select).publish_state("2");
         - lambda: id(bzone2).publish_state(false);
+        - script.execute: nx_zone_route_fix
 
   # bzone3 — кнопка выбора зоны 3.
   # Устанавливает зону 3, сбрасывает кнопку.
@@ -303,6 +333,7 @@ binary_sensor:
         - lambda: |-
             id(zone_select).publish_state("3");
         - lambda: id(bzone3).publish_state(false);
+        - script.execute: nx_zone_route_fix
 
   # bzone4 — кнопка выбора зоны 4.
   # Устанавливает зону 4, сбрасывает кнопку.
@@ -315,6 +346,7 @@ binary_sensor:
         - lambda: |-
             id(zone_select).publish_state("4");
         - lambda: id(bzone4).publish_state(false);
+        - script.execute: nx_zone_route_fix
 
   # bzone5 — кнопка выбора зоны 5.
   # Устанавливает зону 5, сбрасывает кнопку.
@@ -327,35 +359,28 @@ binary_sensor:
         - lambda: |-
             id(zone_select).publish_state("5");
         - lambda: id(bzone5).publish_state(false);
-
-  # map_m0 — кнопка запуска программы Pulse Zone (страница map_m0).
-  # Устанавливает Pulse Zone, логирует событие, сбрасывает кнопку.
-  - platform: nextion
-    page_id: 12
-    component_id: 3
-    id: map_m0
-    on_press:
-      then:
-        - lambda: |-
-            id(program_select).publish_state("Pulse Zone");  // Выбираем программу
-            ESP_LOGI("Nextion", "INFO tab (map_m0 press) press"); 
-            id(map_m0).publish_state(false);
-
-  # map_m1 — кнопка запуска программы Pulse Zone (страница map_m1).
-  # Аналогично map_m0, но с другой кнопки.
-  - platform: nextion
-    page_id: 12
-    component_id: 1
-    id: map_m1
-    on_press:
-      then:
-        - lambda: |-
-            id(program_select).publish_state("Pulse Zone");  // Выбираем программу
-            ESP_LOGI("Nextion", "INFO tab (map_m1 press) press"); 
-            id(map_m1).publish_state(false);
+        - script.execute: nx_zone_route_fix
 
 # Текстовые сенсоры
 text_sensor:
+
+  # Web UI diagnostic snapshot: read-only firmware flags, NOT motor movement proof.
+  # Published only when the value changes (no per-second spam in HA/logs).
+  # Web UI liveness comes from web_server SSE ping/events, not from this sensor.
+  - platform: template
+    name: "UI Control State"
+    id: ui_control_state
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      const char *state = id(pause_active)
+          ? (id(motor_running) ? "unknown" : "paused")
+          : (id(motor_running) ? "running" : "stopped");
+      std::string snapshot = std::string(state) + "|" + (id(auto_mode) ? "auto" : "manual");
+      static std::string last_published;
+      if (snapshot == last_published) return {};
+      last_published = snapshot;
+      return snapshot;
   # - platform: template
   #   name: "Last Time"
   #   id: last_time_text
@@ -412,6 +437,14 @@ text_sensor:
     name: "Zwift"
     id: ble_server_status
     icon: "mdi:bluetooth"
+
+  # Границы зон пульса для веб-интерфейса: "max=176;rest=0;b=88,106,123,141,158,176"
+  # (b = 50,60,70,80,90,100 % — по формуле/своему максимуму, % или Карвонен). Пишет update_heart_rate_zones.
+  - platform: template
+    name: "HR Zones"
+    id: hr_zones_text
+    icon: "mdi:heart-settings"
+    entity_category: diagnostic
 
   # Выбранные данные (отображение текущего выбора)
   - platform: template

@@ -1,0 +1,74 @@
+# Foundation only. No archive collection and no automatic formatting.
+# 09.10: capacity sensors read the recorder's cached numbers — esp_littlefs_info walks the whole
+# 7 MB partition (~250 ms in the main loop, every 30 s ×3) and caused the periodic Loop Time spikes.
+sensor:
+  - platform: template
+    id: workout_storage_total
+    name: "Workout Storage Total"
+    entity_category: diagnostic
+    unit_of_measurement: "B"
+    accuracy_decimals: 0
+    update_interval: 30s
+    # cached by the recorder IO task (after init/record/delete): no LittleFS walk in the main loop
+    lambda: 'const size_t t=treadmill_recorder::archive_total.load(),u=treadmill_recorder::archive_used.load(); return t&&u<=t ? float(t) : NAN;'
+  - platform: template
+    id: workout_storage_used
+    name: "Workout Storage Used"
+    entity_category: diagnostic
+    unit_of_measurement: "B"
+    accuracy_decimals: 0
+    update_interval: 30s
+    # cached by the recorder IO task (after init/record/delete): no LittleFS walk in the main loop
+    lambda: 'const size_t t=treadmill_recorder::archive_total.load(),u=treadmill_recorder::archive_used.load(); return t&&u<=t ? float(u) : NAN;'
+  - platform: template
+    id: workout_storage_free
+    name: "Workout Storage Free"
+    entity_category: diagnostic
+    unit_of_measurement: "B"
+    accuracy_decimals: 0
+    update_interval: 30s
+    # cached by the recorder IO task (after init/record/delete): no LittleFS walk in the main loop
+    lambda: 'const size_t t=treadmill_recorder::archive_total.load(),u=treadmill_recorder::archive_used.load(); return t&&u<=t ? float(t-u) : NAN;'
+  - platform: template
+    id: programs_revision
+    name: "Programs Revision"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 5s
+    # grows on every program save/delete: the page sees the change in the event stream and reloads the list once
+    lambda: 'return float(treadmill_recorder::programs_rev.load());'
+
+text_sensor:
+  - platform: template
+    id: workout_storage_status
+    name: "Workout Storage Status"
+    entity_category: diagnostic
+    update_interval: 10s
+    lambda: 'return treadmill_storage::status;'
+  - platform: template
+    id: workout_storage_self_test
+    name: "Workout Storage Self Test"
+    entity_category: diagnostic
+    update_interval: 10s
+    lambda: 'return treadmill_storage::self_test_status;'
+
+button:
+  - platform: template
+    id: workout_storage_initialize_blank
+    name: "Workout Storage Initialize BLANK Only"
+    icon: "mdi:database-plus"
+    entity_category: diagnostic
+    disabled_by_default: true
+    on_press:
+      - lambda: |-
+          // Deliberate first-use operation, never a format/recovery button.
+          // Firmware flags are not a substitute for a physical STOP check.
+          const bool stopped = !id(motor_running) && !id(treadmill_running) &&
+              !id(pause_active) && !id(calibration_active) &&
+              id(target_speed_goal) == 0 && id(current_speed) == 0.0f;
+          treadmill_storage::initialize_blank(stopped);
+          id(workout_storage_status).update();
+          id(workout_storage_self_test).update();
+          id(workout_storage_total).update();
+          id(workout_storage_used).update();
+          id(workout_storage_free).update();

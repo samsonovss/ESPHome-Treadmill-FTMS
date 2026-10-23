@@ -1,0 +1,9 @@
+# Diagnostics for the web UI (Settings → Diagnostics): uptime lets the browser detect reboots
+# (uptime went back) next to the existing Reset Reason / Heap Free / Heap Max Block / Loop Time / Wi-Fi.
+# Read-only, once a minute; no control logic.
+sensor:
+  - platform: uptime
+    name: "Uptime"
+    id: diag_uptime
+    update_interval: 60s
+    entity_category: diagnostic

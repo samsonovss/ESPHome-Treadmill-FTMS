@@ -35,9 +35,8 @@ select:
     options:
       - "None"
       - "Pulse Zone"
-      - "Fat Burn"
-      - "Recovery run"
       - "HIIT"
+      - "Fartlek"
     initial_option: "None"
     optimistic: true
     on_value:
@@ -50,37 +49,42 @@ select:
             id(set_warm_up_time).publish_state(00.0); //время разминки
             id(set_cool_down_time).publish_state(00.0); //время заминки
             //id(stop_program).execute();
-          } else if (program == "Fat Burn") {
-            id(zone_select).publish_state("2");
-            id(set_run_time).publish_state(40.0); //время тренировки 
-            id(set_warm_up_time).publish_state(03.0); //время разминки
-            id(set_cool_down_time).publish_state(03.0); //время заминки
-            id(remaining_run_time) = 40 * 60;
-            id(manual_stop) = false;
-          } else if (program == "Recovery run") {
-            id(zone_select).publish_state("1");
-            id(set_run_time).publish_state(25.0);
-            id(set_warm_up_time).publish_state(03.0); //время разминки
-            id(set_cool_down_time).publish_state(03.0); //время заминки
-            id(remaining_run_time) = 25 * 60;
-            id(manual_stop) = false;
           } else if (program == "HIIT") {
             // --- Устанавливаем зону по умолчанию при выборе---
             id(zone_select).publish_state("4");
 
             id(set_run_time).publish_state(0.0);      // время тренировки = 0
             id(remaining_run_time) = 0;               // не отсчитываем время
-            id(set_warm_up_time).publish_state(0.0);  // при желании можно убрать разминку
-            id(set_cool_down_time).publish_state(0.0);// и заминку, если они не нужны
+            { float w = id(wc_hiit_w), cd = id(wc_hiit_c);   // 22.10: last values of this program (default 3+3)
+              id(set_warm_up_time).publish_state(w);
+              id(set_cool_down_time).publish_state(cd); }
             id(interval_phase) = "high";
             id(interval_time) = 0;
             id(manual_stop) = false;
           
+          } else if (program == "Fartlek") {
+            // plan (Fartlek Plan) sets length and speeds; no firmware warm-up / run time (12.10)
+            id(set_run_time).publish_state(0.0);
+            id(remaining_run_time) = 0;
+            { float w = id(wc_fk_w), cd = id(wc_fk_c);   // 22.10: last values of this program (default 3+3)
+              id(set_warm_up_time).publish_state(w);
+              id(set_cool_down_time).publish_state(cd); }
+            id(fartlek_seg) = 0;
+            id(fartlek_t) = 0;
+            id(manual_stop) = false;
           } else if (program == "Pulse Zone") {
             id(set_run_time).publish_state(30.0);
             id(set_warm_up_time).publish_state(03.0); //время разминки
             id(set_cool_down_time).publish_state(03.0); //время заминки
             id(manual_stop) = false;
+          }
+          // 16.10: режим разминки/заминки по умолчанию — пульсовые и HIIT по пульсу, фартлек по времени (можно сменить)
+          if (program != "None") {
+            // 22.10: HIIT / Fartlek — the modes last used with this program
+            int mm = program == "HIIT" ? id(wc_hiit_m) : program == "Fartlek" ? id(wc_fk_m) : 3;
+            const char *mw = (mm & 1) ? "Pulse" : "Time", *mc = (mm & 2) ? "Pulse" : "Time";
+            if (id(route_wu_mode).current_option() != mw) id(route_wu_mode).publish_state(mw);
+            if (id(route_cd_mode).current_option() != mc) id(route_cd_mode).publish_state(mc);
           }
 
 
@@ -121,7 +125,54 @@ select:
     on_value:
       - script.execute: update_heart_rate_zones
 
-# Map — выбор маршрута (реальные и Zwift-треки).
+# HR Max Mode — откуда брать максимальный пульс:
+#   Formula — по возрасту и полу (214 − 0.8·возраст / 209 − 0.7·возраст),
+#   Manual  — измеренный пользователем (HR Max Manual).
+  - platform: template
+    name: "HR Max Mode"
+    id: hr_max_mode
+    restore_value: yes
+    options:
+      - "Formula"
+      - "Manual"
+    initial_option: "Formula"
+    optimistic: true
+    entity_category: config
+    on_value:
+      - script.execute: update_heart_rate_zones
+
+# HR Zone Method — как считать границы зон:
+#   Percent  — % от максимума (зона k: 50+10(k−1) … 60+10(k−1) %),
+#   Karvonen — резерв пульса: покой + (макс − покой) · те же %.
+  - platform: template
+    name: "HR Zone Method"
+    id: hr_zone_method
+    restore_value: yes
+    options:
+      - "Percent"
+      - "Karvonen"
+    initial_option: "Percent"
+    optimistic: true
+    entity_category: config
+    on_value:
+      - script.execute: update_heart_rate_zones
+
+# No Pulse Action — что делать пульсовым программам (Pulse Zone, Fat Burn, Recovery run, HIIT по пульсу, Fartlek по зонам),
+# если нет сигнала пульса:
+#   Slow — сбросить скорость до 1.0 км/ч (как было раньше),
+#   Hold — держать текущую скорость, не разгоняться и не сбавлять.
+  - platform: template
+    name: "No Pulse Action"
+    id: no_pulse_action
+    restore_value: yes
+    options:
+      - "Slow"
+      - "Hold"
+    initial_option: "Slow"
+    optimistic: true
+    entity_category: config
+
+# Map — выбор маршрута (Zwift-треки и свой маршрут из веб-UI).
 # Используется для отображения и запуска тренировок по заданному маршруту.
   - platform: template
     name: "Map"
@@ -129,21 +180,61 @@ select:
     restore_value: no
     options:
       - "None"
-      - "Russia, Ufa 3.4km"                           #1
-      - "Russia, Ufa Sipailovo 4.4km"                 #2
-      - "Russia, Ufa Kashkadan 1.7km"                 #3
-      - "Zwift Epic Run 6.2km"                        #4
-      - "Zwift 5K loop 5.0km"                         #5
-      - "Zwift Mountain Mash 5.9km"                   #6
-      - "Zwift Chili Pepper 8.0km"                    #7
-      - "Zwift Hilly Route Reverse Run 9.2km"         #8
-      - "Zwift Ocean Blvd 11.2km"                     #9
-      - "Zwift Beach Island Loop 12.8km"              #10
-      - "Zwift Jon’s Route 12.6km"                    #11
+      - "Custom route"                                # маршрут из веб-UI (treadmill_routes.h)
     initial_option: "None"
     optimistic: true
-    # on_value:
-    #   - script.execute: update_heart_rate_zones
+    on_value:
+      # 16.10: маршрут без пульсовой программы — разминка/заминка 3+3 по времени; маршрут снят → быстрый старт без них
+      - lambda: |-
+          std::string m = x;
+          if (!id(motor_running) && id(program_select).current_option() == "None") {
+            float v = m == "None" ? 0.0f : 3.0f;
+            if (id(set_warm_up_time).state != v) id(set_warm_up_time).publish_state(v);
+            if (id(set_cool_down_time).state != v) id(set_cool_down_time).publish_state(v);
+            if (m != "None") {
+              if (id(route_wu_mode).current_option() != "Time") id(route_wu_mode).publish_state("Time");
+              if (id(route_cd_mode).current_option() != "Time") id(route_cd_mode).publish_state("Time");
+            }
+          }
+
+# 13.10 шаг 3: режим разминки/заминки маршрута. Pulse — по пульсу (как пульсовые программы),
+# Time — вручную: линейно «Начать с» → «Закончить на» / от скорости финиша → «Не медленнее».
+# Хранится между перезагрузками; веб ставит Pulse/Time при выборе маршрута (скорость по пульсу / вручную).
+  - platform: template
+    name: "Warm-up Mode"
+    id: route_wu_mode
+    restore_value: yes
+    options:
+      - "Pulse"
+      - "Time"
+    initial_option: "Time"
+    optimistic: true
+    on_value:
+      - script.execute: wc_remember   # 22.10
+
+  - platform: template
+    name: "Cool-down Mode"
+    id: route_cd_mode
+    restore_value: yes
+    options:
+      - "Pulse"
+      - "Time"
+    initial_option: "Time"
+    optimistic: true
+    on_value:
+      - script.execute: wc_remember   # 22.10
+
+# HIIT Work Mode — как задаётся скорость в фазе работы HIIT:
+# Pulse — подбор по пульсу (adjust_speed_by_pulse_hiit), Manual — фиксированная HIIT High Speed.
+  - platform: template
+    name: "HIIT Work Mode"
+    id: hiit_work_mode
+    restore_value: yes
+    options:
+      - "Pulse"
+      - "Manual"
+    initial_option: "Pulse"
+    optimistic: true
 
 
   # - platform: template
@@ -235,6 +326,19 @@ number:
     restore_value: yes
     initial_value: 85
 
+  # Motor temperature: failed DS18B20 reads in a row before the overheat guard treats the sensor as faulty (12.10)
+  - platform: template
+    name: "Motor Temp Fault Reads"
+    id: temp_fault_reads
+    min_value: 1
+    max_value: 10
+    step: 1
+    entity_category: config
+    mode: box
+    optimistic: true
+    restore_value: yes
+    initial_value: 3
+
   # === BEGIN EXPERIMENTAL_KICKR_RUN ===
   # ------------------------------------------------------------
   # Настройки сопоставления реального уклона Zwift и уровней дорожки
@@ -249,13 +353,19 @@ number:
   #    Пользователь измеряет подъём полотна и вводит полученное значение.
   #    Например, если уровень 15 физически даёт 5%, здесь указывается 5.0.
   #
+  # 2a. Treadmill Real Grade At Zero:
+  #    реальный уклон полотна в процентах на уровне 0 (у многих дорожек
+  #    дека и в нижнем положении слегка приподнята). Между уровнем 0 и
+  #    максимумом уклон считается линейным. Тем же способом измеряется
+  #    лазером: разница высот рамы на 1 м в мм / 10 = %.
+  #
   # 3. Zwift Incline Intensity:
   #    дополнительная регулировка силы автонаклона.
   #    100% — полное рассчитанное значение, 50% — половина, 0% — всегда 0.
   #
   # Формула:
-  #   уровень = уклон Zwift * максимальный уровень / реальный максимум
-  #             * интенсивность / 100
+  #   уровень = (уклон Zwift * интенсивность / 100 - уклон на 0)
+  #             * максимальный уровень / (реальный максимум - уклон на 0)
   # ------------------------------------------------------------
   - platform: template
     name: "Treadmill Maximum Incline Level"
@@ -270,6 +380,19 @@ number:
     initial_value: 15
 
   - platform: template
+    name: "Treadmill Real Grade At Zero"
+    id: treadmill_real_zero_grade
+    min_value: 0
+    max_value: 10
+    step: 0.1
+    unit_of_measurement: "%"
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: yes
+    initial_value: 0
+
+  - platform: template
     name: "Treadmill Real Grade At Maximum"
     id: treadmill_real_max_grade
     min_value: 0.5
@@ -281,6 +404,8 @@ number:
     optimistic: true
     restore_value: yes
     initial_value: 15
+
+  # Treadmill Incline Motor Step удалён 12.10: веб берёт шаг наклона из платы (Board Max Incline ÷ Treadmill Maximum Incline Level).
 
   - platform: template
     name: "Zwift Incline Intensity"
@@ -371,6 +496,17 @@ number:
     initial_value: 5.0   # по умолчанию 5 км/ч
 
   - platform: template
+    name: "HIIT High Speed"
+    id: hiit_high_speed
+    optimistic: true
+    restore_value: yes
+    min_value: 3.0
+    max_value: 16.0
+    step: 0.5
+    unit_of_measurement: "km/h"
+    initial_value: 8.0   # скорость работы при HIIT Work Mode = Manual
+
+  - platform: template
     name: "HIIT Cycles"
     id: hiit_cycles
     optimistic: true
@@ -390,6 +526,260 @@ number:
     step: 0.1
     unit_of_measurement: "км/ч"
     initial_value: 0.2   # по умолчанию 0.2 км/ч за секунду
+
+# --- Датчик скорости FC-33 (12.10): механика и поправка, раньше были зашиты в globals ---
+# Treadmill Speed Motor = импульсы/с / импульсы_на_оборот / передаточное × окружность × 3.6 × поправка/100
+  - platform: template
+    name: "Speed Sensor Correction"
+    id: speed_sensor_correction
+    optimistic: true
+    restore_value: yes
+    min_value: 80
+    max_value: 120
+    step: 0.5
+    initial_value: 100
+    unit_of_measurement: "%"
+    entity_category: config
+
+  - platform: template
+    name: "Speed Sensor Roller Circumference"
+    id: speed_sensor_roller_mm
+    optimistic: true
+    restore_value: yes
+    min_value: 50
+    max_value: 1000
+    step: 0.1
+    initial_value: 276.3
+    unit_of_measurement: "мм"
+    entity_category: config
+
+  - platform: template
+    name: "Speed Sensor Gear Ratio"
+    id: speed_sensor_gear_ratio
+    optimistic: true
+    restore_value: yes
+    min_value: 1
+    max_value: 500
+    step: 0.1
+    initial_value: 74.5
+    entity_category: config
+
+  - platform: template
+    name: "Speed Sensor Pulses Per Rotation"
+    id: speed_sensor_ppr
+    optimistic: true
+    restore_value: yes
+    min_value: 1
+    max_value: 1000
+    step: 1
+    initial_value: 144
+    entity_category: config
+
+# Кнопки на поручнях (12.10): шаг физических кнопок скорости и наклона (GPIO 13/14, 9/10)
+  - platform: template
+    name: "Handrail Speed Step"
+    id: handrail_speed_step
+    optimistic: true
+    restore_value: yes
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    initial_value: 0.5
+    unit_of_measurement: "км/ч"
+    entity_category: config
+
+  - platform: template
+    name: "Handrail Incline Step"
+    id: handrail_incline_step
+    optimistic: true
+    restore_value: yes
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    initial_value: 1.0
+    entity_category: config
+
+# 16.10: Route Warm-up/Cool-down Time удалены — у всех программ одна пара Set Warm-up/Cool-down Time + Warm-up/Cool-down Mode.
+# Разминка и заминка (12.10): раньше числа были зашиты в 30-scripts warm_up/cool_down и 40-intervals
+  - platform: template
+    name: "Warm-up Start Speed"
+    id: wu_start_speed
+    optimistic: true
+    restore_value: yes
+    min_value: 1
+    max_value: 8
+    step: 0.5
+    initial_value: 3
+    unit_of_measurement: "км/ч"
+    entity_category: config
+
+  - platform: template
+    name: "Warm-up End Speed"
+    id: wu_end_speed
+    optimistic: true
+    restore_value: yes
+    min_value: 3
+    max_value: 12
+    step: 0.1
+    initial_value: 6
+    unit_of_measurement: "км/ч"
+    entity_category: config
+
+  - platform: template
+    name: "Warm-up Speed Step"
+    id: wu_step_kmh
+    optimistic: true
+    restore_value: yes
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    initial_value: 0.1
+    unit_of_measurement: "км/ч"
+    entity_category: config
+
+  - platform: template
+    name: "Warm-up Step Interval"
+    id: wu_step_sec
+    optimistic: true
+    restore_value: yes
+    min_value: 5
+    max_value: 60
+    step: 5
+    initial_value: 10
+    unit_of_measurement: "s"
+    entity_category: config
+
+  - platform: template
+    name: "Warm-up Max Speed"
+    id: wu_max_speed
+    optimistic: true
+    restore_value: yes
+    min_value: 3
+    max_value: 18
+    step: 0.5
+    initial_value: 10
+    unit_of_measurement: "км/ч"
+    entity_category: config
+
+  - platform: template
+    name: "Warm-up Target HR"
+    id: wu_target_pct
+    optimistic: true
+    restore_value: yes
+    min_value: 40
+    max_value: 80
+    step: 5
+    initial_value: 60
+    unit_of_measurement: "%"
+    entity_category: config
+
+  - platform: template
+    name: "Warm-up Extra Step"
+    id: wu_extra_step
+    optimistic: true
+    restore_value: yes
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    initial_value: 0.5
+    unit_of_measurement: "км/ч"
+    entity_category: config
+
+  - platform: template
+    name: "Warm-up No Pulse Stop"
+    id: wu_no_pulse
+    optimistic: true
+    restore_value: yes
+    min_value: 30
+    max_value: 300
+    step: 10
+    initial_value: 60
+    unit_of_measurement: "s"
+    entity_category: config
+
+  - platform: template
+    name: "Cool-down Target HR"
+    id: cd_target_pct
+    optimistic: true
+    restore_value: yes
+    min_value: 50
+    max_value: 80
+    step: 5
+    initial_value: 60
+    unit_of_measurement: "%"
+    entity_category: config
+
+  - platform: template
+    name: "Cool-down Step Interval"
+    id: cd_step_sec
+    optimistic: true
+    restore_value: yes
+    min_value: 5
+    max_value: 60
+    step: 5
+    initial_value: 15
+    unit_of_measurement: "s"
+    entity_category: config
+
+  - platform: template
+    name: "Cool-down Big Step"
+    id: cd_big_step
+    optimistic: true
+    restore_value: yes
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    initial_value: 0.5
+    unit_of_measurement: "км/ч"
+    entity_category: config
+
+  - platform: template
+    name: "Cool-down Small Step"
+    id: cd_small_step
+    optimistic: true
+    restore_value: yes
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    initial_value: 0.1
+    unit_of_measurement: "км/ч"
+    entity_category: config
+
+  - platform: template
+    name: "Cool-down Big Step Above"
+    id: cd_big_margin
+    optimistic: true
+    restore_value: yes
+    min_value: 5
+    max_value: 30
+    step: 5
+    initial_value: 10
+    unit_of_measurement: "bpm"
+    entity_category: config
+
+  - platform: template
+    name: "Cool-down Min Speed"
+    id: cd_min_speed
+    optimistic: true
+    restore_value: yes
+    min_value: 1
+    max_value: 6
+    step: 0.5
+    initial_value: 3.0
+    unit_of_measurement: "км/ч"
+    entity_category: config
+
+  - platform: template
+    name: "Cool-down Hold At Min"
+    id: cd_hold
+    optimistic: true
+    restore_value: yes
+    min_value: 10
+    max_value: 120
+    step: 10
+    initial_value: 30
+    unit_of_measurement: "s"
+    entity_category: config
 
 # Age — возраст пользователя (16–100 лет).
 # При изменении обновляет поле на дисплее и пересчитывает пульсовые зоны.
@@ -412,6 +802,38 @@ number:
 
 # Weight — вес пользователя (40–100 кг).
 # При изменении отправляется на дисплей Nextion.
+
+# HR Max Manual — измеренный максимальный пульс (используется при HR Max Mode = Manual).
+  - platform: template
+    name: "HR Max Manual"
+    id: hr_max_manual
+    min_value: 120
+    max_value: 230
+    step: 1
+    unit_of_measurement: "bpm"
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: yes
+    initial_value: 190
+    on_value:
+      - script.execute: update_heart_rate_zones
+
+# Resting Heart Rate — пульс покоя (утром лёжа), для метода Карвонена.
+  - platform: template
+    name: "Resting Heart Rate"
+    id: resting_heart_rate
+    min_value: 30
+    max_value: 110
+    step: 1
+    unit_of_measurement: "bpm"
+    mode: box
+    entity_category: config
+    optimistic: true
+    restore_value: yes
+    initial_value: 60
+    on_value:
+      - script.execute: update_heart_rate_zones
   - platform: template
     name: "weight"
     id: weight_kg
@@ -481,7 +903,8 @@ number:
     on_value:
       - lambda: |-
           float incline = x;
-          int16_t incline_value = static_cast<int16_t>(incline * 10);  // 0.1% шаг, signed (может быть отрицательным в теории)
+          // lroundf: 5.3 * 10 = 52.99… must become 53, not 52 (routes now send tenths) — 10.10
+          int16_t incline_value = static_cast<int16_t>(lroundf(incline * 10));  // 0.1% шаг, signed (может быть отрицательным в теории)
 
           if (id(target_incline) != incline_value) {
             id(target_incline_goal) = incline_value;
@@ -524,6 +947,7 @@ number:
           id(display_nextion).send_command_printf("Time.n_warm.val=%d", (int)id(set_warm_up_time).state);
           ESP_LOGI("Nextion", "Sending command for Time.n_warm.val");
           //}
+      - script.execute: wc_remember   # 22.10
 
 # Set Run Time — длительность основной тренировки (0–240 мин).
 # При изменении обновляет оставшееся время (remaining_run_time) и поле на дисплее.
@@ -578,6 +1002,7 @@ number:
           id(display_nextion).send_command_printf("Time.n_cool.val=%d", (int)id(set_cool_down_time).state);
           ESP_LOGI("Nextion", "Sending command for Time.n_cool.val");
           //}
+      - script.execute: wc_remember   # 22.10
 
 #Компонент number для эмуляции пульса для отладки
   - platform: template
@@ -680,12 +1105,37 @@ number:
       - lambda: |-
           id(uart_bus).flush();  // Очищаем буфер перед сменой скорости
           uint32_t new_baud_rate = (uint32_t)x;  // Преобразуем значение ползунка в uint32_t
-          ESP_LOGI("UART", "Changing baud rate from %i to %i", id(uart_bus).get_baud_rate(), new_baud_rate);
+          ESP_LOGI("UART", "Changing baud rate from %lu to %lu", static_cast<unsigned long>(id(uart_bus).get_baud_rate()), static_cast<unsigned long>(new_baud_rate));
           if (id(uart_bus).get_baud_rate() != new_baud_rate) {
             id(uart_bus).set_baud_rate(new_baud_rate);
             id(uart_bus).load_settings();
           }
 
+
+  # Display Brightness — яркость Nextion из веб-интерфейса/HA (20–100 %).
+  # Пишет в ту же переменную, что и ползунок на дисплее (brightness_level),
+  # двигает ползунок display.hbright и сразу применяет dim.
+  - platform: template
+    id: display_brightness
+    name: "Display Brightness"
+    min_value: 20
+    max_value: 100
+    step: 5
+    unit_of_measurement: "%"
+    entity_category: config
+    mode: slider
+    optimistic: true
+    restore_value: yes
+    initial_value: 60
+    on_value:
+      then:
+        - lambda: |-
+            int b = (int)x;
+            if (b < 20) b = 20;
+            if (b > 100) b = 100;
+            id(brightness_level) = b;
+            id(display_nextion).set_component_value("display.hbright", b);
+            id(display_nextion).send_command_printf("dim=%d", b);
 
   - platform: template
     id: treadmill_slider_max

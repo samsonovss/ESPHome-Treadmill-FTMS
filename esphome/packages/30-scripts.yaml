@@ -39,6 +39,8 @@ script:
       cmd: string
     then:
       - lambda: |-
+          if (treadmill_motor::listen) return;  // listen mode: the ESP stays silent on the line (10.10)
+          if (treadmill_motor::blocked_by_cal(cmd)) return;  // auto-calibration: only [ZT] polling goes out (11.10)
           id(uart_bus).write_str(cmd.c_str());
       - delay: 50ms
 
@@ -50,9 +52,10 @@ script:
     then:
       - script.stop: uart_send
       - lambda: |-
+          id(recorder_event).execute(4); // snapshot only; queued filesystem I/O
           // Удаляем устаревшие команды и ставим остановку в UART-очередь.
-          id(uart_send)->execute("[SETSPD:000]");
-          id(uart_send)->execute("[SETINC:000]");
+          id(uart_send)->execute(treadmill_motor::speed_cmd(0));  // format from Settings → Motor board (10.10)
+          id(uart_send)->execute(treadmill_motor::incline_cmd(0));  // format from Settings → Incline (10.10)
 
           // Сохраняем текущие цели
           id(saved_speed)   = id(target_speed_goal);
@@ -137,12 +140,9 @@ script:
           id(motor_running) = true;
 
           // Отправляем команды немедленно
-          char cmd[20];
-          sprintf(cmd, "[SETSPD:%03d]", id(target_speed_goal));
-          id(uart_send)->execute(cmd);
+          id(uart_send)->execute(treadmill_motor::speed_cmd(id(target_speed_goal)));
 
-          sprintf(cmd, "[SETINC:%03d]", id(target_incline_goal));
-          id(uart_send)->execute(cmd);
+          id(uart_send)->execute(treadmill_motor::incline_cmd(id(target_incline_goal)));
 
           ESP_LOGI("PAUSE", "Training resumed at %.0f sec, speed=%d, incline=%d",
                    id(pause_time_sec), id(target_speed_goal), id(target_incline_goal));
@@ -155,6 +155,7 @@ script:
             }
           }
 
+          id(recorder_event).execute(5); // same workout ID; restored program status
           // --- Отправляем FTMS статус: Resumed (0x04)
           id(ftms_status_char).set_value({0x04});
           id(ftms_status_char).notify();
@@ -186,6 +187,11 @@ script:
           id(zone3_time) = 0;
           id(zone4_time) = 0;
           id(zone5_time) = 0;
+          id(zone1_time_stored) = 0;
+          id(zone2_time_stored) = 0;
+          id(zone3_time_stored) = 0;
+          id(zone4_time_stored) = 0;
+          id(zone5_time_stored) = 0;
 
           // --- Сброс итоговых глобалов ---
           id(last_time_stored) = 0.0f;
@@ -201,10 +207,20 @@ script:
           id(fat_grams_stored) = 0.0f;
           id(avg_vo2_stored) = 0.0f;
           id(avg_met_stored) = 0.0f;
+          id(energy_kcal) = 0.0f;
+          id(fat_kcal) = 0.0f;
+          id(vo2_sum) = 0.0f;
+          id(total_met_sum) = 0.0f;
+          id(met_count) = 0;
           id(avg_pace_stored) = 0.0f;
 
           // --- Обнуление сенсоров в HA ---
           id(last_time).publish_state(0.0f);
+          id(last_zone1_time).publish_state(0.0f);
+          id(last_zone2_time).publish_state(0.0f);
+          id(last_zone3_time).publish_state(0.0f);
+          id(last_zone4_time).publish_state(0.0f);
+          id(last_zone5_time).publish_state(0.0f);
           id(last_distance).publish_state(0.0f);
           id(last_calories).publish_state(0.0f);
           id(last_avg_speed).publish_state(0.0f);
@@ -268,6 +284,25 @@ script:
           id(display_nextion).set_component_text("speed.tstatus", "Manual Mode");
           id(control_mode) = 0;  // Ручной режим
           id(auto_mode) = false;
+
+          // 13.10: маршрут — своя разминка (Route Warm-up Time) по пульсу, трасса с 0 км после неё
+          id(route_wucd) = id(map_select).current_option() != "None";
+          id(route_km_offset) = 0; id(route_km_offset_sensor).publish_state(0);
+          id(route_cd_active) = false;
+          id(warm_up_active) = false;
+          id(warm_up_time) = 0;
+          if (id(set_warm_up_time).state > 0) {   // 16.10: общая Set Warm-up Time — и для свободного бега (по умолчанию 0)
+            id(target_speed_goal) = (int) lroundf(id(wu_start_speed).state * 10);
+            if (id(target_speed_goal) < 6 || id(target_speed_goal) > 180) id(target_speed_goal) = 25;
+            id(set_speed).publish_state(id(target_speed_goal) / 10.0);
+            id(warm_up_active) = true;
+            id(remaining_warm_up_time) = id(set_warm_up_time).state * 60;
+            char wbuf[32];
+            snprintf(wbuf, sizeof(wbuf), "Warm-up: (%d:%02d)", id(remaining_warm_up_time) / 60, id(remaining_warm_up_time) % 60);
+            id(program_status).publish_state(wbuf);
+            id(display_nextion).set_component_text("speed.tstatus", wbuf);
+            ESP_LOGI("Route", "Route warm-up %d s", id(remaining_warm_up_time));
+          }
           ESP_LOGI("Manual", "Установлен ручной режим (control_mode = 0), иконка 62");
 
           // Fitness Machine Status: Started or Resumed (0x04)
@@ -277,12 +312,13 @@ script:
           id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x04));
           ESP_LOGI("FTMS", "Отправлено уведомление: Started or Resumed (0x04)");
 
-          // Training Status: Manual Mode (0x0D)
-          id(training_status_char).set_value({0x00, 0x0D});
+          // Training Status: Manual Mode (0x0D), или Warming Up (0x02) при разминке маршрута (13.10)
+          uint8_t ts0 = id(warm_up_active) ? 0x02 : 0x0D;
+          id(training_status_char).set_value({0x00, ts0});
           id(training_status_char).notify();
-          id(last_training_status) = {0x00, 0x0D};
-          id(ftms_training_status_sensor).publish_state(id(training_status_to_string)(0x0D));
-          ESP_LOGI("FTMS", "Отправлено уведомление: Manual Mode (0x0D)");
+          id(last_training_status) = {0x00, ts0};
+          id(ftms_training_status_sensor).publish_state(id(training_status_to_string)(ts0));
+          ESP_LOGI("FTMS", "Отправлено уведомление: Training Status 0x%02X", ts0);
 
           if (id(current_page) != 1) {
             id(display_nextion).send_command_printf("page 1");
@@ -290,6 +326,10 @@ script:
           }
 
 
+
+      - script.execute:
+          id: recorder_event
+          kind: 1
 
   - id: start_program
     then:
@@ -306,6 +346,7 @@ script:
                 id(program_status).publish_state("Start blocked: Overheat");
                 id(display_nextion).send_command_printf("page 24");
             - script.stop: start_program
+      - script.execute: reset_workout_data
       - lambda: |-
           id(motor_running) = true;
           id(manual_stop) = false;
@@ -320,7 +361,8 @@ script:
 
           // Если цель ещё не задана — ставим минимальную (2.5 км/ч = 25)
           if (id(target_speed_goal) == 0) {
-            id(target_speed_goal) = 25;
+            id(target_speed_goal) = (int) lroundf(id(wu_start_speed).state * 10);   // 13.10: Warm-up Start Speed (was 2.5)
+            if (id(target_speed_goal) < 6 || id(target_speed_goal) > 180) id(target_speed_goal) = 25;
           }
 
           // Публикуем цель на дисплей
@@ -368,6 +410,20 @@ script:
               ESP_LOGI("FTMS", "Отправлено уведомление: High Intensity Interval (0x04)");
             }
 
+          } else if (program == "Fartlek") {
+            id(control_mode) = 0;  // скорость задаёт fartlek_tick по плану
+            id(auto_mode) = false;
+            id(fartlek_seg) = 0;
+            id(fartlek_t) = 0;
+            { float T0 = id(treadmill_time_sec).state; id(fartlek_last_t) = isnan(T0) ? 0 : (int) T0; }   // 22.10
+            id(display_nextion).send_command_printf("speed.p_icon_mode.pic=62");
+            if (id(last_training_status)[1] != 0x04) {
+              id(training_status_char).set_value({0x00, 0x04});
+              id(training_status_char).notify();
+              id(last_training_status) = {0x00, 0x04};
+              id(ftms_training_status_sensor).publish_state(id(training_status_to_string)(0x04));
+            }
+            ESP_LOGI("Program", "Fartlek start");
           } else {
             id(control_mode) = 0;  // Ручной режим для остальных
             id(auto_mode) = false;
@@ -385,12 +441,17 @@ script:
           }
 
           float wu_time = id(set_warm_up_time).state;
+          // 13.10: маршрут + пульсовая программа — разминка/заминка маршрута (Route Warm-up/Cool-down Time)
+          id(route_wucd) = id(map_select).current_option() != "None" &&
+                           (program == "Pulse Zone" || program == "Fat Burn" || program == "Recovery run");
+          id(route_km_offset) = 0; id(route_km_offset_sensor).publish_state(0);
+          id(route_cd_active) = false;
           if (wu_time > 0) {
             id(warm_up_active) = true;
             id(remaining_warm_up_time) = wu_time * 60;
             int warm_up_minutes = id(remaining_warm_up_time) / 60;
             int warm_up_seconds = id(remaining_warm_up_time) % 60;
-            char buffer[20];
+            char buffer[64];
             snprintf(buffer, sizeof(buffer), "Warm-up: (%d:%02d)", warm_up_minutes, warm_up_seconds);
             id(program_status).publish_state(buffer);
             id(display_nextion).set_component_text("speed.tstatus", buffer);
@@ -408,10 +469,10 @@ script:
           } else {
             id(warm_up_active) = false;
             id(remaining_warm_up_time) = 0;
-            float run_time = id(set_run_time).state;
+            float run_time = program == "Fartlek" ? 0 : id(set_run_time).state;
             id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;
 
-            if (program != "None" && id(remaining_run_time) > 0) {
+            if (program != "None" && (id(remaining_run_time) > 0 || id(route_wucd))) {   // route without time: ends by distance
               int remaining_minutes = id(remaining_run_time) / 60;
               int remaining_seconds = id(remaining_run_time) % 60;
               std::string zone = id(zone_select).current_option();
@@ -423,7 +484,10 @@ script:
               else if (zone == "4") short_zone = "Z4";
               else if (zone == "5") short_zone = "Z5";
 
-              if (program == "Pulse Zone") {
+              if (id(remaining_run_time) <= 0) {
+                snprintf(buffer, sizeof(buffer), "%s %.0f-%.0f \xc2\xb7 %.2f km left", short_zone.c_str(), id(target_heart_rate_min), id(target_heart_rate_max),
+                  fmaxf(0.0f, (treadmill_routes::count.load() >= 2 ? treadmill_routes::points[treadmill_routes::count.load() - 1][0] : 0.0f) - (id(treadmill_distance_km).state - id(route_km_offset))));
+              } else if (program == "Pulse Zone") {
                 snprintf(buffer, sizeof(buffer), "%s: %.0f-%.0f bpm (%d:%02d)",
                         short_zone.c_str(), id(target_heart_rate_min), id(target_heart_rate_max),
                         remaining_minutes, remaining_seconds);
@@ -455,7 +519,7 @@ script:
               }
             } else {
               // Только для НЕ-HIIT программ выводим "No duration"
-              if (program != "HIIT") {
+              if (program != "HIIT" && program != "Fartlek") {
                 id(program_status).publish_state("Program: No duration");
                 id(display_nextion).set_component_text("speed.tstatus", "Program: No duration");
               }
@@ -496,34 +560,70 @@ script:
 #        * Если пульс не определяется → "Warm-up: Wait pulse".
 #        * Если пульс ниже зоны 1 → "Warm-up: Need X bpm".
 #    - Обновление статуса каждые 10 секунд.
+      - script.execute:
+          id: recorder_event
+          kind: 1
+
   - id: warm_up
     then:
       - lambda: |-
           static int warm_up_time = 0;
           warm_up_time++;
+          static int wu_wait = 0;   // 22.10: seconds since the warm-up time ran out (No Pulse Stop counts from here)
+          if (id(remaining_warm_up_time) > 0) wu_wait = 0; else wu_wait++;
           float heart_rate = id(heart_rate_sensor).state;
-          float zone_1_min = id(max_heart_rate) * 0.5;
-
-          // Увеличение скорости на 0.1 км/ч каждые 10 секунд во время разминки
-          if (id(control_mode) != 1 && id(remaining_warm_up_time) > 0 &&
-              warm_up_time % 10 == 0 && heart_rate < zone_1_min && !isnan(heart_rate)) {
-            if (id(target_speed_goal) < 120) {
-              id(target_speed_goal) += 1;
+          if (!(heart_rate > 0)) heart_rate = NAN;   // 22.10: no strap = 0 bpm, not NaN — 0 counted as a real low pulse (speed steps, "Need 108 bpm")
+          float zone_1_min = id(hr_zone_base) + (id(max_heart_rate) - id(hr_zone_base)) * id(wu_target_pct).state / 100.0f;   // 12.10: Warm-up Target HR, как зоны (Карвонен)
+          int wu_every = (int) id(wu_step_sec).state; if (wu_every < 1) wu_every = 10;
+          int wu_step = (int) lroundf(id(wu_step_kmh).state * 10); if (wu_step < 1) wu_step = 1;
+          int wu_cap = (int) lroundf(id(wu_max_speed).state * 10); if (wu_cap < 6) wu_cap = 120;
+          // 13.10 шаг 3: ручная разминка маршрута — линейно от текущей скорости к «Закончить на» за оставшееся время
+          // (нажали +/- — продолжаем от новой скорости). Пульс не нужен.
+          bool wu_time_mode = id(route_wu_mode).current_option() == "Time";   // 16.10: выбор ⏱/♥ для всех программ
+          if (wu_time_mode) {
+            static float wf = 0;
+            float cur = id(target_speed_goal) / 10.0f;
+            if (fabsf(wf - cur) > 0.15f) wf = cur;
+            int r = id(remaining_warm_up_time);
+            wf += (id(wu_end_speed).state - wf) / (float) (r + 1);
+            int g = (int) lroundf(wf * 10);
+            if (g != id(target_speed_goal)) {
+              id(target_speed_goal) = g;
+              id(set_speed).publish_state(g / 10.0);
+            }
+          }
+          // Увеличение скорости на Warm-up Speed Step каждые Warm-up Step Interval во время разминки
+          if (!wu_time_mode && id(control_mode) != 1 && id(remaining_warm_up_time) > 0 &&
+              warm_up_time % wu_every == 0 && heart_rate < zone_1_min && !isnan(heart_rate)) {
+            if (id(target_speed_goal) < wu_cap) {
+              id(target_speed_goal) += wu_step;
+              if (id(target_speed_goal) > wu_cap) id(target_speed_goal) = wu_cap;
               id(set_speed).publish_state(id(target_speed_goal) / 10.0);
-              ESP_LOGI("WarmUp", "Increased speed by 0.1 km/h: target_speed_goal=%d", id(target_speed_goal));
+              ESP_LOGI("WarmUp", "Increased speed by %.1f km/h: target_speed_goal=%d", wu_step / 10.0f, id(target_speed_goal));
             }
           }
 
           // Проверка завершения времени разминки
           if (id(remaining_warm_up_time) <= 0) {
-            if (heart_rate >= zone_1_min && !isnan(heart_rate)) {
+            // 13.10: no HR for Warm-up No Pulse Stop seconds -> warm-up by time, main part starts (was: whole program stopped)
+            bool wu_no_hr = isnan(heart_rate) && wu_wait >= (int) id(wu_no_pulse).state;   // 22.10: was counted from the warm-up start — a 1 min warm-up skipped «Wait pulse» entirely
+            if (wu_no_hr) ESP_LOGW("WarmUp", "No pulse for %d s - warm-up finished by time", wu_wait);
+            if ((heart_rate >= zone_1_min && !isnan(heart_rate)) || wu_no_hr || wu_time_mode) {
               id(warm_up_active) = false;
               warm_up_time = 0;
+              wu_wait = 0;
+              if (id(route_wucd)) {   // 13.10: трасса начинается с 0 км после разминки
+                float d = id(treadmill_distance_km).state;
+                id(route_km_offset) = isnan(d) ? 0 : d;
+                id(route_km_offset_sensor).publish_state(id(route_km_offset));
+                ESP_LOGI("Route", "Warm-up done, route starts at %.3f km", id(route_km_offset));
+              }
 
               std::string program = id(program_select).current_option();
               if (program == "HIIT") {
                 // --- Переход сразу в HIIT ---
                 id(interval_time) = 0;
+                { float T0 = id(treadmill_time_sec).state; id(hiit_last_t) = isnan(T0) ? 0 : (int) T0; }   // 22.10: HIIT starts at the current Treadmill Time
                 id(interval_phase) = "high";
                 id(auto_mode) = false;
 
@@ -558,8 +658,20 @@ script:
                 // Для остальных программ публикуем "Warm-up: Done"
                 id(program_status).publish_state("Warm-up: Done");
                 id(display_nextion).set_component_text("speed.tstatus", "Warm-up: Done");
+                // 16.10: фартлек — после разминки план (fartlek_tick), маршрут без программы — ручной режим
+                if (program == "Fartlek" || program == "None") {
+                  if (program == "Fartlek") { float T0 = id(treadmill_time_sec).state; id(fartlek_last_t) = isnan(T0) ? 0 : (int) T0; id(fartlek_t) = 0; }   // 22.10: plan starts after warm-up
+                  uint8_t sc = program == "Fartlek" ? 0x04 : 0x0D;
+                  if (id(last_training_status)[1] != sc) {
+                    id(training_status_char).set_value({0x00, sc});
+                    id(training_status_char).notify();
+                    id(last_training_status) = {0x00, sc};
+                    id(ftms_training_status_sensor).publish_state(id(training_status_to_string)(sc));
+                  }
+                  return;
+                }
 
-                if (program != "None" && id(remaining_run_time) > 0) {
+                if (program != "None" && (id(remaining_run_time) > 0 || (id(route_wucd) && !id(route_cd_active)))) {
                   uint8_t status_code;
                   if (program == "Pulse Zone" || program == "Fat Burn" || program == "Recovery run") {
                     status_code = 0x07;
@@ -587,27 +699,7 @@ script:
                 }
               }
             }
-            else if (warm_up_time >= 60 && isnan(heart_rate)) {
-              // Аварийная остановка
-              id(warm_up_active) = false;
-              id(motor_running) = false;
-              id(target_speed) = 0;
-              id(target_speed_goal) = 0;
-              id(set_speed).publish_state(0.0);
-              id(treadmill_speed_goal_sensor).publish_state(0.0);
-              id(program_status).publish_state("Warm-up: No pulse");
-              id(display_nextion).set_component_text("speed.tstatus", "Warm-up: No pulse");
-              warm_up_time = 0;
-              if (id(last_training_status)[1] != 0x01) {
-                id(training_status_char).set_value({0x00, 0x01});
-                id(training_status_char).notify();
-                id(last_training_status) = {0x00, 0x01};
-                id(ftms_training_status_sensor).publish_state(id(training_status_to_string)(0x01));
-                ESP_LOGI("FTMS", "Отправлено уведомление: Idle (0x01)");
-              }
-              id(stop_program).execute();
-              ESP_LOGI("WarmUp", "Stopped: No pulse detected for 60 seconds");
-            }
+            // 13.10: the old 'no pulse -> stop program' branch is gone (see wu_no_hr above)
           }
 
           // Обновление статуса дисплея (только если разминка активна)
@@ -624,7 +716,7 @@ script:
                 snprintf(buffer, sizeof(buffer), "Warm-up: Need %.0f bpm", zone_1_min);
               }
             }
-            if (warm_up_time % 10 == 0) {
+            if (warm_up_time % 10 == 0 || id(remaining_warm_up_time) <= 0) {   // 22.10: «Wait pulse / Need» shows at once, not up to 10 s later
               id(program_status).publish_state(buffer);
               id(display_nextion).set_component_text("speed.tstatus", buffer);
               ESP_LOGI("DEBUG", "Status updated: %s, length: %d", buffer, strlen(buffer));
@@ -658,6 +750,19 @@ script:
 #    - Если пульс ≤ зоны 1 (или пульс отсутствует) и min_speed_timer ≥30 сек.
 #    → мотор выключается, цели скорости сбрасываются в 0,
 #      статус "Cool-down: Done", выполняется stop_program.
+  # 16.10: единый вход в заминку (HIIT/фартлек после конца плана); пульсовые и маршрут запускают её у себя тем же образом
+  - id: begin_cool_down
+    then:
+      - lambda: |-
+          id(remaining_run_time) = 0;
+          id(remaining_cool_down_time) = (int) id(set_cool_down_time).state * 60;
+          char buffer[32];
+          snprintf(buffer, sizeof(buffer), "Cool-down: (%d:%02d)", id(remaining_cool_down_time) / 60, id(remaining_cool_down_time) % 60);
+          id(program_status).publish_state(buffer);
+          id(display_nextion).set_component_text("speed.tstatus", buffer);
+          ESP_LOGI("CoolDown", "Begin cool-down %d s", id(remaining_cool_down_time));
+          id(cool_down).execute();
+
   - id: cool_down
     then:
       - lambda: |-
@@ -667,36 +772,48 @@ script:
           }
 
           float heart_rate = id(heart_rate_sensor).state;
-          float zone_1_max = id(max_heart_rate) * 0.6;
+          if (!(heart_rate > 0)) heart_rate = NAN;   // 22.10: no strap = 0 bpm, not NaN — 0 counted as a real low pulse (speed steps, "Need 108 bpm")
+          float zone_1_max = id(hr_zone_base) + (id(max_heart_rate) - id(hr_zone_base)) * id(cd_target_pct).state / 100.0f;   // 12.10: Cool-down Target HR, как зоны (Карвонен)
           float current_speed_kph = id(target_speed_goal) / 10.0;   // работаем через goal
-          float target_min_speed = 3.0; //ниже шага не уйдет
-
+          float target_min_speed = id(cd_min_speed).state; //ниже шага не уйдет
           static int speed_adjust_timer = 0;
           static int min_speed_timer = 0;
-          static float target_speed_kph = current_speed_kph;
+          // 12.10: было static (инициализировалось один раз за загрузку → во 2-й тренировке заминка прыгала к старой скорости)
+          float target_speed_kph = current_speed_kph;
+
+          // 13.10 шаг 3: ручная заминка маршрута — линейно от текущей скорости к «Не медленнее» за оставшееся время
+          bool cd_time_mode = id(route_cd_mode).current_option() == "Time";   // 16.10: выбор ⏱/♥ для всех программ
+          if (cd_time_mode) {
+            static float cf = 0;
+            if (fabsf(cf - current_speed_kph) > 0.15f) cf = current_speed_kph;
+            int r = id(remaining_cool_down_time);
+            if (cf > target_min_speed) cf -= (cf - target_min_speed) / (float) (r + 1);
+            int g = (int) lroundf(cf * 10);
+            if (g != id(target_speed_goal)) id(target_speed_goal) = g;
+          }
 
           // каждые ~15 вызовов уменьшаем скорость
           speed_adjust_timer++;
-          if (speed_adjust_timer >= 15 && current_speed_kph > target_min_speed) {
+          if (!cd_time_mode && speed_adjust_timer >= (int) id(cd_step_sec).state && current_speed_kph > target_min_speed) {
             float speed_step = 0.0;
 
             if (!isnan(heart_rate)) {
-              if (heart_rate > zone_1_max + 10) {
-                speed_step = 0.5;
+              if (heart_rate > zone_1_max + id(cd_big_margin).state) {
+                speed_step = id(cd_big_step).state;
                 ESP_LOGI("CoolDown", "High HR (>10 above max), decrease speed by 0.5");
-              } else if (heart_rate > zone_1_max && heart_rate <= zone_1_max + 10) {
-                speed_step = 0.1;
+              } else if (heart_rate > zone_1_max && heart_rate <= zone_1_max + id(cd_big_margin).state) {
+                speed_step = id(cd_small_step).state;
                 ESP_LOGI("CoolDown", "High HR (≤10 above max), decrease speed by 0.1");
               }
             } else {
-              speed_step = 0.5;
-              ESP_LOGI("CoolDown", "No HR, decrease speed by 0.5");
+              speed_step = id(cd_big_step).state;
+              ESP_LOGI("CoolDown", "No HR, decrease speed by %.1f", speed_step);
             }
 
             if (speed_step > 0.0) {
               target_speed_kph -= speed_step;
               if (target_speed_kph < target_min_speed) target_speed_kph = target_min_speed;
-              id(target_speed_goal) = (int)(target_speed_kph * 10);
+              id(target_speed_goal) = (int) lroundf(target_speed_kph * 10);
               speed_adjust_timer = 0;
               ESP_LOGI("CoolDown", "Decrease speed by %.1f: target_speed_goal=%d",
                       speed_step, id(target_speed_goal));
@@ -714,7 +831,7 @@ script:
           if (id(remaining_cool_down_time) % 10 == 0) {
             int remaining_minutes = id(remaining_cool_down_time) / 60;
             int remaining_seconds = id(remaining_cool_down_time) % 60;
-            char buffer[20];
+            char buffer[64];
             snprintf(buffer, sizeof(buffer), "Cool-down: (%d:%02d)", remaining_minutes, remaining_seconds);
             id(program_status).publish_state(buffer);
             id(display_nextion).set_component_text("speed.tstatus", buffer);
@@ -732,7 +849,8 @@ script:
 
           // условие завершения заминки
           bool pulse_ok = isnan(heart_rate) || heart_rate <= zone_1_max;
-          if (id(remaining_cool_down_time) <= 0 || (pulse_ok && min_speed_timer >= 30)) {
+          if (id(remaining_cool_down_time) <= 0 || (!cd_time_mode && pulse_ok && min_speed_timer >= (int) id(cd_hold).state)) {
+            id(recorder_event).execute(3); // archive snapshot before reset
             id(motor_running) = false;
             id(target_speed_goal) = 0;   // только goal, target_speed подтянется интервалом
             id(set_speed).publish_state(0.0);
@@ -749,6 +867,7 @@ script:
           id(interval_cycle_count) = 0;
           id(interval_phase) = "high";   // начинаем с работы
           id(interval_time) = 0;         // сброс времени
+          { float T0 = id(treadmill_time_sec).state; id(hiit_last_t) = isnan(T0) ? 0 : (int) T0; }   // 22.10: phases run on Treadmill Time from here (0 at a fresh start)
           ESP_LOGI("HIIT", "HIIT стартовал, цикл счётчик сброшен");
 
 
@@ -770,12 +889,22 @@ script:
   - id: interval_training
     then:
       - lambda: |-
+          // 22.10: phase seconds are taken from Treadmill Time (the clock shown on web/Nextion/record), not counted by
+          // this 1-s tick — two separate 1-s clocks drifted apart and a 60 s HIIT showed 0:58-0:59 at the end
+          float Tf = id(treadmill_time_sec).state;
+          int T = isnan(Tf) ? 0 : (int) Tf;
+          if (T < id(hiit_last_t)) id(hiit_last_t) = T;   // clock was reset
+          int dT = T - id(hiit_last_t);
+          id(hiit_last_t) = T;
+
           if (id(control_mode) == 1) {
             ESP_LOGI("IntervalTraining", "Free Run активен, регулировка скорости по пульсу приостановлена");
             return;
           }
 
-          id(interval_time)++;
+          int prev_time = id(interval_time);
+          id(interval_time) += dT;
+          bool phase_switched = false;
           const char* phase = id(interval_phase).c_str();
 
           // Длительность текущей фазы
@@ -789,10 +918,10 @@ script:
             id(update_heart_rate_zones).execute();
 
             ESP_LOGI("IntervalTraining", "High phase: target zone %s (%.0f–%.0f bpm)",
-                    id(zone_select).current_option(),
+                    id(zone_select).current_option().c_str(),
                     id(target_heart_rate_min), id(target_heart_rate_max));
 
-            if (id(interval_time) % 4 == 0) {
+            if (id(interval_time) / 4 != prev_time / 4) {   // every 4 s (T may step by 0 or 2)
               id(adjust_speed_by_pulse_hiit).execute();
             }
 
@@ -808,7 +937,8 @@ script:
 
           // --- Переключение фаз ---
           if (id(interval_time) >= phase_duration) {
-            id(interval_time) = 0;
+            id(interval_time) -= phase_duration;   // 22.10: carry the extra second over, no drift
+            phase_switched = true;
 
             if (strcmp(phase, "high") == 0) {
               id(interval_phase) = "low";
@@ -825,7 +955,13 @@ script:
             // Проверка завершения
             if ((int)id(hiit_cycles).state <= 0) {
               ESP_LOGI("IntervalTraining", "HIIT завершён: выполнено %d циклов", id(interval_cycle_count));
+              if (id(set_cool_down_time).state > 0) { id(begin_cool_down).execute(); return; }   // 16.10: заминка после последнего интервала
+              id(recorder_event).execute(3); // archive snapshot before reset
               id(motor_running) = false;
+              id(target_speed_goal) = 0;
+              id(program_status).publish_state("HIIT: Done");
+              id(display_nextion).set_component_text("speed.tstatus", "HIIT: Done");
+              id(stop_program).execute();   // 22.10: without cool-down the run used to end without stop_program (status stuck at 0:01, screen stayed on)
               return;
             }
           }
@@ -839,6 +975,7 @@ script:
           // вычисляем оставшееся время
           int remaining = phase_duration - id(interval_time);
           if (remaining < 0) remaining = 0;
+          if ((remaining >= 1 && remaining <= 2) || phase_switched) id(nx_beep).execute();   // 3-2-1 countdown + phase change
           int rem_min = remaining / 60;
           int rem_sec = remaining % 60;
 
@@ -895,10 +1032,13 @@ script:
           if (id(control_mode) == 1) return; // Free Run — выходим
           static int pulse_out_of_zone_count = 0;
           float hr = id(heart_rate_sensor).state;
+          if (!(hr > 0)) hr = NAN;   // 22.10: no strap = 0 bpm, treat as no pulse
 
           if (isnan(hr)) {
-            id(target_speed_goal) = 10; // 1.0 км/ч
-            id(set_speed).publish_state(1.0);
+            if (id(no_pulse_action).current_option() != "Hold") {
+              id(target_speed_goal) = 10; // 1.0 км/ч
+              id(set_speed).publish_state(1.0);
+            }
             pulse_out_of_zone_count = 0;
             return;
           }
@@ -940,17 +1080,30 @@ script:
     then:
       - lambda: |-
           if (id(control_mode) == 1) return;
+          // Ручной режим работы: фиксированная скорость HIIT High Speed (как фаза отдыха)
+          if (id(hiit_work_mode).current_option() == "Manual") {
+            int work_speed = (int)(id(hiit_high_speed).state * 10.0f);
+            if (id(target_speed_goal) != work_speed) {
+              id(target_speed_goal) = work_speed;
+              id(set_speed).publish_state(id(hiit_high_speed).state);
+              ESP_LOGI("IntervalTraining", "High phase (manual): set fixed speed %.1f km/h", id(hiit_high_speed).state);
+            }
+            return;
+          }
           static int pulse_out_of_zone_count = 0;
           static unsigned long hiit_start_ms = 0;
           unsigned long now = millis();
           float hr = id(heart_rate_sensor).state;
+          if (!(hr > 0)) hr = NAN;   // 22.10: no strap = 0 bpm, treat as no pulse
 
           if (hiit_start_ms == 0) hiit_start_ms = now;
           unsigned long elapsed = now - hiit_start_ms;
 
           if (isnan(hr)) {
-            id(target_speed_goal) = 10;
-            id(set_speed).publish_state(1.0);
+            if (id(no_pulse_action).current_option() != "Hold") {
+              id(target_speed_goal) = 10;
+              id(set_speed).publish_state(1.0);
+            }
             pulse_out_of_zone_count = 0;
             return;
           }
@@ -1029,9 +1182,12 @@ script:
             }
           }
 
+          // Route without a set time: no countdown, ends by distance (update_incline_by_map)
+          const bool route_untimed = id(route_wucd) && id(remaining_run_time) <= 0;
+
           // Отсчёт времени тренировки
-          id(remaining_run_time)--;
-          if (id(remaining_run_time) % 60 == 0 || id(remaining_run_time) == 0) {
+          if (!route_untimed) id(remaining_run_time)--;
+          if (!route_untimed && (id(remaining_run_time) % 60 == 0 || id(remaining_run_time) == 0)) {
             int remaining_minutes = id(remaining_run_time) / 60;
             id(set_run_time).publish_state((float)remaining_minutes);
           }
@@ -1051,7 +1207,12 @@ script:
               else if (zone == "5") short_zone = "Z5";
 
               char buffer[40];
-              if (program == "Pulse Zone") {
+              if (program == "None") {   // 16.10: free run with a time limit
+                snprintf(buffer, sizeof(buffer), "Manual Mode (%d:%02d)", remaining_minutes, remaining_seconds);
+              } else if (route_untimed) {
+                snprintf(buffer, sizeof(buffer), "%s %.0f-%.0f \xc2\xb7 %.2f km left", short_zone.c_str(), id(target_heart_rate_min), id(target_heart_rate_max),
+                  fmaxf(0.0f, (treadmill_routes::count.load() >= 2 ? treadmill_routes::points[treadmill_routes::count.load() - 1][0] : 0.0f) - (id(treadmill_distance_km).state - id(route_km_offset))));
+              } else if (program == "Pulse Zone") {
                 snprintf(buffer, sizeof(buffer), "%s: %.0f-%.0f bpm (%d:%02d)",
                         short_zone.c_str(), id(target_heart_rate_min), id(target_heart_rate_max),
                         remaining_minutes, remaining_seconds);
@@ -1072,6 +1233,8 @@ script:
             status_code = 0x07; // Heart Rate Control
           } else if (program == "HIIT") {
             status_code = (id(interval_phase) == "high") ? 0x04 : 0x03;
+          } else if (program == "None") {
+            status_code = 0x0D;   // 16.10: free run = Manual Mode
           } else {
             status_code = 0x00;
           }
@@ -1085,13 +1248,17 @@ script:
           }
 
           // Переход к заминке
-          if (id(remaining_run_time) <= 0 && program != "None") {
-            float cool_down_time = id(set_cool_down_time).state;
+          if (!route_untimed && id(remaining_run_time) <= 0 && (program != "None" || !id(route_wucd))) {   // 16.10: free run stops by its time limit too
+            float cool_down_time = id(set_cool_down_time).state;   // 16.10: общая для всех
             if (cool_down_time > 0) {
+              if (id(route_wucd)) {   // 13.10: заминка маршрута — наклон плавно к 0, трасса больше не двигает наклон
+                id(route_cd_active) = true;
+                id(route_cd_inc0) = isnan(id(set_incline).state) ? 0 : id(set_incline).state;
+              }
               id(remaining_cool_down_time) = cool_down_time * 60;
               int cool_down_minutes = id(remaining_cool_down_time) / 60;
               int cool_down_seconds = id(remaining_cool_down_time) % 60;
-              char buffer[20];
+              char buffer[64];
               snprintf(buffer, sizeof(buffer), "Cool-down: (%d:%02d)", cool_down_minutes, cool_down_seconds);
               id(program_status).publish_state(buffer);
               id(display_nextion).set_component_text("speed.tstatus", buffer);
@@ -1099,6 +1266,7 @@ script:
               id(cool_down).execute();
             } else {
               id(remaining_cool_down_time) = 0;
+              id(recorder_event).execute(3); // archive snapshot before reset
               id(motor_running) = false;
               id(target_speed_goal) = 0;   // только goal, speed подтянется интервалом
               id(set_speed).publish_state(0.0);
@@ -1126,10 +1294,8 @@ script:
     mode: queued
     then:
       - lambda: |-
-          float real_incline = id(avg_incline_stored) / 3.0f;
-          float speed_m_per_min = id(avg_speed_stored) * 1000.0f / 60.0f;
-          float grade = real_incline / 100.0f;
-          id(avg_vo2_stored) = 0.1f * speed_m_per_min + 1.8f * speed_m_per_min * grade + 3.5f;
+          // Средний VO₂ из посекундных значений (40-intervals)
+          id(avg_vo2_stored) = id(met_count) > 0 ? id(vo2_sum) / id(met_count) : 0.0f;
           id(last_vo2).publish_state(id(avg_vo2_stored));
           ESP_LOGI("VO2", "Avg VO2: %.1f ml/kg/min", id(avg_vo2_stored));
 
@@ -1170,34 +1336,10 @@ script:
     mode: queued
     then:
       - lambda: |-
-          float total_time = id(last_time_stored);
-          float total_calories_val = id(last_calories_stored);
-          float fat_calories = 0.0f;
-
-          if (total_time > 0) {
-            float fraction_zone1 = id(zone1_time_stored) / total_time;
-            float fraction_zone2 = id(zone2_time_stored) / total_time;
-            float fraction_zone3 = id(zone3_time_stored) / total_time;
-            float fraction_zone4 = id(zone4_time_stored) / total_time;
-            float fraction_zone5 = id(zone5_time_stored) / total_time;
-
-            float calories_zone1 = total_calories_val * fraction_zone1;
-            float calories_zone2 = total_calories_val * fraction_zone2;
-            float calories_zone3 = total_calories_val * fraction_zone3;
-            float calories_zone4 = total_calories_val * fraction_zone4;
-            float calories_zone5 = total_calories_val * fraction_zone5;
-
-            fat_calories += calories_zone1 * 0.80f;
-            fat_calories += calories_zone2 * 0.65f;
-            fat_calories += calories_zone3 * 0.40f;
-            fat_calories += calories_zone4 * 0.15f;
-            fat_calories += calories_zone5 * 0.05f;
-          }
-
-          id(fat_grams_stored) = fat_calories / 9.0f;
+          // Жир копится посекундно по текущей пульсовой зоне (40-intervals); 1 г ≈ 9 ккал
+          id(fat_grams_stored) = id(fat_kcal) / 9.0f;
           id(last_fat).publish_state(id(fat_grams_stored));
-
-          ESP_LOGI("FatCalc", "Fat burned: %.1f g", id(fat_grams_stored));
+          ESP_LOGI("FatCalc", "Fat burned: %.1f g of %.0f kcal", id(fat_grams_stored), id(energy_kcal));
 
 
   - id: calc_averages
@@ -1252,6 +1394,9 @@ script:
   - id: stop_program
     mode: single
     then:
+      - script.execute:
+          id: recorder_event
+          kind: 3
       - switch.turn_off: free_running_mode_switch
       - lambda: |-
           //# 1. Сохраняем итоговые значения
@@ -1283,6 +1428,11 @@ script:
       - lambda: |-
           // Принудительно публикуем данные пробежки в сенсоры в HA (сенсоры без интервала поэтому так)
           id(last_time).publish_state(id(last_time_stored));
+          id(last_zone1_time).publish_state(id(zone1_time_stored));
+          id(last_zone2_time).publish_state(id(zone2_time_stored));
+          id(last_zone3_time).publish_state(id(zone3_time_stored));
+          id(last_zone4_time).publish_state(id(zone4_time_stored));
+          id(last_zone5_time).publish_state(id(zone5_time_stored));
           id(last_distance).publish_state(id(last_distance_stored));
           id(last_calories).publish_state(id(last_calories_stored));
           id(last_fat).publish_state(id(fat_grams_stored));
@@ -1346,8 +1496,8 @@ script:
       - script.stop: uart_send
       - lambda: |-
           // Удаляем устаревшие команды и ставим остановку в UART-очередь.
-          id(uart_send)->execute("[SETSPD:000]");
-          id(uart_send)->execute("[SETINC:000]");
+          id(uart_send)->execute(treadmill_motor::speed_cmd(0));  // format from Settings → Motor board (10.10)
+          id(uart_send)->execute(treadmill_motor::incline_cmd(0));  // format from Settings → Incline (10.10)
       - logger.log: "treadmill: Stop speed and incline queued"
       - delay: 10ms
       - lambda: |-
@@ -1561,14 +1711,32 @@ script:
     then:
       - lambda: |-
           float age = id(age_number).state;                                 // Получаем возраст пользователя
-          if (id(gender_select).current_option() == "Male") {               // Вычисляем максимальный пульс для мужчин
-            id(max_heart_rate) = 214 - (0.8 * age);
-          } else {                                                          // Вычисляем максимальный пульс для женщин
-            id(max_heart_rate) = 209 - (0.7 * age);
-          }
+          // Максимальный пульс: по формуле (возраст/пол) или измеренный (HR Max Mode = Manual)
+          float formula_max = (id(gender_select).current_option() == "Male")
+                                  ? 214 - (0.8 * age)
+                                  : 209 - (0.7 * age);
+          float manual_max = id(hr_max_manual).state;
+          bool manual = id(hr_max_mode).current_option() == "Manual" &&
+                        manual_max >= 120.0f && manual_max <= 230.0f;
+          id(max_heart_rate) = manual ? manual_max : formula_max;
           int zone = atoi(id(zone_select).current_option().c_str());                // Получаем номер выбранной зоны пульса
-          id(target_heart_rate_min) = id(max_heart_rate) * (0.5 + (zone - 1) * 0.1); // Вычисляем нижнюю границу зоны
-          id(target_heart_rate_max) = id(max_heart_rate) * (0.6 + (zone - 1) * 0.1); // Вычисляем верхнюю границу зоны
+          float lo_pct = 0.5f + (zone - 1) * 0.1f, hi_pct = 0.6f + (zone - 1) * 0.1f;
+          // Карвонен: покой + (макс − покой) · % ; иначе % от максимума
+          float rest = id(resting_heart_rate).state;
+          bool karvonen = id(hr_zone_method).current_option() == "Karvonen" &&
+                          rest >= 30.0f && rest < id(max_heart_rate) - 20.0f;
+          float base = karvonen ? rest : 0.0f, span = id(max_heart_rate) - base;
+          id(target_heart_rate_min) = base + span * lo_pct;                 // Нижняя граница зоны
+          id(target_heart_rate_max) = base + span * hi_pct;                 // Верхняя граница зоны
+          id(hr_zone_base) = base;                                          // для текущей зоны (on_value пульса)
+          // Все границы одним сенсором для веб-интерфейса — публикуем только при изменении.
+          {
+            char zb[96];
+            snprintf(zb, sizeof(zb), "max=%.0f;rest=%.0f;b=%.0f,%.0f,%.0f,%.0f,%.0f,%.0f",
+                     id(max_heart_rate), base, base + span * 0.5f, base + span * 0.6f, base + span * 0.7f,
+                     base + span * 0.8f, base + span * 0.9f, base + span * 1.0f);
+            if (!id(hr_zones_text).has_state() || id(hr_zones_text).state != zb) id(hr_zones_text).publish_state(zb);
+          }
           char buffer[100];                                                 // Формируем строку с информацией
           snprintf(buffer, sizeof(buffer), "%s %.0f, HR Zone %d: %.0f–%.0f bpm",
                   id(gender_select).current_option().c_str(), age, zone,
@@ -1691,7 +1859,7 @@ script:
             int percent = total_zone_time > 0 ? (zones[i] * 100) / total_zone_time : 0;
             id(display_nextion).send_command_printf("info.j%d.val=%d", i, percent);
 
-            char buf[10];
+            char buf[24];
             snprintf(buf, sizeof(buf), "%d:%02d", zones[i] / 60, zones[i] % 60);
             id(display_nextion).send_command_printf("info.t%d.txt=\"%s\"", i, buf);
           }
@@ -1699,7 +1867,7 @@ script:
           // --- Общее время ---
           int total_minutes = (int)id(last_time_stored) / 60;
           int total_seconds = (int)id(last_time_stored) % 60;
-          char duration[10];
+          char duration[24];
           snprintf(duration, sizeof(duration), "%02d:%02d", total_minutes, total_seconds);
           id(display_nextion).send_command_printf("info.t5.txt=\"%s\"", duration);
 
@@ -1767,7 +1935,7 @@ script:
           char buffer[256];
 
           // Форматируем зоны
-          char zone1_str[10], zone2_str[10], zone3_str[10], zone4_str[10], zone5_str[10];
+          char zone1_str[24], zone2_str[24], zone3_str[24], zone4_str[24], zone5_str[24];
           snprintf(zone1_str, sizeof(zone1_str), "%d:%02d", id(zone1_time_stored)/60, id(zone1_time_stored)%60);
           snprintf(zone2_str, sizeof(zone2_str), "%d:%02d", id(zone2_time_stored)/60, id(zone2_time_stored)%60);
           snprintf(zone3_str, sizeof(zone3_str), "%d:%02d", id(zone3_time_stored)/60, id(zone3_time_stored)%60);
@@ -1865,27 +2033,49 @@ script:
       - lambda: |-
           struct Map2D { const char* name; const float (*arr)[2]; int len; };
           Map2D maps[] = {
-            {"Russia, Ufa 3.4km", incline_profile_map_russia_ufa3_4km_2d, 114},
-            {"Russia, Ufa Sipailovo 4.4km", incline_profile_map_sipailovo_circle_4_37km_2d, 146},
-            {"Russia, Ufa Kashkadan 1.7km", incline_profile_map_sipailovo_Kashkadan_1_72km_2d, 58},
-            {"Zwift Epic Run 6.2km", incline_profile_Epic_Run_6_2km, 149},
-            {"Zwift 5K loop 5.0km", incline_profile_5K_loop_5_0km, 67},
-            {"Zwift Mountain Mash 5.9km", incline_profile_Mountain_Mash_5_9km, 106},
-            {"Zwift Chili Pepper 8.0km", incline_profile_Chili_Pepper_8_0km, 156},
-            {"Zwift Hilly Route Reverse Run 9.2km", incline_profile_Hilly_Route_Reverse_Run_9_2km, 225},
-            {"Zwift Ocean Blvd 11.2km", incline_profile_11_1_Ocean_Blvd_11_2km, 121},
-            {"Zwift Beach Island Loop 12.8km", incline_profile_Beach_Island_Loop_12_8km, 125},
-            {"Zwift Jon’s Route 12.6km", incline_profile_Jons_Route_12_6km, 135},
+            // Маршрут из веб-UI: точки загружаются в PSRAM только при остановленной дорожке
+            {treadmill_routes::CUSTOM_NAME, treadmill_routes::points, treadmill_routes::count.load()},
           };
           const int map_count = sizeof(maps) / sizeof(maps[0]);
 
           const char* selected = id(map_select).current_option().c_str();
-          float cur_km = id(treadmill_distance_km).state;
+          // 13.10: разминка маршрута — наклон 0; заминка — плавно к 0 (~1 мин), трасса не двигается
+          if (id(route_wucd) && id(warm_up_active)) {
+            if (fabs(id(set_incline).state) > 0.01) id(set_incline).publish_state(0.0);
+            return;
+          }
+          if (id(route_wucd) && id(route_cd_active)) {
+            float cur = id(set_incline).state;
+            if (!isnan(cur) && cur > 0.01) {
+              float step = id(route_cd_inc0) / 60.0f; if (step < 0.1f) step = 0.1f;
+              float nv = roundf((cur - step) * 10.0f) / 10.0f; if (nv < 0.05f) nv = 0.0f;
+              id(set_incline).publish_state(nv);
+            }
+            return;
+          }
+          float cur_km = id(treadmill_distance_km).state - (id(route_wucd) ? id(route_km_offset) : 0.0f);
 
           for (int m = 0; m < map_count; m++) {
             if (strcmp(selected, maps[m].name) == 0) {
+              if (maps[m].arr == nullptr || maps[m].len < 2) {
+                ESP_LOGW("InclineMap", "Map '%s' has no points loaded", selected);
+                return;
+              }
               float last_dist = maps[m].arr[maps[m].len - 1][0];
               if (cur_km >= last_dist) {
+                // 13.10: заминка маршрута (Route Cool-down Time) вместо мгновенного стопа
+                if (id(route_wucd) && id(set_cool_down_time).state > 0 && !id(route_cd_active)) {
+                  id(route_cd_active) = true;
+                  id(route_cd_inc0) = isnan(id(set_incline).state) ? 0 : id(set_incline).state;
+                  id(remaining_run_time) = 0;            // остатки Set Run Time не мешают заминке
+                  id(remaining_cool_down_time) = id(set_cool_down_time).state * 60;
+                  char cbuf[32];
+                  snprintf(cbuf, sizeof(cbuf), "Cool-down: (%d:%02d)", id(remaining_cool_down_time) / 60, id(remaining_cool_down_time) % 60);
+                  id(program_status).publish_state(cbuf);
+                  id(display_nextion).set_component_text("speed.tstatus", cbuf);
+                  ESP_LOGI("InclineMap", "Map '%s' end (%.3f km) -> route cool-down %d s", selected, cur_km, id(remaining_cool_down_time));
+                  return;
+                }
                 id(set_incline).publish_state(0.0);
                 ESP_LOGI("InclineMap", "Map '%s' end reached (%.3f km >= %.3f km)", selected, cur_km, last_dist);
                 id(stop_program).execute();
@@ -1975,6 +2165,7 @@ script:
                     ESP_LOGI("FreeRunning", "Начальная скорость: 1.0 км/ч");
                 }
                 id(program_status).publish_state("Free Running Mode");
+                id(recorder_event).execute(1);
                 //id(display_nextion).send_command("page 1");
                 ESP_LOGI("Nextion", "Переключение на страницу 1");
                 
@@ -2002,7 +2193,7 @@ script:
 #    - Передняя зона (in_front) → ускорение (+шаг скорости каждые ≥1 сек).
 #    - Задняя зона (in_back) → замедление (первый шаг сразу, далее каждые ≥1 сек).
 #    - Средняя зона → удержание скорости, сброс таймера.
-# 4. Шаг изменения скорости задаётся параметром free_run_step (например, 0.1–0.5 км/ч).
+# 4. Шаг изменения скорости задаётся параметром free_run_step (например, 0.1–0.5 км/ч); в сильных зонах (TM Strong Accel/Decel) — ×2 (12.10).
 # 5. Ограничивает скорость в диапазоне 0.6–18.0 км/ч (6–180 в целых значениях).
 # 6. При изменении цели обновляет target_speed_goal и публикует новое значение set_speed.
   - id: free_running_logic
@@ -2036,6 +2227,9 @@ script:
 
           bool in_front = (d < accel - 2);
           bool in_back  = (d > decel + 2);
+          // Сильные зоны (12.10): ближе TM Strong Accel / дальше TM Strong Decel — шаг ×2
+          bool strong_front = in_front && (d < id(accel_strong_cm).state);
+          bool strong_back  = in_back  && (d > id(decel_strong_cm).state);
 
           // Таймер шагов
           static uint32_t last_step_ms = 0;
@@ -2045,33 +2239,35 @@ script:
           // Шаг из параметра
           float step_kph = id(free_run_step).state;
           int step_int = (int)(step_kph * 10);
+          int step_front = strong_front ? step_int * 2 : step_int;
+          int step_back  = strong_back  ? step_int * 2 : step_int;
 
           int goal_int = id(target_speed_goal);
           bool changed = false;
 
           if (in_front && (now - last_step_ms >= 1000)) {
-            goal_int += step_int;
+            goal_int += step_front;
             last_step_ms = now;
             first_back = true; // сбрасываем флаг задней зоны
             changed = true;
-            ESP_LOGI("FreeRunning", "Передняя зона: +%.1f км/ч, новая цель %.1f",
-                    step_kph, goal_int / 10.0f);
+            ESP_LOGI("FreeRunning", "Передняя зона%s: +%.1f км/ч, новая цель %.1f",
+                    strong_front ? " (сильная)" : "", step_front / 10.0f, goal_int / 10.0f);
           }
           else if (in_back) {
             if (first_back) {
               // мгновенный первый шаг при входе в заднюю зону
-              goal_int -= step_int;
+              goal_int -= step_back;
               first_back = false;
               last_step_ms = now;
               changed = true;
-              ESP_LOGI("FreeRunning", "Задняя зона (первый шаг): -%.1f км/ч, новая цель %.1f",
-                      step_kph, goal_int / 10.0f);
+              ESP_LOGI("FreeRunning", "Задняя зона%s (первый шаг): -%.1f км/ч, новая цель %.1f",
+                      strong_back ? " (сильная)" : "", step_back / 10.0f, goal_int / 10.0f);
             } else if (now - last_step_ms >= 1000) {
-              goal_int -= step_int;
+              goal_int -= step_back;
               last_step_ms = now;
               changed = true;
-              ESP_LOGI("FreeRunning", "Задняя зона: -%.1f км/ч, новая цель %.1f",
-                      step_kph, goal_int / 10.0f);
+              ESP_LOGI("FreeRunning", "Задняя зона%s: -%.1f км/ч, новая цель %.1f",
+                      strong_back ? " (сильная)" : "", step_back / 10.0f, goal_int / 10.0f);
             }
           }
           else {
@@ -2118,6 +2314,8 @@ script:
                 id(display_nextion).send_command_printf("page 24");
             - script.stop: start_calibration
       - lambda: |- 
+          id(recorder_event).execute(3); // finish any real session; calibration never starts an archive
+          id(recorder_event).execute(6); // archive reads blocked during calibration; no workout start
           id(calibration_active) = true;
           id(calibration_min_distance) = 9999.0;  // Сбрасываем минимальное расстояние
           id(calibration_max_distance) = 0.0;    // Сбрасываем максимальное расстояние

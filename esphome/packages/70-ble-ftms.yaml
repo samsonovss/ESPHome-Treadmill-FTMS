@@ -24,9 +24,11 @@ esp32_ble_tracker:
 #    - Публикует battery_level_sensor = 0.
 #    - Публикует статус "Отключено".
 ble_client:
-  - mac_address: !secret heart_rate_monitor_mac
+  - mac_address: "00:00:00:00:00:00"  # placeholder: the real strap is chosen at runtime (HR select, restored from flash)
     id: fit_smart
     on_connect:
+      # HR monitor connected → stop BLE scanning: Wi-Fi shares the radio and gets several times faster (09.10).
+      - esp32_ble_tracker.stop_scan:
       - text_sensor.template.publish:
           id: connection_status
           state: "Подключен"
@@ -58,6 +60,9 @@ ble_client:
 
                 //id(display_nextion).send_command_printf("mainPage.bfit_test.aph=127"); 
     on_disconnect:
+      # Scan again so the monitor is found when it comes back.
+      - esp32_ble_tracker.start_scan:
+          continuous: true
       - sensor.template.publish:
           id: heart_rate_sensor
           state: 0 # !lambda 'return NAN;'
@@ -606,14 +611,20 @@ esp32_ble_server:
 
                     float max_level = id(treadmill_max_incline_level).state;
                     float real_max_grade = id(treadmill_real_max_grade).state;
+                    float real_zero_grade = id(treadmill_real_zero_grade).state;
                     float intensity = id(zwift_incline_intensity).state / 100.0f;
 
+                    // Реальный уклон на уровне 0 (линейно до максимума);
+                    // NaN/мусор после сброса настроек → 0.
+                    if (!(real_zero_grade >= 0.0f) || real_zero_grade > 10.0f)
+                      real_zero_grade = 0.0f;
                     // Защита от некорректного делителя после сброса настроек.
-                    if (real_max_grade < 0.1f)
-                      real_max_grade = 0.1f;
+                    float span = real_max_grade - real_zero_grade;
+                    if (!(span >= 0.1f))
+                      span = 0.1f;
 
                     float target_level =
-                        grade_percent * max_level / real_max_grade * intensity;
+                        (grade_percent * intensity - real_zero_grade) * max_level / span;
 
                     if (target_level < 0.0f)
                       target_level = 0.0f;
@@ -634,125 +645,3 @@ esp32_ble_server:
                              id(zwift_auto_incline).state ? "ON" : "OFF");
                   }
     # === END EXPERIMENTAL_KICKR_RUN ===
-
-# on_write:
-#   then:
-#     - lambda: |-
-#         if (x.empty()) return;
-#         uint8_t op_code = x[0];
-#         ESP_LOGI("FTMS", "Команда: 0x%02X, Данные: %d байт, motor_running=%d, manual_stop=%d", 
-#           op_code, x.size(), id(motor_running), id(manual_stop));
-
-#         std::string hex_data;
-#         for (size_t i = 0; i < x.size(); ++i) {
-#           char buf[4];
-#           snprintf(buf, sizeof(buf), "%02X ", x[i]);
-#           hex_data += buf;
-#         }
-#         ESP_LOGI("FTMS", "RAW: %s", hex_data.c_str());
-
-#         std::vector<uint8_t> response_vec;
-
-#         if (op_code == 0x00) {  // Request Control
-#           response_vec = {0x80, 0x00, 0x01};  // Success
-#           ESP_LOGI("FTMS", "Request Control подтверждён");
-#         } else if (op_code == 0x07) {  // Start
-#             if (id(manual_stop)) {
-#                 response_vec = {0x80, 0x07, 0x02};  // Invalid Parameter
-#                 ESP_LOGW("FTMS", "Команда Start проигнорирована: тренажёр остановлен вручную");
-#             } else if (id(motor_running)) {
-#                 response_vec = {0x80, 0x07, 0x01};  // Success
-#                 ESP_LOGI("FTMS", "Команда Start проигнорирована: тренажёр уже работает");
-#             } else {
-#                 if (id(program_select).current_option() != "None") {
-#                     id(start_program).execute();
-#                     ESP_LOGI("FTMS", "Запуск программы");
-#                 } else {
-#                     id(start_manual).execute();
-#                     ESP_LOGI("FTMS", "Запуск ручного режима");
-#                 }
-#                 response_vec = {0x80, 0x07, 0x01};  // Success
-#             }
-
-#         } else if (op_code == 0x08) {  // Stop
-#           id(stop_program).execute();
-#           response_vec = {0x80, 0x08, 0x01};  // Success
-#           ESP_LOGI("FTMS", "Стоп выполнен");
-
-#         } else if (op_code == 0x02 && x.size() >= 3) {  // Set Target Speed
-#           float requested_kmh = (x[1] | (x[2] << 8)) / 100.0f;
-#           if (requested_kmh >= 0.6f && requested_kmh <= 18.0f) {
-#             int target = (int)(requested_kmh * 10);
-#             id(target_speed_goal) = target;   // только goal, без прямого изменения target_speed
-
-#             response_vec = {0x80, 0x02, 0x01};  // Success
-
-#             // уведомление FTMS
-#             id(ftms_status_char).set_value({0x05, x[1], x[2]});  // Target Speed Changed
-#             id(ftms_status_char).notify();
-#             id(last_ftms_status) = {0x05, x[1], x[2]};
-#             id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x05));
-
-#             ESP_LOGI("FTMS", "Скорость установлена (goal): %.2f км/ч", requested_kmh);
-#           } else {
-#             response_vec = {0x80, 0x02, 0x02};  // Invalid Parameter
-#             ESP_LOGW("FTMS", "Недопустимая скорость: %.2f км/ч", requested_kmh);
-#           }
-
-#         } else if (op_code == 0x03 && x.size() >= 3) {  // Set Target Incline
-#           static uint32_t last_incline_time = 0;
-#           if (millis() - last_incline_time < 500) {
-#             ESP_LOGI("FTMS", "Игнорируем частую команду наклона");
-#             return;
-#           }
-#           last_incline_time = millis();
-#           float requested_incline = (x[1] | (x[2] << 8)) / 10.0f;
-#           if (requested_incline >= 0.0f && requested_incline <= 15.0f) {
-#             id(set_incline).publish_state(requested_incline);
-#             id(target_incline_goal) = (int)(requested_incline * 10);
-#             id(target_incline) = id(target_incline_goal);
-#             response_vec = {0x80, 0x03, 0x01};  // Success
-            
-#             id(ftms_status_char).set_value({0x06, x[1], x[2]});  // Target Incline Changed
-#             id(ftms_status_char).notify();
-#             id(last_ftms_status) = {0x06, x[1], x[2]};
-#             id(ftms_status_sensor).publish_state(id(ftms_status_to_string)(0x06));
-#             ESP_LOGI("FTMS", "Наклон установлен: %.1f%%, уведомление: Target Incline Changed (0x06)");
-#           } else {
-#             response_vec = {0x80, 0x03, 0x02};  // Invalid Parameter
-#             ESP_LOGW("FTMS", "Недопустимый наклон: %.1f%%", requested_incline);
-#           }
-#         } else {
-#           response_vec = {0x80, op_code, 0x06};  // Op Code Not Supported
-#           ESP_LOGW("FTMS", "Неизвестная команда: 0x%02X", op_code);
-#         }
-
-#         // --- Отправка ответа на Control Point (всегда 3 байта) ---
-#         if (!response_vec.empty()) {
-#           id(ftms_control_point_char).set_value({
-#             response_vec[0],
-#             response_vec[1],
-#             response_vec[2]
-#           });
-#           id(ftms_control_point_char).notify();
-#           ESP_LOGI("FTMS", "Ответ отправлен на Control Point");
-#         }
-
-    # - uuid: "0000180D-0000-1000-8000-00805F9B34FB"
-    #   advertise: true
-    #   characteristics:
-        # - uuid: "2A37"
-        #   id: heart_rate_data
-        #   notify: true
-        #   read: true
-        #   value: !lambda |-
-        #     if (isnan(id(heart_rate_sensor).state)) {
-        #       return std::vector<uint8_t>{};
-        #     }
-        #     uint8_t heart_rate = (uint8_t)(id(heart_rate_sensor).state);
-        #     std::vector<uint8_t> hr_data(2, 0);
-        #     hr_data[0] = 0x06;
-        #     hr_data[1] = heart_rate;
-        #     return hr_data;
-
-# Бинарные сенсоры

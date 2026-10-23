@@ -1,0 +1,145 @@
+openapi: 3.0.3
+info:
+  title: ESPHome Treadmill HTTP API
+  version: "0.1-draft"
+  description: |
+    Read-only API of the treadmill board (ESP32, ESPHome web_server). No authentication yet:
+    use only on a trusted local network. Describes only what exists in the firmware sources.
+    Live state and control use the standard ESPHome web_server (SSE /events, REST /<domain>/<name>);
+    entity names are board-specific and not listed here.
+servers:
+  - url: http://{host}
+    variables: {host: {default: treadmill.local}}
+paths:
+  /workouts/status:
+    get:
+      summary: Recorder status
+      responses:
+        "200":
+          description: OK
+          content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}
+  /workouts/list:
+    get:
+      summary: Page of saved workout IDs (ascending)
+      parameters:
+        - {name: after, in: query, schema: {type: string, pattern: "^w[0-9]{10}$"}, description: Cursor = `next` of the previous page}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 20, default: 20}}
+      responses:
+        "200":
+          description: OK. Page may hold fewer items than limit (gaps); continue while `next` is not null.
+          content: {application/json: {schema: {$ref: "#/components/schemas/List"}}}
+        "409": {description: Workout active or finalizing; retry after STOP}
+        "503": {description: Storage not ready}
+  /workouts/file:
+    get:
+      summary: Workout file (gzip when the client accepts it)
+      parameters:
+        - {name: id, in: query, required: true, schema: {type: string, pattern: "^w[0-9]{10}$"}}
+        - {name: type, in: query, required: true, schema: {type: string, enum: [csv, json]}}
+      responses:
+        "200":
+          description: "csv: samples (~1 per second); json: Summary"
+          content:
+            text/csv: {}
+            application/json: {schema: {$ref: "#/components/schemas/Summary"}}
+        "404": {description: Not found or in trash}
+        "409": {description: Archive busy or workout active}
+  /api/workouts/trash/list:
+    get:
+      summary: IDs moved to trash
+      parameters:
+        - {name: after, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, maximum: 20}}
+      responses: {"200": {description: OK}}
+  /api/workouts/trash:
+    post:
+      summary: Move a workout to trash (reversible). Needs firmware with the trash API flashed.
+      parameters: [{name: id, in: query, required: true, schema: {type: string}}]
+      responses:
+        "202": {description: Queued; poll /api/workouts/job}
+        "409": {description: Workout active, or another operation pending}
+  /api/workouts/restore:
+    post:
+      summary: Restore a workout from trash
+      parameters: [{name: id, in: query, required: true, schema: {type: string}}]
+      responses: {"202": {description: Queued}, "409": {description: Busy}}
+  /api/workouts/job:
+    get:
+      summary: State of the latest trash/restore job
+      parameters: [{name: job, in: query, required: true, schema: {type: integer}}]
+      responses:
+        "200":
+          description: OK
+          content: {application/json: {schema: {type: object, properties: {job: {type: integer}, state: {type: string, enum: [queued, running, succeeded, failed]}, operation: {type: string}, id: {type: string}, error: {type: string}}}}}
+        "404": {description: Unknown job (job numbers reset on reboot)}
+  /api/programs/list:
+    get:
+      summary: Saved program IDs
+      responses: {"200": {description: OK}, "409": {description: Workout active}}
+  /api/programs/file:
+    get:
+      summary: One saved program (JSON)
+      parameters: [{name: id, in: query, required: true, schema: {type: string}}]
+      responses: {"200": {description: OK}, "404": {description: Not found}, "409": {description: Busy}}
+  /api/programs/delete:
+    post:
+      summary: Delete a saved program (treadmill must be stopped)
+      parameters: [{name: id, in: query, required: true, schema: {type: string}}]
+      responses: {"200": {description: "{deleted:true}"}, "404": {description: Not found}, "409": {description: Not stopped or busy}}
+  /mcp:
+    post:
+      summary: MCP server (JSON-RPC 2.0, stateless)
+      description: >
+        Methods initialize, ping, tools/list, tools/call. Tools get_status, get_live,
+        list_workouts(after, limit<=20), get_workout_summary(id), list_programs, get_program(id), save_program(program), delete_program(id). History tools and save_program return a tool
+        error while a workout runs. save_program only stores a validated program file (same rules as /api/programs/save); no tool starts a workout or moves the motor. GET returns 405.
+      requestBody: {required: true, content: {application/json: {schema: {type: object}}}}
+      responses: {"200": {description: JSON-RPC response}, "202": {description: Notification accepted}}
+components:
+  schemas:
+    Status:
+      type: object
+      properties:
+        state: {type: string, enum: [idle, recording, finalizing]}
+        recording: {type: boolean}
+        archive_available: {type: boolean}
+        error: {type: string}
+        total_bytes: {type: integer}
+        used_bytes: {type: integer}
+    List:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {type: object, properties: {id: {type: string}, summary_available: {type: boolean}}}
+        next: {type: string, nullable: true}
+    Summary:
+      type: object
+      description: Workout summary. Fields marked "new" exist only in workouts recorded after the matching firmware was flashed.
+      properties:
+        schema_version: {type: integer}
+        id: {type: string}
+        duration_sec: {type: number, description: Running time without pauses}
+        elapsed_sec: {type: number}
+        distance_km: {type: number}
+        calories: {type: number}
+        avg_speed_kmh: {type: number}
+        max_speed_kmh: {type: number}
+        avg_incline_pct: {type: number}
+        ascent_m: {type: number}
+        avg_heart_rate: {type: number, nullable: true}
+        max_heart_rate: {type: number, nullable: true}
+        fat_g: {type: number}
+        carbs_g: {type: number}
+        avg_met: {type: number}
+        avg_vo2: {type: number}
+        profile: {type: object, description: "weight_kg, age, sex, hr_max"}
+        zone_sec: {type: array, items: {type: number}, minItems: 6, maxItems: 6, description: "Seconds by heart-rate zone: index 0 = below Z1, indices 1..5 = Z1..Z5; zone bounds follow the HR Zone Method setting"}
+        target_zone: {type: integer}
+        program: {type: string}
+        route: {type: string}
+        phases: {type: array, description: "[[start_sec, phase_letter], ...]"}
+        zwift_profile: {type: array, nullable: true}
+        trimp: {type: number, description: "new. Edwards load: sum(zone_sec[z]*z, z=1..5)/60"}
+        blocks_sec: {type: integer, description: "new. Block length, 300"}
+        blocks: {type: array, description: "new. [[end_timer_s, avg_speed_kmh, avg_grade_pct, avg_hr (0 = no data)], ...], up to 60, empty after crash recovery", items: {type: array, items: {type: number}}}
