@@ -80,7 +80,7 @@ script:
             else if (st.rfind("Fartlek ", 0) == 0 && st.find(" Fast ") != std::string::npos) ph = 'H';   // 16.10: fartlek fast segment = work
             else if (st.rfind("Fartlek ", 0) == 0 && st.find(" Easy ") != std::string::npos) ph = 'L';   // 16.10: fartlek easy segment = rest
             else if (st.find(", Run (") != std::string::npos ||
-                     (st.size() > 3 && st[0] == 'Z' && st[1] >= '1' && st[1] <= '5' && st[2] == ':')) ph = 'R';  // "Z2: 108-126 bpm (12:00)" = Pulse Zone main part
+                     (st.size() > 3 && st[0] == 'Z' && st[1] >= '1' && st[1] <= '5' && (st[2] == ':' || st[2] == ' '))) ph = 'R';  // "Z2: 108-126 bpm (12:00)" / route "Z2 112-130 · 1.2 km left" = Pulse Zone main part
             s.phase = ph;
           }
           if (kind == 1) {
