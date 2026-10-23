@@ -48,7 +48,7 @@ function step(x,cfg,manual){const h=x.hr0??hrModel(),seg=x.plan.find(s=>x.t>=s.a
  else if(seg.k==='run'){const [lo,hi]=reg(seg.z);st=`Z${seg.z}: ${lo}-${hi} bpm (${mmss(left)})`;inc=manual?.inc??inc;}
  else if(seg.k==='work'){if(cfg.hiitManual){tgt=cfg.high;st=`High ${cfg.high.toFixed(1)} km/h, C:${seg.c} (${mmss(left)})`;}else{const [lo,hi]=reg(cfg.zone);st=`High Z${cfg.zone} ${lo}-${hi}, C:${seg.c} (${mmss(left)})`;}}
  else if(seg.k==='rest'){tgt=cfg.low;st=`Recovery ${cfg.low.toFixed(1)} km/h, C:${seg.c} (${mmss(left)})`;}
- else if(seg.k==='fk'){if(seg.z)reg(seg.z);else tgt=seg.s;if(seg.i!=null)inc=seg.i;const fast=seg.z?seg.z>=3:seg.s>6;st=`Fartlek ${seg.n}/${seg.N} ${fast?'Fast':'Easy'} ${seg.z?'Z'+seg.z:seg.s.toFixed(1)} (${mmss(left)})`;}
+ else if(seg.k==='fk'){if(seg.z)reg(seg.z);else tgt=seg.s;if(seg.i!=null)inc=seg.i;const fast=seg.z?seg.z>=3:seg.s>=8;st=`Fartlek ${seg.n}/${seg.N} ${fast?'Fast':'Easy'} ${seg.z?'Z'+seg.z:seg.s.toFixed(1)} (${mmss(left)})`;}
  else if(seg.k==='man'){tgt=manual?.spd??tgt;inc=manual?.inc??inc;}
  if(x.route&&manual?.route)inc=routeLevel(manual.route,x.dist);
  tgt=Math.max(0.6,Math.min(16,Math.round(tgt*10)/10));x.tgt=tgt;x.inc=inc;
@@ -88,9 +88,9 @@ function profileOf(text){try{const g=JSON.parse(text).geom,R=6371,rad=Math.PI/18
  for(let i=1;i<g.length;i++){const [a1,o1]=g[i-1],[a2,o2,e2]=g[i],d=R*Math.acos(Math.min(1,Math.sin(a1*rad)*Math.sin(a2*rad)+Math.cos(a1*rad)*Math.cos(a2*rad)*Math.cos((o2-o1)*rad)));km+=d;
   if(km-k0>=0.1){const gr=(e2-e0)/((km-k0)*10);pts.push([+km.toFixed(3),Math.max(0,Math.min(15,Math.round(gr*15/6.5)))]);k0=km;e0=e2;}}return {km,pts};}catch{return null;}}
 (function seedHistory(){const day=864e5,now=Date.now(),rid=Object.keys(SAMPLE_ROUTES).find(k=>/Набережная/.test(SAMPLE_ROUTES[k]))??Object.keys(SAMPLE_ROUTES)[0],rp=rid?profileOf(SAMPLE_ROUTES[rid]):null;
- const runs=[[20,'Pulse Zone',{zone:2,run:30,warm:5,cool:3}],[13,'None',{run:rp?Math.round(rp.km/8*60):25,warm:3,spd:8,route:rp}],[6,'HIIT',{hi:60,lo:90,cycles:8,high:10.5,low:5.5,hiitManual:true,warm:5,cool:3}],[2,'Fartlek',{fplan:'240/6.0,60/10.5,120/6.5,30/12.0,90/6.0,180/9.0,120/6.0,45/11.0,120/6.0',warm:5,cool:3}]];
- runs.forEach(([d,p,o],i)=>{const c={...cfgNow(),program:p,warm:0,cool:0,run:0,...o};const st=new Date(now-d*day);st.setHours(7+i*4,(i*17)%60,0,0);
-  const x=newSession(c,st.getTime());x.fit=4-i*2;if(o.route){x.route=true;x.routeName=JSON.parse(SAMPLE_ROUTES[rid]).name;}const total=x.plan.reduce((s,g)=>s+(Number.isFinite(g.d)?g.d:0),0);
+ const runs=[[41,'Pulse Zone',{zone:2,run:28,warm:5,cool:3}],[34,'Pulse Zone',{zone:2,run:32,warm:5,cool:3}],[27,'Pulse Zone',{zone:2,run:30,warm:5,cool:3}],[20,'Pulse Zone',{zone:2,run:30,warm:5,cool:3}],[13,'None',{run:rp?Math.round(rp.km/8*60):25,warm:3,spd:8,route:rp}],[6,'HIIT',{hi:60,lo:90,cycles:8,high:10.5,low:5.5,hiitManual:true,warm:5,cool:3}],[2,'Fartlek',{fplan:'240/6.0,60/10.5,120/6.5,30/12.0,90/6.0,180/9.0,120/6.0,45/11.0,120/6.0',warm:5,cool:3}]];
+ runs.forEach(([d,p,o],i)=>{const c={...cfgNow(),program:p,warm:0,cool:0,run:0,...o};const st=new Date(now-d*day);st.setHours(7+(i%4)*4,(i*17)%60,0,0);
+  const x=newSession(c,st.getTime());x.fit=3-(i%4)*2;if(o.route){x.route=true;x.routeName=JSON.parse(SAMPLE_ROUTES[rid]).name;}const total=x.plan.reduce((s,g)=>s+(Number.isFinite(g.d)?g.d:0),0);
   for(let t=0;t<total;t++)step(x,c,{spd:o.spd??7,inc:0,route:o.route?o.route.pts:null});finalize(x);});})();
 
 // --- live session ---
