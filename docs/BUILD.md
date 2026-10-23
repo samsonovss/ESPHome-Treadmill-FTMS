@@ -29,7 +29,9 @@ python3 generate.py      # writes ../esphome/treadmill_dashboard.h
 
 `generate.py` merges the sources into one page, gzips it and writes it as a C byte array into `esphome/treadmill_dashboard.h`. The firmware serves it from flash. Rebuild and flash the firmware afterwards, then reload the page with Ctrl+F5.
 
-The generated header is committed, so building the firmware does not need Python. If you change anything in `web-ui/`, regenerate the header and commit both.
+The generated header is committed, so building the firmware does not need Python. If you change anything in `web-ui/`, regenerate the header and commit both; CI (`web-ui/check_header.py`) fails when they differ.
+
+`generate.py` also writes `web-ui/generated/demo.html`: the same page plus [`web-ui/demo/mock.js`](../web-ui/demo/mock.js), a virtual treadmill in the browser. CI publishes it as the [live demo](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/). Open it locally with any static server to try changes without a board.
 
 Main sources:
 

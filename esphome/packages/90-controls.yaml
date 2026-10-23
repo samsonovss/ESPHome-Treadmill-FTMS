@@ -469,6 +469,7 @@ number:
     name: "HIIT High Duration"
     id: hiit_high_duration
     optimistic: true
+    restore_value: yes  # keep after a reboot
     min_value: 30
     max_value: 600
     step: 30
@@ -479,6 +480,7 @@ number:
     name: "HIIT Low Duration"
     id: hiit_low_duration
     optimistic: true
+    restore_value: yes  # keep after a reboot
     min_value: 30
     max_value: 600
     step: 30
@@ -489,6 +491,7 @@ number:
     name: "HIIT Low Speed"
     id: hiit_low_speed
     optimistic: true
+    restore_value: yes  # keep the rest speed after a reboot (work speed already does)
     min_value: 3.0
     max_value: 8.0
     step: 0.5
@@ -510,6 +513,7 @@ number:
     name: "HIIT Cycles"
     id: hiit_cycles
     optimistic: true
+    restore_value: yes  # keep after a reboot
     min_value: 1
     max_value: 20
     step: 1

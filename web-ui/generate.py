@@ -70,8 +70,14 @@ inline void register_web_handler() {
 } // namespace treadmill_web
 '''
 (p/'generated').mkdir(exist_ok=True)
-(p/'generated/index.html').write_text(html)  # plain page for browsing/debugging (not committed)
-# The firmware includes the header from esphome/ (next to treadmill.yaml).
+# Demo build (GitHub Pages): the same page + demo/mock.js, a virtual treadmill that answers /events and the API in the browser.
+_core=p.parent/'esphome'/'packages'/'00-core.yaml'
+_ver=re.search(r'version:\s*"([^"]+)"',_core.read_text()).group(1) if _core.exists() else 'demo'
+_mock=(p/'demo'/'mock.js').read_text().replace('/*DEMO_ENTITIES*/[]',(p/'demo'/'entities.json').read_text().strip()).replace("/*DEMO_VERSION*/''",json.dumps(_ver))
+assert html.count('<head>')==1 and '</script' not in _mock
+(p/'generated/demo.html').write_text(html.replace('<head>','<head><script>'+_mock+'</script>',1))
+(p/'generated/index.html').write_text(html)
+# The firmware includes the header from esphome/ (next to treadmill.yaml) in the repository; elsewhere it stays in generated/.
 out = p.parent/'esphome' if (p.parent/'esphome'/'packages').is_dir() else p/'generated'
 (out/'treadmill_dashboard.h').write_text(header)
 print(f'Generated offline HTML {len(html.encode())} bytes; header {len(header.encode())} bytes')
