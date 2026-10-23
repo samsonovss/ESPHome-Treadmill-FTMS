@@ -1,103 +1,115 @@
 # Smart ESPHome Treadmill with FTMS and Native Zwift Incline Control
 
-[Русская версия](README.ru.md) | [Releases and history](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram community](https://t.me/TreadmillSmart)
+[Русская версия](README.ru.md) | [**Live demo**](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/) | [Releases](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram community](https://t.me/TreadmillSmart)
 
-Turn an older treadmill into a modern smart training machine. This project completely replaces the original console with an ESP32-S3 and ESPHome solution, controls the lower motor board directly over UART, and connects to Zwift and other fitness applications through Bluetooth [Fitness Machine Service (FTMS)](docs/specs/FTMS_v1.0.pdf) without bridges or companion apps. It supports native incline control from Zwift, Home Assistant, a Nextion display, heart-rate programs, built-in workout modes, and user-position and safety-zone detection with a VL53L1X laser time-of-flight distance sensor. The current configuration was developed for PSA(xx)-family boards but can be adapted to other treadmills after their control protocol has been investigated.
+Turn an older treadmill into a modern smart training machine. An ESP32-S3 with ESPHome replaces the original console, drives the lower motor board directly over UART and talks to Zwift and other fitness apps over Bluetooth [FTMS](docs/specs/FTMS_v1.0.pdf), without bridges or companion apps. Everything runs on the board itself: a full web interface, workout programs, heart-rate control, workout history with FIT export, and one-click firmware updates from GitHub. Home Assistant is supported but not required.
 
 https://github.com/user-attachments/assets/f829769c-47f4-4251-8f99-d2f9a6cf358a
 
+> [!TIP]
+> **[Try the web interface in your browser](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/)**: the same page the treadmill serves, running on simulated data.
+
 ## Highlights
 
-- **Direct Bluetooth FTMS** - no bridges or companion apps;
-- **Native Zwift incline control** - route grade physically controls the treadmill;
-- **Home Assistant integration**;
-- **Custom Home Assistant workout automations** - create and run your own speed and incline programs;
-- **Nextion touchscreen interface**;
-- **Heart-rate workouts, HIIT, warm-up, and cool-down**;
-- **ESPHome-based and fully local** - no cloud required;
-- **Laser ToF safety-zone detection, optical speed feedback, and motor-temperature monitoring**.
+- **Direct Bluetooth FTMS**: Zwift, Kinomap, FitShow, Kinni and other apps connect straight to the treadmill;
+- **Native Zwift incline**: the route grade physically moves the deck;
+- **Built-in web interface** at the treadmill's address: live workout, programs, history, progress, settings. RU/EN, light and dark themes, works offline;
+- **Workout programs**: heart-rate zone, HIIT, fartlek, your own interval plans, routes drawn on a map or picked from the Zwift catalog;
+- **Heart-rate control**: pair a BLE chest strap from the web page; the treadmill adjusts speed to keep you in the zone;
+- **Workout history on the board**: every run is recorded to flash, with charts, a progress tab and **FIT export** for Strava and Garmin Connect;
+- **One-click updates**: treadmill and display firmware update over Wi-Fi from GitHub releases;
+- **AI agent access (MCP)**: Claude and other agents can read workouts and create programs; they cannot move the belt;
+- **Nextion touchscreen**, **Home Assistant** integration, **laser ToF** user-position and safety zone, optical speed feedback, motor temperature monitoring;
+- **Fully local**: no cloud, no account.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     Apps[Zwift / Kinomap / other FTMS apps]
-    HA[Home Assistant]
-    HR[BLE heart-rate monitor]
+    Web[Browser: built-in web UI]
+    HA[Home Assistant - optional]
+    AI[AI agent - MCP]
+    HR[BLE heart-rate strap]
+    GH[GitHub releases]
     ESP[ESP32-S3 + ESPHome]
     Display[Nextion]
     Sensors[VL53L1X / FC-33 / DS18B20]
     Board[Treadmill motor controller]
 
     Apps <-->|BLE FTMS / RSC| ESP
+    Web <-->|HTTP / SSE| ESP
     HA <-->|ESPHome API| ESP
+    AI -->|HTTP /mcp| ESP
     HR -->|BLE Heart Rate| ESP
+    GH -->|firmware updates| ESP
     Display <-->|UART| ESP
     Sensors --> ESP
     ESP <-->|UART SETSPD / SETINC| Board
 ```
 
-The ESP32-S3 acts as the central controller. It receives commands from the UI, workout programs, or fitness apps, sends them to the treadmill motor controller, and publishes telemetry back to Home Assistant and BLE clients.
+The ESP32-S3 is the central controller. It takes commands from the web page, the display, workout programs or fitness apps, sends them to the motor controller and publishes telemetry back to every client.
+
+## Quick Start
+
+> [!IMPORTANT]
+> **The first install must be done over USB.** The firmware uses its own flash layout (a partition for workout history), so an older build cannot be converted over Wi-Fi. After this one USB flash, all later updates come over Wi-Fi with one click.
+
+1. **Wire the board** (see [Hardware](#hardware) and [Wiring](#wiring)). Check your motor board's voltage levels first.
+2. **Flash over USB.** Copy [`esphome/`](esphome/) into your ESPHome configuration directory, open `treadmill-public.yaml` in the ESPHome dashboard and choose *Install → Plug into this computer*. No secrets are needed for this build.
+3. **Connect to Wi-Fi.** The board opens the **`Treadmill Setup`** hotspot. Join it, pick your home network and enter the password. It is stored on the board and survives updates.
+4. **Open the treadmill's address** in a browser (shown in your router, or `http://treadmill.local`). Done: from now on, *Settings → System* shows new firmware versions and installs them over Wi-Fi.
+
+Before the first run, test stopping, minimum speed and incline reset **without a person on the belt**.
+
+Details: [installation guide](docs/INSTALL.md) · [building from source](docs/BUILD.md).
+
+## Web Interface
+
+The treadmill serves its own interface on port 80. The whole page is built into the firmware (gzip, ~210 KB) and needs no internet; only optional extras (map tiles, route building, update checks) go online.
+
+| Tab | What it does |
+|---|---|
+| **Workout** | Live speed, incline, heart rate and zones on one chart; start/stop, manual control, route map and elevation ahead |
+| **Programs** | Ready-made and your own programs: pulse zone, HIIT, fartlek, interval plans, map routes and the Zwift route catalog |
+| **History** | Every saved workout with charts and a summary; download FIT or CSV; delete to a recoverable trash |
+| **Progress** | Weekly/monthly/yearly volume, training load, intensity distribution, fitness trend, consistency |
+| **Settings** | Your profile and HR zones, heart-rate strap pairing, treadmill tuning, display and firmware updates, AI agent connection |
+
+Try it: **[live demo](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/)**. More in the [web interface guide](docs/WEB_UI.md).
+
+## Workout Modes
+
+- manual control and **Free Run** (belt speed follows your position, laser ToF);
+- **Pulse Zone**: the treadmill adjusts speed to hold your heart rate in the selected zone, with warm-up and cool-down;
+- **HIIT**: work and recovery by time or by heart rate;
+- **Fartlek**: random speed and incline surges within your limits, with presets;
+- **Your own programs**: build interval plans in the web editor; they are saved on the board;
+- **Routes**: incline follows an elevation profile, from a route drawn on a map or the [Zwift route catalog](route_profiles/);
+- **native Zwift incline** control.
+
+Treadmill behavior profiles: speed correction (`Soft`, `Precise`, `Aggressive`) and acceleration (`Soft`, `Normal`, `Fast`, `Technogym`).
 
 ## Supported Applications
-
-Tested applications:
-
-- **Zwift**
-- **Kinomap** on Android and iOS
-- **FitShow**
-- **Kinni**
-
-Other FTMS applications may behave differently. FTMS support alone does not guarantee that every application uses the same characteristics and control commands.
-
-### Application Compatibility Matrix
 
 | Feature | Zwift | Kinomap | FitShow | Kinni |
 |---|---:|---:|---:|---:|
 | Treadmill discovery over BLE | ✅ | ✅ | ✅ | ✅ |
-| Speed reporting | ✅ | ✅ | ✅ | ✅ |
-| Distance reporting | ✅ | ✅ | ✅ | ✅ |
-| Heart-rate reporting | ✅ | ✅ | ✅ | ✅ |
+| Speed, distance and heart-rate reporting | ✅ | ✅ | ✅ | ✅ |
 | Start / pause / stop from the application | ➖ | ✅ | ✅ | ✅ |
-| Target-speed control from the application | ➖ | ✅ | ✅ | ✅ |
-| Incline control from the application | ➖ | ✅ | ✅ | ✅ |
+| Target-speed and incline control from the application | ➖ | ✅ | ✅ | ✅ |
 | Automatic route-grade incline control | ✅ | ✅ | ✅ | ✅ |
 | Native Zwift route-grade incline control | ✅ | ➖ | ➖ | ➖ |
 
-✅ — tested and working; ➖ — not applicable.
+✅ tested and working; ➖ not applicable. Kinomap tested on Android and iOS. Other FTMS apps may use different characteristics and commands.
 
-> This matrix reflects practical testing with the current firmware version. Behavior may depend on the application version.
+Standard FTMS covers all these apps. Native incline in Zwift additionally uses a Wahoo KICKR RUN compatibility profile: Zwift sends route grade through the Wahoo Run service, not the FTMS incline command.
 
-### FTMS and Zwift Compatibility
+### Zwift Automatic Incline
 
-For standard fitness applications, the treadmill uses Bluetooth FTMS to report workout data and control speed and incline.
+The current route grade comes from Zwift and is mapped to the treadmill's physical incline level. Settings: `Zwift Auto Incline`, `Treadmill Maximum Incline Level`, `Treadmill Real Grade At Maximum`, `Zwift Incline Intensity` (0-100%).
 
-Native automatic incline in Zwift additionally uses a Wahoo KICKR RUN compatibility profile. Zwift sends route grade through the proprietary Wahoo Run service rather than through the standard FTMS incline-control command.
-
-Therefore:
-
-- standard FTMS provides primary compatibility with Zwift, Kinomap, FitShow, Kinni, and other applications;
-- the Wahoo KICKR RUN profile provides native route-grade incline control in Zwift.
-
-## Zwift Automatic Incline
-
-The project supports two independent incline modes:
-
-1. **Native Zwift incline**: the current route grade is received directly from Zwift and mapped to the treadmill's physical incline level.
-2. **Standalone route profiles**: saved elevation profiles can run without the Zwift application.
-
-Native mode provides:
-
-- `Zwift Auto Incline` to enable physical incline control;
-- `Treadmill Maximum Incline Level` for the treadmill controller limit;
-- `Treadmill Real Grade At Maximum` for the measured real grade at that level;
-- `Zwift Incline Intensity` for a 0-100% effect strength;
-- `Zwift Requested Incline` for the grade received from Zwift;
-- `Zwift Mapped Treadmill Incline` for the resulting treadmill target.
-
-A treadmill value of `15` does not necessarily mean a real `15%` grade. Measure the actual belt rise and calibrate the mapping before enabling automatic incline.
-
-See [Zwift setup and incline calibration](docs/guides/ZWIFT.md).
+A treadmill level of `15` is not necessarily a real `15%` grade. Measure the actual rise and calibrate before enabling automatic incline. See [Zwift setup and incline calibration](docs/guides/ZWIFT.md).
 
 <details>
   <summary><b>Zwift demonstration</b></summary>
@@ -108,37 +120,30 @@ See [Zwift setup and incline calibration](docs/guides/ZWIFT.md).
 
 ## Treadmill Compatibility
 
-The current configuration was developed for a treadmill with a PSA(xx)-family motor board accepting commands such as:
+Developed for a treadmill with a PSA(xx)-family motor board accepting commands such as:
 
 ```text
 [SETSPD:010]  -> 1.0 km/h
 [SETINC:050]  -> incline level 5.0
 ```
 
-Another treadmill can be adapted when its control interface is accessible, but the presence of UART does not make it automatically compatible. Voltage levels, baud rate, packet format, commands, feedback, and safe limits must be identified first.
-
-See the [UART parsing guide](docs/guides/UART_PARSING.md).
+Another treadmill can be adapted when its control interface is accessible, but having a UART does not make it compatible. Voltage levels, baud rate, packet format, commands, feedback and safe limits must be identified first. See the [UART parsing guide](docs/guides/UART_PARSING.md).
 
 > [!IMPORTANT]
-> Reverse-engineering the control protocol is usually the most difficult part of adapting this project to another treadmill board.
+> Reverse-engineering the control protocol is usually the hardest part of adapting this project to another treadmill board.
 
 ## Hardware
 
 Core components:
 
-- ESP32-S3 with PSRAM and 16 MB Flash;
+- ESP32-S3 with PSRAM and 16 MB flash;
 - treadmill with access to the lower motor controller interface;
 - bidirectional logic-level converter;
 - step-down power converter;
 - Nextion `NX4880E043-011C`, 4.3-inch, 800 x 480 display;
-- BLE heart-rate monitor.
+- BLE heart-rate strap.
 
-Optional components:
-
-- VL53L1X/TOF400C for Free Run, safe-zone detection, and display control;
-- FC-33 for real-speed measurement and correction;
-- DS18B20 for motor temperature monitoring;
-- 3D-printed enclosure and mounts.
+Optional: VL53L1X/TOF400C (Free Run, safety zone, display control), FC-33 (real-speed measurement), DS18B20 (motor temperature), 3D-printed enclosure and mounts.
 
 <details>
   <summary><b>Component photos</b></summary>
@@ -160,118 +165,68 @@ Optional components:
   <img src="docs/images/connection.png" alt="ESP32-S3 treadmill wiring diagram" width="85%">
 </p>
 
-Pins used by the current configuration:
-
 | Function | ESP32-S3 |
 |---|---|
 | Nextion RX/TX | GPIO1 / GPIO2 |
 | Treadmill board TX/RX | GPIO17 / GPIO18 |
 | I2C SDA/SCL | GPIO12 / GPIO11 |
 
-Verify the voltage levels of your motor board before connecting it. Never feed 5 V or 12 V directly into ESP32-S3 GPIO pins.
+Never feed 5 V or 12 V directly into ESP32-S3 GPIO pins.
 
-## Quick Start
+## Integrations
 
-1. Download the repository and copy the contents of `esphome/` into your ESPHome configuration directory.
-2. Rename `secrets.example.yaml` to `secrets.yaml`.
-3. Configure Wi-Fi, API, OTA, fallback access point, DS18B20 address, heart-rate monitor MAC, and Nextion TFT URL.
-4. Keep the `packages/` directory next to `config.yaml`; the main file loads all functional sections from it.
-5. Verify pin assignments, UART settings, and the command format used by your treadmill.
-6. Disconnect the power stage and first test ESP32 boot, Nextion, and sensors.
-7. Create a backup, compile the configuration, and inspect the logs.
-8. Test stop behavior, minimum speed, and incline reset without a person on the belt.
+- **Home Assistant**: the treadmill appears as an ESPHome device with all controls and sensors. The private build uses API encryption; see [building from source](docs/BUILD.md).
+- **HTTP API**: live state over the standard ESPHome REST/SSE, plus workout archive and program endpoints. See the [API reference](docs/API.md) ([OpenAPI](docs/openapi.yaml)).
+- **AI agents (MCP)**: `http://<treadmill>/mcp` lets Claude and other MCP clients list workouts, read summaries and save programs. See [MCP](docs/MCP.md).
 
-The configuration is a working example for one installation, not a universal firmware image for every treadmill.
-
-## Workout Modes
-
-- manual control;
-- Pulse Zone;
-- Fat Burn;
-- Recovery Run;
-- configurable HIIT work and recovery cycles;
-- warm-up and cool-down;
-- distance-based Free Run;
-- precomputed route elevation profiles;
-- native Zwift incline control.
-
-Configurable treadmill behavior profiles:
-
-- **Speed correction:** `Soft`, `Precise`, and `Aggressive` control how actively the system compensates for differences between the target and measured belt speed;
-- **Acceleration and deceleration:** `Soft`, `Normal`, `Fast`, and `Technogym` control how smoothly and quickly the belt changes speed.
-
-## Interfaces
-
-The local ESPHome web interface is available on port `80` without authentication.
-
-Workout recording to CSV and Garmin FIT is available through the optional [Home Assistant workout recorder](treadmill_workouts/README.md).
-
-### Home Assistant
-
-<p align="center">
-  <img src="docs/images/hassio.png" alt="Home Assistant treadmill control interface" width="80%">
-</p>
+> [!WARNING]
+> The web interface, API and MCP have no authentication. Use them only on a trusted home network.
 
 <details>
-  <summary><b>Nextion</b></summary>
+  <summary><b>Home Assistant, Nextion and the finished treadmill</b></summary>
+  <p align="center">
+    <img src="docs/images/hassio.png" alt="Home Assistant treadmill control interface" width="80%">
+  </p>
   <p align="center">
     <img src="docs/images/nextion_desine.png" alt="Nextion display interface" width="80%">
   </p>
-</details>
-
-<details>
-  <summary><b>Finished treadmill gallery</b></summary>
   <p align="center">
     <img src="docs/images/treadmill/1.jpg" width="30%" alt="Finished treadmill, view 1">
     <img src="docs/images/treadmill/2.jpg" width="30%" alt="Finished treadmill, view 2">
     <img src="docs/images/treadmill/3.jpg" width="30%" alt="Finished treadmill, view 3">
   </p>
-  <p align="center">
-    <img src="docs/images/treadmill/4.jpg" width="30%" alt="Finished treadmill, view 4">
-    <img src="docs/images/treadmill/5.jpg" width="30%" alt="Finished treadmill, view 5">
-    <img src="docs/images/treadmill/6.jpg" width="30%" alt="Finished treadmill, view 6">
-  </p>
 </details>
 
-Videos:
-
-- [control dashboard overview](https://youtube.com/shorts/wjRsA46usog);
-- [treadmill running demonstration](https://youtube.com/shorts/QqvJLKn4GOk).
+Videos: [control dashboard overview](https://youtube.com/shorts/wjRsA46usog) · [treadmill running](https://youtube.com/shorts/QqvJLKn4GOk).
 
 ## Repository Layout
 
-- [`esphome/config.yaml`](esphome/config.yaml) - main device configuration with ESP32, network, API, OTA, BLE, and package declarations;
-- [`esphome/packages/`](esphome/packages/) - hardware, globals, scripts, sensors, BLE/FTMS, controls, and Nextion configuration;
-- [`esphome/incline_profiles.h`](esphome/incline_profiles.h) - generated route incline profiles;
-- [`treadmill_workouts/`](treadmill_workouts/) - Home Assistant CSV recorder and FIT exporter;
-- [`nextion_display/`](nextion_display/) - display source, HMI, and compiled TFT;
-- [`route_profiles/`](route_profiles/) - Zwift running routes (map + elevation, GPX) loaded by the web UI catalog;
-- [`3d-models/`](3d-models/) - printable enclosure and sensor mounts;
-- [`PCB/`](PCB/) - future PCB design materials;
-- [`docs/guides/`](docs/guides/) - detailed setup guides;
-- [`docs/specs/FTMS_v1.0.pdf`](docs/specs/FTMS_v1.0.pdf) - FTMS specification;
-- [GitHub Releases](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) - versions and project history.
+- [`esphome/`](esphome/): firmware
+  - `treadmill-public.yaml`: build used for releases (no secrets, Wi-Fi setup hotspot);
+  - `treadmill.yaml`: private build with your own Wi-Fi/API/OTA secrets ([`secrets.example.yaml`](esphome/secrets.example.yaml));
+  - [`packages/`](esphome/packages/): hardware, sensors, BLE/FTMS, programs, recorder, display, updates;
+  - `*.h`: C++ parts (web page, recorder, programs, routes, MCP, motor);
+  - [`components/`](esphome/components/): patched ESPHome components (BLE server for Zwift, Nextion);
+- [`web-ui/`](web-ui/): web interface sources; `generate.py` builds `esphome/treadmill_dashboard.h`;
+- [`nextion_display/`](nextion_display/): display source, HMI and compiled TFT;
+- [`route_profiles/`](route_profiles/): Zwift running routes (map + elevation) for the route catalog;
+- [`tools/`](tools/): release script;
+- [`3d-models/`](3d-models/): printable enclosure and sensor mounts;
+- [`PCB/`](PCB/): future PCB design materials;
+- [`docs/`](docs/): guides, API reference, FTMS specification.
 
 ## Roadmap
 
-- cadence measurement.
+- cadence measurement;
 - feasibility study for a custom lower power board controlling the treadmill motor and incline.
 
-Completed work is removed from the roadmap and recorded in the [release notes](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases).
+Completed work is recorded in the [release notes](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases).
 
-## Support the Project
+## Author, Community and Support
 
-This project is developed in the author's free time and has so far been funded personally. Firmware and electronics development, prototype manufacturing, components, and testing require significant time and expense.
+Created by [Anton Samsonov](https://t.me/samsonovss). Discussion, builds and help: [Treadmill Smart](https://t.me/TreadmillSmart).
 
-If this project has been useful to you and you would like to support its continued development, any contribution will help fund new components, prototypes, test equipment, and documentation.
-
-## Author and Community
-
-Created by [Anton Samsonov](https://t.me/samsonovss).
-
-Discussion, builds, and support: [Treadmill Smart](https://t.me/TreadmillSmart).
-
-## Support the Project
+The project is developed in the author's free time and funded personally. If it has been useful to you, any contribution helps pay for components, prototypes, test equipment and documentation:
 
 - PayPal: `samsonov@hotmail.com`
 - BTC: `bc1q3cza0kasutzes4hfddxuclmd9ghn5v7zw2nr5c`
