@@ -4,6 +4,8 @@
 // generated/demo.html; the firmware page never contains it. Entity names, status strings and API answers
 // copy the firmware (packages/*.yaml, treadmill_recorder.h) so the page takes the same code paths.
 (()=>{
+// The page caches history by workout id in localStorage; the demo's ids restart at w1 on every load, so drop that cache or old demo data shows up.
+try{localStorage.removeItem('treadmill.histMeta.v1');localStorage.removeItem('treadmill.histRows.v1');}catch{}
 const HISTORY=/*DEMO_HISTORY*/[],SEED=/*DEMO_ENTITIES*/[],VERSION=/*DEMO_VERSION*/'',SAMPLE_ROUTES=/*DEMO_ROUTES*/{};
 const E=new Map(),DEC=new Map(),UNIT=new Map(),listeners=new Set();
 for(const e0 of SEED){const i=e0.id.indexOf('/'),e={domain:e0.id.slice(0,i),name:e0.id.slice(i+1),...e0};E.set(e.id,e);
