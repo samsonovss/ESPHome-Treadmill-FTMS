@@ -73,7 +73,7 @@ inline void register_web_handler() {
 # Demo build (GitHub Pages): the same page + demo/mock.js, a virtual treadmill that answers /events and the API in the browser.
 _core=p.parent/'esphome'/'packages'/'00-core.yaml'
 _ver=re.search(r'version:\s*"([^"]+)"',_core.read_text()).group(1) if _core.exists() else 'demo'
-_mock=(p/'demo'/'mock.js').read_text().replace('/*DEMO_ENTITIES*/[]',(p/'demo'/'entities.json').read_text().strip()).replace("/*DEMO_VERSION*/''",json.dumps(_ver)).replace('/*DEMO_ROUTES*/{}',(p/'demo'/'routes.json').read_text().strip())
+_mock=(p/'demo'/'mock.js').read_text().replace('/*DEMO_ENTITIES*/[]',(p/'demo'/'entities.json').read_text().strip()).replace("/*DEMO_VERSION*/''",json.dumps(_ver)).replace('/*DEMO_HISTORY*/[]',(p/'demo'/'history.json').read_text().strip()).replace('/*DEMO_ROUTES*/{}',(p/'demo'/'routes.json').read_text().strip())
 assert html.count('<head>')==1 and '</script' not in _mock
 (p/'generated/demo.html').write_text(html.replace('<head>','<head><script>'+_mock+'</script>',1))
 (p/'generated/index.html').write_text(html)

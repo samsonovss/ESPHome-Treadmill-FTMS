@@ -4,7 +4,7 @@
 // generated/demo.html; the firmware page never contains it. Entity names, status strings and API answers
 // copy the firmware (packages/*.yaml, treadmill_recorder.h) so the page takes the same code paths.
 (()=>{
-const SEED=/*DEMO_ENTITIES*/[],VERSION=/*DEMO_VERSION*/'',SAMPLE_ROUTES=/*DEMO_ROUTES*/{};
+const HISTORY=/*DEMO_HISTORY*/[],SEED=/*DEMO_ENTITIES*/[],VERSION=/*DEMO_VERSION*/'',SAMPLE_ROUTES=/*DEMO_ROUTES*/{};
 const E=new Map(),DEC=new Map(),UNIT=new Map(),listeners=new Set();
 for(const e0 of SEED){const i=e0.id.indexOf('/'),e={domain:e0.id.slice(0,i),name:e0.id.slice(i+1),...e0};E.set(e.id,e);
  const m=String(e.state??'').match(/^(-?\d+)(?:\.(\d+))?\s*(.*)$/);DEC.set(e.id,m?(m[2]||'').length:0);UNIT.set(e.id,m?m[3]:'');}
@@ -79,7 +79,7 @@ function finalize(x){const id=wid(nextId++),r=x.rows,h=hrModel(),hrs=r.map(q=>q[
   profile:{weight_kg:cfg.weight,age:num('number/Age'),sex:str('select/Gender')==='Female'?'female':'male',hr_max:h.max},zone_sec:x.zs,target_zone:PULSE.includes(cfg.program)?cfg.zone:null,
   phases:x.phases,trimp:+trimp.toFixed(1),blocks_sec:300,blocks,zwift_profile:null,route:x.routeName??null,program:cfg.program==='None'?'':cfg.program};
  W.set(id,{summary,rows:r,program:cfg.program});return id;}
-function csv(id){const w=W.get(id),s0=Date.parse(w.summary.start);let o='timestamp,heart_rate,speed_kmh,incline_pct,distance_km,time_s,calories,status,program,zone,incline_level,target_zone,elapsed_s\n';
+function csv(id){const w=W.get(id);if(w.raw)return w.raw;const s0=Date.parse(w.summary.start);let o='timestamp,heart_rate,speed_kmh,incline_pct,distance_km,time_s,calories,status,program,zone,incline_level,target_zone,elapsed_s\n';
  for(const q of w.rows)o+=`${new Date(s0+q[1]*1000).toISOString().replace(/\.\d+Z$/,'Z')},${q[2]},${q[3].toFixed(3)},${q[10].toFixed(3)},${q[5].toFixed(6)},${q[1]},${q[6].toFixed(2)},running,"${w.program}",${q[8]},${q[4].toFixed(2)},${q[9]},${q[0]}\n`;return o;}
 
 // A few made-up workouts, one of each kind, so History and Progress have something to show.
@@ -87,11 +87,11 @@ function csv(id){const w=W.get(id),s0=Date.parse(w.summary.start);let o='timesta
 function profileOf(text){try{const g=JSON.parse(text).geom,R=6371,rad=Math.PI/180,pts=[[0,0]];let km=0,k0=0,e0=g[0][2];
  for(let i=1;i<g.length;i++){const [a1,o1]=g[i-1],[a2,o2,e2]=g[i],d=R*Math.acos(Math.min(1,Math.sin(a1*rad)*Math.sin(a2*rad)+Math.cos(a1*rad)*Math.cos(a2*rad)*Math.cos((o2-o1)*rad)));km+=d;
   if(km-k0>=0.1){const gr=(e2-e0)/((km-k0)*10);pts.push([+km.toFixed(3),Math.max(0,Math.min(15,Math.round(gr*15/6.5)))]);k0=km;e0=e2;}}return {km,pts};}catch{return null;}}
-(function seedHistory(){const day=864e5,now=Date.now(),rid=Object.keys(SAMPLE_ROUTES).find(k=>/Набережная/.test(SAMPLE_ROUTES[k]))??Object.keys(SAMPLE_ROUTES)[0],rp=rid?profileOf(SAMPLE_ROUTES[rid]):null;
- const runs=[[41,'Pulse Zone',{zone:2,run:28,warm:5,cool:3}],[34,'Pulse Zone',{zone:2,run:32,warm:5,cool:3}],[27,'Pulse Zone',{zone:2,run:30,warm:5,cool:3}],[20,'Pulse Zone',{zone:2,run:30,warm:5,cool:3}],[13,'None',{run:rp?Math.round(rp.km/8*60):25,warm:3,spd:8,route:rp}],[6,'HIIT',{hi:60,lo:90,cycles:8,high:10.5,low:5.5,hiitManual:true,warm:5,cool:3}],[2,'Fartlek',{fplan:'240/6.0,60/10.5,120/6.5,30/12.0,90/6.0,180/9.0,120/6.0,45/11.0,120/6.0',warm:5,cool:3}]];
- runs.forEach(([d,p,o],i)=>{const c={...cfgNow(),program:p,warm:0,cool:0,run:0,...o};const st=new Date(now-d*day);st.setHours(7+(i%4)*4,(i*17)%60,0,0);
-  const x=newSession(c,st.getTime());x.fit=3-(i%4)*2;if(o.route){x.route=true;x.routeName=JSON.parse(SAMPLE_ROUTES[rid]).name;}const total=x.plan.reduce((s,g)=>s+(Number.isFinite(g.d)?g.d:0),0);
-  for(let t=0;t<total;t++)step(x,c,{spd:o.spd??7,inc:0,route:o.route?o.route.pts:null});finalize(x);});})();
+// Four real workouts (pulse, map, HIIT, fartlek) recorded on the author's treadmill; days shifted so they look recent.
+(function seedHistory(){const day=864e5,d0=new Date();d0.setHours(0,0,0,0);
+ for(const it of HISTORY){const s=it.summary,o=new Date(s.start),tod=((o.getUTCHours()*60+o.getUTCMinutes())*60+o.getUTCSeconds())*1000,st=d0.getTime()-it.d*day+tod,iso=t=>new Date(t).toISOString().replace(/\.\d+Z$/,'Z');
+  const id=wid(nextId++),sum={...s,id,start:iso(st),end:iso(st+s.duration_sec*1000)};
+  W.set(id,{summary:sum,rows:[],program:s.program,raw:it.csv.replace(/^(.*\n)[^,\n]+,/,'$1'+sum.start+',')});}})();
 
 // --- live session ---
 let S={st:'stopped',x:null},speed=1;
