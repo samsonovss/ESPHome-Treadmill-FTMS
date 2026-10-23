@@ -4,7 +4,7 @@
 // generated/demo.html; the firmware page never contains it. Entity names, status strings and API answers
 // copy the firmware (packages/*.yaml, treadmill_recorder.h) so the page takes the same code paths.
 (()=>{
-const SEED=/*DEMO_ENTITIES*/[],VERSION=/*DEMO_VERSION*/'';
+const SEED=/*DEMO_ENTITIES*/[],VERSION=/*DEMO_VERSION*/'',SAMPLE_ROUTES=/*DEMO_ROUTES*/{};
 const E=new Map(),DEC=new Map(),UNIT=new Map(),listeners=new Set();
 for(const e0 of SEED){const i=e0.id.indexOf('/'),e={domain:e0.id.slice(0,i),name:e0.id.slice(i+1),...e0};E.set(e.id,e);
  const m=String(e.state??'').match(/^(-?\d+)(?:\.(\d+))?\s*(.*)$/);DEC.set(e.id,m?(m[2]||'').length:0);UNIT.set(e.id,m?m[3]:'');}
@@ -82,12 +82,16 @@ function finalize(x){const id=wid(nextId++),r=x.rows,h=hrModel(),hrs=r.map(q=>q[
 function csv(id){const w=W.get(id),s0=Date.parse(w.summary.start);let o='timestamp,heart_rate,speed_kmh,incline_pct,distance_km,time_s,calories,status,program,zone,incline_level,target_zone,elapsed_s\n';
  for(const q of w.rows)o+=`${new Date(s0+q[1]*1000).toISOString().replace(/\.\d+Z$/,'Z')},${q[2]},${q[3].toFixed(3)},${q[10].toFixed(3)},${q[5].toFixed(6)},${q[1]},${q[6].toFixed(2)},running,"${w.program}",${q[8]},${q[4].toFixed(2)},${q[9]},${q[0]}\n`;return o;}
 
-// ~6 weeks of made-up history so History and Progress have something to show.
-(function seedHistory(){const day=864e5,now=Date.now(),kinds=[['Pulse Zone',{zone:2,run:30,warm:5,cool:3}],['HIIT',{hi:60,lo:90,cycles:8,high:10.5,low:5.5,hiitManual:true,warm:5,cool:3}],['None',{run:30,spd:7}],['Fartlek',{fplan:'240/6.0,60/10.5,120/6.5,30/12.0,90/6.0,180/9.0,120/6.0,45/11.0,120/6.0',warm:5,cool:3}],['Pulse Zone',{zone:3,run:25,warm:5,cool:3}],['Recovery run',{zone:1,run:30,warm:3,cool:3}]];
- const days=[41,39,36,34,31,29,27,24,22,20,17,15,13,10,8,6,3,1];
- days.forEach((d,i)=>{const [p,o]=kinds[i%kinds.length],c={...cfgNow(),program:p,warm:0,cool:0,run:0,...o};const st=new Date(now-d*day);st.setHours(7+(i*5)%13,(i*17)%60,0,0);
-  const x=newSession(c,st.getTime());x.fit=Math.max(-8,6-i*0.8);const total=x.plan.reduce((s,g)=>s+g.d,0)||c.run*60;
-  for(let t=0;t<total;t++)step(x,c,{spd:o.spd??7,inc:i%3===2?2:0});finalize(x);});})();
+// A few made-up workouts, one of each kind, so History and Progress have something to show.
+// Map profile: [km, incline level] every 100 m from the sample route's elevation (level 15 = 6.5 %, as the seed calibration).
+function profileOf(text){try{const g=JSON.parse(text).geom,R=6371,rad=Math.PI/180,pts=[[0,0]];let km=0,k0=0,e0=g[0][2];
+ for(let i=1;i<g.length;i++){const [a1,o1]=g[i-1],[a2,o2,e2]=g[i],d=R*Math.acos(Math.min(1,Math.sin(a1*rad)*Math.sin(a2*rad)+Math.cos(a1*rad)*Math.cos(a2*rad)*Math.cos((o2-o1)*rad)));km+=d;
+  if(km-k0>=0.1){const gr=(e2-e0)/((km-k0)*10);pts.push([+km.toFixed(3),Math.max(0,Math.min(15,Math.round(gr*15/6.5)))]);k0=km;e0=e2;}}return {km,pts};}catch{return null;}}
+(function seedHistory(){const day=864e5,now=Date.now(),rid=Object.keys(SAMPLE_ROUTES).find(k=>/Набережная/.test(SAMPLE_ROUTES[k]))??Object.keys(SAMPLE_ROUTES)[0],rp=rid?profileOf(SAMPLE_ROUTES[rid]):null;
+ const runs=[[20,'Pulse Zone',{zone:2,run:30,warm:5,cool:3}],[13,'None',{run:rp?Math.round(rp.km/8*60):25,warm:3,spd:8,route:rp}],[6,'HIIT',{hi:60,lo:90,cycles:8,high:10.5,low:5.5,hiitManual:true,warm:5,cool:3}],[2,'Fartlek',{fplan:'240/6.0,60/10.5,120/6.5,30/12.0,90/6.0,180/9.0,120/6.0,45/11.0,120/6.0',warm:5,cool:3}]];
+ runs.forEach(([d,p,o],i)=>{const c={...cfgNow(),program:p,warm:0,cool:0,run:0,...o};const st=new Date(now-d*day);st.setHours(7+i*4,(i*17)%60,0,0);
+  const x=newSession(c,st.getTime());x.fit=4-i*2;if(o.route){x.route=true;x.routeName=JSON.parse(SAMPLE_ROUTES[rid]).name;}const total=x.plan.reduce((s,g)=>s+(Number.isFinite(g.d)?g.d:0),0);
+  for(let t=0;t<total;t++)step(x,c,{spd:o.spd??7,inc:0,route:o.route?o.route.pts:null});finalize(x);});})();
 
 // --- live session ---
 let S={st:'stopped',x:null},speed=1;
@@ -114,7 +118,8 @@ const T0=Date.now();
 const LS={get:(k,d)=>{try{return JSON.parse(localStorage.getItem('tmdemo.'+k))??d;}catch{return d;}},set:(k,v)=>{try{localStorage.setItem('tmdemo.'+k,JSON.stringify(v));}catch{}}};
 const PROG=new Map([['p1a2b3c4d5e6f7a8b',{version:1,id:'p1a2b3c4d5e6f7a8b',name:'Темповая 35 мин',goal:'темп',plan:'Неделя 1',schema_units:{duration:'s',speed:'km/h',incline:'level'},blocks:[{repeat:1,steps:[{duration:300,zone:1,incline:0}]},{repeat:3,steps:[{duration:360,speed:9.5,incline:1},{duration:120,speed:6,incline:0}]},{repeat:1,steps:[{duration:300,zone:1,incline:0}]}]}],
  ['p0f1e2d3c4b5a6978',{version:1,id:'p0f1e2d3c4b5a6978',name:'Длинная в Z2',goal:'выносливость',plan:'Неделя 1',schema_units:{duration:'s',speed:'km/h',incline:'level'},blocks:[{repeat:1,steps:[{duration:2700,zone:2,incline:1}]}]}]]);
-const ROUTES=new Map(Object.entries({.../*DEMO_ROUTES*/{},...LS.get('routes',{})}));   // sample routes (Ufa) + the visitor's ownlet ROUTE={name:'',points:[]};
+const ROUTES=new Map(Object.entries({...SAMPLE_ROUTES,...LS.get('routes',{})}));   // sample routes (Ufa) + the visitor's own
+let ROUTE={name:'',points:[]};
 let jobN=0;const JOBS=new Map();
 
 // --- HTTP: ESPHome REST + treadmill endpoints ---
