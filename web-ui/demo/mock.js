@@ -114,7 +114,7 @@ const T0=Date.now();
 const LS={get:(k,d)=>{try{return JSON.parse(localStorage.getItem('tmdemo.'+k))??d;}catch{return d;}},set:(k,v)=>{try{localStorage.setItem('tmdemo.'+k,JSON.stringify(v));}catch{}}};
 const PROG=new Map([['p1a2b3c4d5e6f7a8b',{version:1,id:'p1a2b3c4d5e6f7a8b',name:'Темповая 35 мин',goal:'темп',plan:'Неделя 1',schema_units:{duration:'s',speed:'km/h',incline:'level'},blocks:[{repeat:1,steps:[{duration:300,zone:1,incline:0}]},{repeat:3,steps:[{duration:360,speed:9.5,incline:1},{duration:120,speed:6,incline:0}]},{repeat:1,steps:[{duration:300,zone:1,incline:0}]}]}],
  ['p0f1e2d3c4b5a6978',{version:1,id:'p0f1e2d3c4b5a6978',name:'Длинная в Z2',goal:'выносливость',plan:'Неделя 1',schema_units:{duration:'s',speed:'km/h',incline:'level'},blocks:[{repeat:1,steps:[{duration:2700,zone:2,incline:1}]}]}]]);
-const ROUTES=new Map(Object.entries(LS.get('routes',{})));let ROUTE={name:'',points:[]};
+const ROUTES=new Map(Object.entries({.../*DEMO_ROUTES*/{},...LS.get('routes',{})}));   // sample routes (Ufa) + the visitor's ownlet ROUTE={name:'',points:[]};
 let jobN=0;const JOBS=new Map();
 
 // --- HTTP: ESPHome REST + treadmill endpoints ---
