@@ -250,6 +250,24 @@ globals:
     initial_value: '0.0'        # Начальное значение — 0.0 (не определено)
                                 # Используется для регулировки скорости в автоматическом режиме и интервальной тренировке
 
+  # 13.10 маршрут: разминка/заминка вокруг трассы (Route Warm-up/Cool-down Time)
+  - id: route_wucd              # true = идёт тренировка по маршруту (Map != None, программа None или пульсовая)
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: route_km_offset         # км, пройденные до конца разминки; трасса считается от 0 после неё
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: route_cd_active         # идёт заминка после конца трассы
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: route_cd_inc0           # наклон в момент начала заминки (плавно к 0 за ~1 мин)
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+
   # Указывает, активна ли фаза разминки
   - id: warm_up_active
     type: bool
@@ -333,6 +351,38 @@ globals:
     restore_value: no           # Не сохраняем значение после перезагрузки
     initial_value: '0'          # Начальное значение — 0
                                 # Используется в скрипте "interval_training" для отслеживания длительности фазы
+
+  # 22.10: Treadmill Time (s) at the last HIIT tick — HIIT phases advance by its increments
+  - id: hiit_last_t
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  # 22.10: last warm-up/cool-down (min) and ⏱/♥ (bit0 warm-up, bit1 cool-down = Pulse) per program — restored on program select
+  - id: wc_hiit_w
+    type: float
+    restore_value: yes
+    initial_value: '3'
+  - id: wc_hiit_c
+    type: float
+    restore_value: yes
+    initial_value: '3'
+  - id: wc_hiit_m
+    type: int
+    restore_value: yes
+    initial_value: '3'
+  - id: wc_fk_w
+    type: float
+    restore_value: yes
+    initial_value: '3'
+  - id: wc_fk_c
+    type: float
+    restore_value: yes
+    initial_value: '3'
+  - id: wc_fk_m
+    type: int
+    restore_value: yes
+    initial_value: '0'
 
   # Хранит оставшееся время разминки в секундах
   - id: remaining_warm_up_time
@@ -484,6 +534,12 @@ globals:
     type: int
     initial_value: '0'
 
+  # Нижняя опора зон пульса: 0 (% от максимума) или пульс покоя (Карвонен).
+  # Граница k (k=0..5) = hr_zone_base + (max_heart_rate − hr_zone_base) · (0.5 + 0.1·k).
+  - id: hr_zone_base
+    type: float
+    initial_value: '0.0'
+
 #переменные для хранения данных после тренировки:
   - id: start_training_date_stored
     type: std::string
@@ -540,6 +596,19 @@ globals:
   - id: log_lines_global
     type: std::vector<std::string>
 
+  # --- Энергия тренировки, копится посекундно (40-intervals): ккал, из них жира, сумма VO₂ ---
+  - id: energy_kcal
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: fat_kcal
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: vo2_sum
+    type: float
+    restore_value: no
+    initial_value: '0.0'
   - id: fat_grams_stored
     type: float
     initial_value: '0.0'  # Хранит количество сожжённого жира в граммах
@@ -563,5 +632,17 @@ globals:
   #   type: int
   #   restore_value: no
   #   initial_value: '-1'
+
+# ZT reading at incline level 0 (bottom of the last auto-calibration); levels = (ZT − zero) / 10
+  - id: board_incline_zero
+    type: int
+    restore_value: yes
+    initial_value: '10'
+
+# failed motor temperature reads since boot (diagnostics)
+  - id: temp_read_errors
+    type: int
+    restore_value: no
+    initial_value: '0'
 
 # ***************** Скрипты *****************

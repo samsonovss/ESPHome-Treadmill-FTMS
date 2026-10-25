@@ -1,0 +1,79 @@
+# Nextion page 12 (mapmain): "My routes" - 5 rows r0..r4 (component ids 7..11) + bUp/bDown paging.
+# Rows come from board sidecars (<id>.act); tapping a row loads that route and returns to page 0.
+script:
+  - id: nx_routes_render
+    then:
+      - lambda: |-
+          const int n = (int) treadmill_routes::nx_items.size();
+          if (treadmill_routes::nx_off >= n) treadmill_routes::nx_off = 0;
+          const int off = treadmill_routes::nx_off;
+          auto *d = id(display_nextion);
+          d->set_component_text("mapmain.tMsg", "");
+          d->send_command_printf("vis tEmpty,%d", n == 0 ? 1 : 0);
+          for (int i = 0; i < 5; i++) {
+            char comp[16], cmd[16];
+            snprintf(comp, sizeof comp, "mapmain.r%d", i);
+            const int k = off + i;
+            if (k < n) {
+              char line[160];
+              snprintf(line, sizeof line, "%s \xc2\xb7 %.1f km", treadmill_routes::utf8_cut(treadmill_routes::nx_items[k].name, 34).c_str(), treadmill_routes::nx_items[k].km);
+              for (char *p = line; *p; p++) if (*p == '"' || *p == '\\') *p = '\'';
+              d->set_component_text(comp, line);
+            } else {
+              d->set_component_text(comp, "");
+            }
+            snprintf(cmd, sizeof cmd, "vis r%d,%d", i, k < n ? 1 : 0);
+            d->send_command_printf("%s", cmd);
+          }
+          if (n == 0) d->set_component_text("mapmain.tCount", "");
+          else d->set_component_text_printf("mapmain.tCount", "%d-%d of %d", off + 1, off + 5 < n ? off + 5 : n, n);
+
+  - id: nx_zone_route_fix
+    then:
+      - lambda: |-
+          if (id(map_select).current_option() != treadmill_routes::CUSTOM_NAME) return;
+          if (id(program_select).current_option() == "None") id(program_select).publish_state("Pulse Zone");
+          if (id(program_select).current_option() != "Pulse Zone") return;
+          id(set_run_time).publish_state(0);   // route has no set time: ends by distance
+
+  - id: nx_routes_pick
+    parameters:
+      row: int
+    then:
+      - lambda: |-
+          const int idx = treadmill_routes::nx_off + row;
+          if (treadmill_routes::nx_open(idx)) {
+            id(map_select).publish_state(treadmill_routes::CUSTOM_NAME);
+          } else {
+            id(display_nextion).set_component_text("mapmain.tMsg", "Stop the belt first");
+            ESP_LOGW("NxRoutes", "open failed idx=%d items=%d", idx, (int) treadmill_routes::nx_items.size());
+          }
+
+binary_sensor:
+  - {platform: nextion, page_id: 12, component_id: 7,  id: nx_r0, internal: true, on_press: {then: [{lambda: 'id(nx_r0).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 0}}]}}
+  - {platform: nextion, page_id: 12, component_id: 8,  id: nx_r1, internal: true, on_press: {then: [{lambda: 'id(nx_r1).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 1}}]}}
+  - {platform: nextion, page_id: 12, component_id: 9,  id: nx_r2, internal: true, on_press: {then: [{lambda: 'id(nx_r2).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 2}}]}}
+  - {platform: nextion, page_id: 12, component_id: 10, id: nx_r3, internal: true, on_press: {then: [{lambda: 'id(nx_r3).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 3}}]}}
+  - {platform: nextion, page_id: 12, component_id: 11, id: nx_r4, internal: true, on_press: {then: [{lambda: 'id(nx_r4).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 4}}]}}
+  - platform: nextion
+    page_id: 12
+    component_id: 12
+    id: nx_routes_up
+    internal: true
+    on_press:
+      then:
+        - lambda: |-
+            id(nx_routes_up).publish_state(false);
+            treadmill_routes::nx_off = treadmill_routes::nx_off >= 5 ? treadmill_routes::nx_off - 5 : 0;
+        - script.execute: nx_routes_render
+  - platform: nextion
+    page_id: 12
+    component_id: 4
+    id: nx_routes_down
+    internal: true
+    on_press:
+      then:
+        - lambda: |-
+            id(nx_routes_down).publish_state(false);
+            if (treadmill_routes::nx_off + 5 < (int) treadmill_routes::nx_items.size()) treadmill_routes::nx_off += 5;
+        - script.execute: nx_routes_render

@@ -10,3 +10,11 @@ esphome/secrets.yaml
 # Python cache
 __pycache__/
 *.py[cod]
+
+# OpenClaw / assistant workspace files (never part of the project)
+/AGENTS.md
+/SOUL.md
+/USER.md
+/IDENTITY.md
+/memory/
+/.openclaw-cli-images/

@@ -1,0 +1,99 @@
+# 98-hr-select — выбор пульсометра без пересборки прошивки (09.10).
+# • Кнопка «HR Scan» на 20 с собирает устройства, которые объявляют сервис Heart Rate (0x180D).
+# • Текст-сенсор «HR Scan Result»: до 6 устройств «MAC|имя|rssi;…» (сильнее сигнал — выше).
+# • Текст «HR Monitor MAC» (хранится в памяти платы): пусто — адрес из secrets (как раньше);
+#   задан — ble_client fit_smart переключается на этот адрес и переподключается.
+# Логика пульса/зон/программ не меняется: меняется только адрес устройства.
+globals:
+  - id: hr_scan_until
+    type: uint32_t
+    initial_value: '0'
+  - id: hr_found
+    type: std::map<std::string, std::string>
+  - id: hr_default_addr
+    type: uint64_t
+    initial_value: '0'
+
+esp32_ble_tracker:
+  on_ble_advertise:
+    - then:
+        - lambda: |-
+            if (id(hr_scan_until) == 0 || (int32_t)(millis() - id(hr_scan_until)) > 0) return;
+            static const auto HR = esphome::ble_device_base::ESPBTUUID::from_uint16(0x180D);
+            bool hr = false;
+            for (auto &u : x.get_service_uuids()) if (u == HR) { hr = true; break; }
+            if (!hr) return;
+            std::string name(x.get_name().c_str(), x.get_name().size());
+            for (auto &c : name) if (c == '|' || c == ';') c = ' ';
+            if (name.size() > 24) name.resize(24);
+            char mac[MAC_ADDRESS_PRETTY_BUFFER_SIZE];
+            id(hr_found)[x.address_str_to(mac)] = name + "|" + to_string(x.get_rssi());
+            // Publish at most once per second, strongest first, max 6.
+            static uint32_t last = 0;
+            if (millis() - last < 1000) return;
+            last = millis();
+            std::vector<std::pair<int, std::string>> v;
+            for (auto &kv : id(hr_found)) {
+              int rssi = atoi(kv.second.substr(kv.second.rfind('|') + 1).c_str());
+              v.push_back({rssi, kv.first + "|" + kv.second});
+            }
+            std::sort(v.begin(), v.end(), [](auto &a, auto &b) { return a.first > b.first; });
+            std::string out;
+            for (size_t i = 0; i < v.size() && i < 6; i++) { if (i) out += ";"; out += v[i].second; }
+            id(hr_scan_result).publish_state(out);
+
+text_sensor:
+  - platform: template
+    id: hr_scan_result
+    name: "HR Scan Result"
+    icon: "mdi:bluetooth-audio"
+    update_interval: never
+
+button:
+  - platform: template
+    name: "HR Scan"
+    icon: "mdi:magnify"
+    on_press:
+      - esp32_ble_tracker.start_scan:
+          continuous: true
+      - lambda: |-
+          id(hr_found).clear();
+          id(hr_scan_until) = millis() + 20000;
+          if (id(hr_scan_until) == 0) id(hr_scan_until) = 1;
+          id(hr_scan_result).publish_state("scanning");
+      - delay: 21s
+      - lambda: |-
+          if (id(hr_found).empty()) id(hr_scan_result).publish_state("none");
+      # Search window over: stop scanning again if the monitor is connected (otherwise keep looking for it).
+      - if:
+          condition:
+            lambda: return id(fit_smart).connected();
+          then:
+            - esp32_ble_tracker.stop_scan:
+
+text:
+  - platform: template
+    id: hr_monitor_mac
+    name: "HR Monitor MAC"
+    icon: "mdi:heart-pulse"
+    mode: text
+    min_length: 0
+    max_length: 17
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    on_value:
+      - lambda: |-
+          // First call (restore at boot) remembers the compiled-in address from secrets.
+          if (id(hr_default_addr) == 0) id(hr_default_addr) = id(fit_smart).get_address();
+          uint64_t a = 0; int n = 0;
+          for (char c : x) {
+            int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+            if (d < 0) continue;
+            a = (a << 4) | d; n++;
+          }
+          if (n != 12) a = id(hr_default_addr);   // empty / invalid → default from secrets
+          if (a == 0 || a == id(fit_smart).get_address()) return;
+          ESP_LOGI("hr_select", "Heart-rate monitor address -> %012llX", (unsigned long long) a);
+          id(fit_smart).set_address(a);
+          id(fit_smart).disconnect();             // auto-connect picks up the new address

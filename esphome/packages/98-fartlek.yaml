@@ -1,0 +1,160 @@
+# Fartlek (12.10): a run of segments with different length and speed (and optionally incline).
+# The plan comes from the web (Programs → Fartlek: random or own pattern) as text
+#   "dur/speed[/incline],dur/speed[/incline],…"   dur in s, speed km/h, incline level; up to 255 chars.
+# A segment may target a heart-rate zone instead of a speed: "dur/z3[/incline]".
+# Then auto_mode (the same pulse regulator as Pulse Zone / Fat Burn) drives the speed, incl. its no-pulse behaviour.
+# Program "Fartlek": no firmware warm-up (the plan has its own first segment), no run time — it ends after
+# the last segment like HIIT (archive snapshot, belt stops).
+globals:
+  - id: fartlek_seg
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: fartlek_t
+    type: int
+    restore_value: no
+    initial_value: '0'
+  # 22.10: Treadmill Time (s) at the last tick — segments advance by its increments (same clock as web/Nextion)
+  - id: fartlek_last_t
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+text:
+  - platform: template
+    id: fartlek_plan
+    name: "Fartlek Plan"
+    icon: "mdi:run-fast"
+    entity_category: config
+    mode: text
+    min_length: 0
+    max_length: 255
+    optimistic: true
+    restore_value: true
+    initial_value: "300/6.0,60/11.0,120/7.0,30/13.0,90/7.0,180/10.0,120/7.0,20/14.0,120/7.0,300/6.0"
+  - platform: template
+    id: fartlek_name
+    name: "Fartlek Name"
+    icon: "mdi:tag-text"
+    entity_category: config
+    mode: text
+    min_length: 0
+    max_length: 30
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+
+script:
+  # 22.10: remember warm-up/cool-down and their ⏱/♥ per program (HIIT / Fartlek) while stopped — restored on program select (90-controls)
+  - id: wc_remember
+    then:
+      - lambda: |-
+          if (id(motor_running) || id(warm_up_active) || id(pause_active)) return;   // the warm-up countdown also writes Set Warm-up Time
+          std::string p = id(program_select).current_option();
+          float w = id(set_warm_up_time).state, c = id(set_cool_down_time).state;
+          if (isnan(w) || isnan(c)) return;
+          int m = (id(route_wu_mode).current_option() == "Pulse" ? 1 : 0) | (id(route_cd_mode).current_option() == "Pulse" ? 2 : 0);
+          if (p == "HIIT") { id(wc_hiit_w) = w; id(wc_hiit_c) = c; id(wc_hiit_m) = m; }
+          else if (p == "Fartlek") { id(wc_fk_w) = w; id(wc_fk_c) = c; id(wc_fk_m) = m; }
+  - id: fartlek_tick
+    then:
+      - lambda: |-
+          // 22.10: seconds come from Treadmill Time (this script runs on its update), not from a separate 1 s timer
+          float Tf = id(treadmill_time_sec).state;
+          int T = isnan(Tf) ? 0 : (int) Tf;
+          if (T < id(fartlek_last_t)) id(fartlek_last_t) = T;
+          int dT = T - id(fartlek_last_t);
+          id(fartlek_last_t) = T;
+          auto finish = [&](int nseg, int tot) {
+            ESP_LOGI("Fartlek", "Done: %d segments, %d s", nseg, tot);
+            id(auto_mode) = false;
+            if (id(set_cool_down_time).state > 0) { id(begin_cool_down).execute(); return; }   // 16.10: заминка после последнего отрезка
+            id(program_end).execute(std::string("Fartlek: done"));
+          };
+          // parse "dur/spd[/inc]" segments (cheap: ≤255 chars, once a second)
+          struct Seg { int d; float s; float i; int z; };
+          std::vector<Seg> segs; int total = 0;
+          {
+            std::string p = id(fartlek_plan).state; size_t a = 0;
+            while (a < p.size() && segs.size() < 60) {
+              size_t b = p.find(',', a); if (b == std::string::npos) b = p.size();
+              std::string t = p.substr(a, b - a); a = b + 1;
+              int d = 0; float s = NAN, i = NAN; int z = 0;
+              size_t q = t.find('/');
+              if (q != std::string::npos && q + 2 < t.size() && (t[q + 1] == 'z' || t[q + 1] == 'Z')) {
+                int n = sscanf(t.c_str(), "%d/%*c%d/%f", &d, &z, &i);
+                if (n >= 2 && d > 0 && d <= 3600 && z >= 1 && z <= 5) {
+                  segs.push_back({d, NAN, n >= 3 ? i : NAN, z}); total += d;
+                }
+              } else {
+                int n = sscanf(t.c_str(), "%d/%f/%f", &d, &s, &i);
+                if (n >= 2 && d > 0 && d <= 3600 && s >= 0.5f && s <= 25.0f) { segs.push_back({d, s, n >= 3 ? i : NAN, 0}); total += d; }
+              }
+            }
+          }
+          if (segs.empty()) {
+            id(program_status).publish_state("Fartlek: no plan");
+            ESP_LOGW("Fartlek", "Empty or invalid plan, stopping");
+            id(auto_mode) = false;
+            id(recorder_event).execute(3);
+            id(motor_running) = false;
+            return;
+          }
+          // 24.10: advance the clock and switch the segment FIRST, then apply speed/status for the segment now running —
+          // as HIIT: the new speed and the new status land on the same Treadmill Time second as the boundary (was 1 s late)
+          bool seg_switched = false;
+          if (id(fartlek_seg) < (int) segs.size()) {
+            id(fartlek_t) += dT;
+            if (id(fartlek_t) >= segs[id(fartlek_seg)].d) { id(fartlek_t) -= segs[id(fartlek_seg)].d; id(fartlek_seg)++; seg_switched = true; }
+          }
+          int k = id(fartlek_seg);
+          if (k >= (int) segs.size()) { finish((int) segs.size(), total); return; }
+          const Seg &g = segs[k];
+          float mx = id(set_speed).traits.get_max_value(), mn = id(set_speed).traits.get_min_value();
+          auto clampv = [&](float v) { int w = (int) lroundf(v * 10.0f); if (w > (int) lroundf(mx * 10)) w = (int) lroundf(mx * 10); if (w < (int) lroundf(mn * 10)) w = (int) lroundf(mn * 10); return w; };
+          static int entered = -1;
+          int want = id(target_speed_goal);
+          if (g.z == 0) {
+            // fixed-speed segment: the pulse regulator must stay off
+            id(auto_mode) = false;
+            want = clampv(g.s);
+            if (id(target_speed_goal) != want) {
+              id(target_speed_goal) = want;
+              id(set_speed).publish_state(want / 10.0f);
+              ESP_LOGI("Fartlek", "Segment %d/%d: %.1f km/h for %d s", k + 1, (int) segs.size(), want / 10.0f, g.d);
+            }
+          } else {
+            // zone segment: the regulator drives the speed from the current one
+            if (entered != k || id(fartlek_t) == 0) {
+              entered = k;
+              char zs[2] = {(char) ('0' + g.z), 0};
+              if (id(zone_select).current_option() != zs) id(zone_select).publish_state(zs);
+              else id(update_heart_rate_zones).execute();
+              ESP_LOGI("Fartlek", "Segment %d/%d: zone Z%d for %d s", k + 1, (int) segs.size(), g.z, g.d);
+            }
+            id(auto_mode) = true;
+            want = id(target_speed_goal);
+          }
+          if (!std::isnan(g.i) && fabsf(id(set_incline).state - g.i) > 0.05f) id(set_incline).publish_state(g.i);
+          // status: segment, speed, time left in it
+          int left = g.d - id(fartlek_t); if (left < 0) left = 0;
+          if ((left >= 1 && left <= 2) || seg_switched) id(nx_beep).execute();   // 24.10: as HIIT — 2, 1 before the end + the change itself (the switch now happens before this line, left<=2 missed it)
+          // 22.10: "Fartlek k/N Fast|Easy … (m:ss)" — the form the web and the recorder parse (was "Fartlek k/N m:ss": web saw no phase/time left)
+          const char *kind = (g.z ? g.z >= 3 : g.s > 6.0f) ? "Fast" : "Easy";
+          char buf[64], nx[48];   // nx sized for the worst case (no -Wformat-truncation); real text is ~14 chars
+          if (g.z) snprintf(buf, sizeof(buf), "Fartlek %d/%d %s Z%d (%d:%02d)", k + 1, (int) segs.size(), kind, g.z, left / 60, left % 60);
+          else snprintf(buf, sizeof(buf), "Fartlek %d/%d %s %.1f (%d:%02d)", k + 1, (int) segs.size(), kind, g.s, left / 60, left % 60);
+          snprintf(nx, sizeof(nx), "%d/%d %s %d:%02d", k + 1, (int) segs.size(), kind, left / 60, left % 60);   // Nextion line is short (~21 chars)
+          id(program_status).publish_state(buf);
+          if (id(current_page) == 1) id(display_nextion).set_component_text("speed.tstatus", nx);
+
+# 22.10: moved to Treadmill Time on_value (60-sensors.yaml), like HIIT
+#interval:
+#  - interval: 1s
+#    then:
+#      - if:
+#          condition:
+#            lambda: 'return id(motor_running) && id(program_select).current_option() == "Fartlek" && !id(warm_up_active) && id(remaining_cool_down_time) <= 0;'
+#          then:
+#            - script.execute: fartlek_tick
+

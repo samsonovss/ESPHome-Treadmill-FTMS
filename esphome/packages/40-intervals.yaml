@@ -184,7 +184,7 @@ interval:
                     if (delta < -MAX_STEP) delta = -MAX_STEP;
                     new_target_kph = float_kph + delta;
                     ESP_LOGI("Interval", "Corr[%s]: base=%.2f, float=%.2f, actual=%.2f, err=%.2f, delta=%.2f, new=%.2f",
-                            id(speed_corr_profile).current_option(), base_kph, float_kph, actual_kph, error, delta, new_target_kph);
+                            id(speed_corr_profile).current_option().c_str(), base_kph, float_kph, actual_kph, error, delta, new_target_kph);
                   } else {
                     //лог режима Hold временно отключил
                     //ESP_LOGI("Interval", "Hold[%s]: base=%.2f, float=%.2f, actual=%.2f, err=%.2f",
@@ -201,15 +201,13 @@ interval:
                 if (cmd_target < 6)   cmd_target = 6;
                 if (cmd_target > 180) cmd_target = 180;
 
-                char speed_buffer[13];
-                snprintf(speed_buffer, sizeof(speed_buffer), "[SETSPD:%03d]", cmd_target);
-                // отправляем через очередь скриптов
-                id(uart_send)->execute(speed_buffer);
+                // отправляем через очередь скриптов (формат — Настройки → Плата мотора, 10.10)
+                id(uart_send)->execute(treadmill_motor::speed_cmd(cmd_target));
 
                 static int last_sent_speed = -1;
                 if (cmd_target != last_sent_speed) {
                   last_sent_speed = cmd_target;
-                  ESP_LOGI("Interval", "SpeedCmd sent: %s", speed_buffer);
+                  ESP_LOGI("Interval", "SpeedCmd sent: %s", treadmill_motor::speed_cmd(cmd_target).c_str());
                 }
 
 # Управление наклоном беговой дорожки
@@ -222,18 +220,40 @@ interval:
   - interval: 700ms
     then:
       - lambda: |-
-          char incline_buffer[13];
+          char incline_buffer[32];  // room for longer motor templates (10.10)
           // Если двигатель работает, отправляем текущую цель наклона
+          static bool was_running = false;
           if (id(motor_running)) {
-            snprintf(incline_buffer, sizeof(incline_buffer), "[SETINC:%03d]", id(target_incline_goal));
-            id(uart_send)->execute(incline_buffer);
+            was_running = true; treadmill_motor::returning = false;
+            // Motor-format test (Settings → Incline): the raw command replaces the regular one for 15 s.
+            if (treadmill_motor::raw_active(millis())) id(uart_send)->execute(treadmill_motor::raw_cmd);
+            else id(uart_send)->execute(treadmill_motor::incline_cmd(id(target_incline_goal)));
             //ESP_LOGI("treadmill", "Incline sent (running): %s", incline_buffer);
           }
-          // Если двигатель выключен, но наклон ещё не 0, возвращаем в 0
-          else if (id(treadmill_incline_feedback) > 5) {  // 5 = 0.5%
-            snprintf(incline_buffer, sizeof(incline_buffer), "[SETINC:000]");
-            id(uart_send)->execute(incline_buffer);
-            ESP_LOGI("treadmill", "Incline sent (reset to 0): %s", incline_buffer);
+          // Motor stopped: bring the deck back to 0 (11.10). "Arrived" uses the chosen position source with the board's own
+          // parking gap (PSA15H stops ~0.6 above the bottom; its echo then says 0.8 at step 0.2) — no fixed 0.5 threshold.
+          // Gives up when the position stops changing for 4 s or after 30 s, so a board with another sensor never hangs here.
+          else {
+            static uint32_t since = 0, moved = 0; static int last = -999;
+            uint32_t now = millis();
+            if (was_running) { was_running = false; treadmill_motor::returning = true; since = moved = now; last = -999; }
+            if (treadmill_motor::returning) {
+              bool zt = treadmill_motor::use_zt(now);
+              int p = zt ? treadmill_motor::cur_tenths : id(treadmill_incline_feedback);
+              if (p != last) { last = p; moved = now; }
+              bool arrived = p >= 0 && p <= treadmill_motor::park_tenths + 2;
+              bool stalled = now - since > 3000 && now - moved > 4000;
+              if (arrived || stalled || now - since > 30000) {
+                treadmill_motor::returning = false;
+                if (stalled && p >= 0 && p <= 20) treadmill_motor::park_tenths = p;   // learn where this board parks
+                ESP_LOGI("treadmill", "Incline back at 0: pos %d (%s), park %d, %s", p, zt ? "ZT" : "echo", treadmill_motor::park_tenths,
+                         arrived ? "arrived" : stalled ? "stopped moving" : "timeout");
+              } else {
+                snprintf(incline_buffer, sizeof(incline_buffer), "%s", treadmill_motor::incline_cmd(0).c_str());
+                id(uart_send)->execute(incline_buffer);
+                ESP_LOGD("treadmill", "Incline sent (reset to 0): %s, pos %d", incline_buffer, p);
+              }
+            }
           }
 
 
@@ -246,15 +266,16 @@ interval:
 # 2. Если все условия выполняются:
 #    - запускается скрипт interval_training,
 #      который управляет фазами высокой и низкой интенсивности.
-  - interval: 1s
-    then:
-      - if:
-          condition:
-            # Проверяем, что мотор работает, выбрана программа HIIT и разминка завершена
-            lambda: 'return id(motor_running) && id(program_select).current_option() == "HIIT" && !id(warm_up_active);'
-          then:
-             # Выполняем скрипт интервальной тренировки для управления фазами
-            - script.execute: interval_training
+# 22.10: moved to Treadmill Time on_value (60-sensors.yaml) — a separate 1 s timer raced the clock and the countdown skipped seconds
+#  - interval: 1s
+#    then:
+#      - if:
+#          condition:
+#            # Проверяем, что мотор работает, выбрана программа HIIT и разминка завершена
+#            lambda: 'return id(motor_running) && id(program_select).current_option() == "HIIT" && !id(warm_up_active) && id(remaining_cool_down_time) <= 0;'
+#          then:
+#             # Выполняем скрипт интервальной тренировки для управления фазами
+#            - script.execute: interval_training
 
 
   # Интервал регулирует скорость по пульсу каждые 4 секунды в автоматическом режиме
@@ -308,7 +329,8 @@ interval:
 #      вызывает скрипт adjust_speed_by_pulse_normal для коррекции скорости.
 # 4. Ведётся логирование всех изменений скорости.
 # ============================
-  - interval: 4s
+  # 12.10: тик 1 с (было 4 с) — иначе Pulse Adjust Interval 2/6/10 с фактически = 4/8/12; все паузы внутри по millis()
+  - interval: 1s
     then:
       - if:
           # Проверяем, что мотор запущен
@@ -320,17 +342,20 @@ interval:
                 static unsigned long last_adjust_ms = 0;   // когда последний раз меняли скорость
                 unsigned long now = millis();              // текущее время в миллисекундах
                 float heart_rate = id(heart_rate_sensor).state; // текущий пульс
+                if (!(heart_rate > 0)) heart_rate = NAN;   // 24.10: no strap = 0 bpm — counted as a low pulse, the speed rose +0.5 every 10 s while «waiting for pulse» (as fixed in warm_up 22.10)
 
                 // --- Этап разминки ---
                 // Условие: не ручной режим, разминка активна, время разминки вышло,
                 // и текущая скорость совпадает с целевой (т.е. нет других изменений).
                 if (id(control_mode) != 1 && id(warm_up_active) && id(remaining_warm_up_time) <= 0 && id(target_speed) == id(target_speed_goal)) {
-                  float zone_1_min = id(max_heart_rate) * 0.5; // нижняя граница зоны 1 (50% от maxHR)
+                  float zone_1_min = id(hr_zone_base) + (id(max_heart_rate) - id(hr_zone_base)) * id(wu_target_pct).state / 100.0f; // 12.10: как зоны (Карвонен)
 
                   // Если пульс есть, он ниже зоны 1, и прошло хотя бы 10 секунд с последнего изменения
-                  if (!isnan(heart_rate) && heart_rate < zone_1_min && (now - last_adjust_ms) >= 10000) {
-                    if (id(target_speed_goal) < 180) {
-                      id(target_speed_goal) += 5;   // Увеличиваем скорость на 0.5 км/ч
+                  if (!isnan(heart_rate) && heart_rate < zone_1_min && (now - last_adjust_ms) >= (unsigned long)(id(wu_step_sec).state * 1000)) {
+                    int wu_cap = (int) lroundf(id(wu_max_speed).state * 10); if (wu_cap < 6 || wu_cap > 180) wu_cap = 100;   // 13.10: cap = Warm-up Max Speed (was 18 km/h)
+                    if (id(target_speed_goal) < wu_cap) {
+                      id(target_speed_goal) += (int) lroundf(id(wu_extra_step).state * 10);   // 12.10: Warm-up Extra Step
+                      if (id(target_speed_goal) > wu_cap) id(target_speed_goal) = wu_cap;
                       last_adjust_ms = now;         // Запоминаем время изменения
                       ESP_LOGI("Interval", "Warm-up: Waiting for pulse, increase speed by 0.5, target_speed_goal=%d", id(target_speed_goal));
                     }
@@ -417,8 +442,12 @@ interval:
 
             buf.push_back((char)c);
 
+            // listen mode: long text without a frame is logged raw (unknown framing)
+            if (treadmill_motor::listen && buf.size() > 48 && buf.find(']') == std::string::npos) { treadmill_motor::listen_note("raw:" + buf, millis()); buf.clear(); continue; }
+
             // ждём закрывающую скобку — только тогда команда готова
             if (c == ']') {
+              if (treadmill_motor::listen) { auto k = buf.rfind('['); treadmill_motor::listen_note(k == std::string::npos ? "raw:" + buf : buf.substr(k), millis()); }
 
               // команда должна начинаться с '['
               if (buf.front() != '[') {
@@ -439,13 +468,36 @@ interval:
               {
                 std::string cmd = buf.substr(s + 1, m - (s + 1));
                 std::string val = buf.substr(m + 1, e - (m + 1));
+                treadmill_motor::note_reply(cmd, val, millis());  // command search (Settings → Incline): log everything for 4 s
 
                 // обработка команд
-                if (cmd == "SETSPD") {
+                treadmill_motor::note_ack(cmd, val);
+                if (cmd == "VER") {
+                  id(board_version).publish_state(val);
+                }
+                else if (cmd == "SPDMAX" || cmd == "SPDMIN" || cmd == "INCMAX" || cmd == "INCMIN") {
+                  id(board_reply).publish_state("[" + cmd + ":" + val + "]");
+                }
+                else if (cmd == "ZT" || (!cmd.empty() && cmd == treadmill_motor::pos_query_name())) {
+                  treadmill_motor::zero = id(board_incline_zero);
+                  if (treadmill_motor::parse_zt(val)) {
+                    if (treadmill_motor::zero != id(board_incline_zero)) { id(board_incline_zero) = treadmill_motor::zero; id(board_incline_zero_sensor).publish_state(treadmill_motor::zero); }
+                    id(board_incline_pos).publish_state(treadmill_motor::zt_pos);
+                    if (treadmill_motor::cal_active && treadmill_motor::zt_flag == 1) {
+                      treadmill_motor::cal_active = false;
+                      treadmill_motor::want_zero = true;  // the deck's reading back at level 0 becomes the new zero
+                      char m[80]; snprintf(m, sizeof(m), "Готово: низ %d, верх %d", treadmill_motor::zt_max, treadmill_motor::zt_min);  // raw pot: larger = lower deck
+                      id(board_cal_status).publish_state(m);
+                      ESP_LOGW("motor", "Incline calibration done: %s", m);
+                    }
+                  }
+                }
+                else if (cmd == "SETSPD") {
                   id(treadmill_speed_feedback) = atoi(val.c_str());
                 }
                 else if (cmd == "SETINC") {
                   int inc = atoi(val.c_str());
+                  if (treadmill_motor::board_div > 1.0f) inc = (int) lroundf(inc / treadmill_motor::board_div);  // board levels → ours (11.10)
                   if (inc <= 1) inc = 0;
                   id(treadmill_incline_feedback) = inc;
                 }
@@ -486,23 +538,24 @@ interval:
 #    - каждые 60 секунд обновляет ползунок set_warm_up_time в интерфейсе.
 # 3. Независимо от времени вызывает скрипт warm_up,
 #    который управляет скоростью и контролем пульса.
-  - interval: 1s
-    then:
-      - if:
-          condition:
-            # Проверяем, что мотор работает и разминка активна
-            lambda: 'return id(motor_running) && id(warm_up_active);'
-          then:
-            - lambda: |- 
-                if (id(remaining_warm_up_time) > 0) {                               // Если осталось время разминки
-                  id(remaining_warm_up_time)--;                                     // Уменьшаем оставшееся время на 1 секунду
-                  if (id(remaining_warm_up_time) % 60 == 0) {                       // Каждые 60 секунд обновляем ползунок
-                    int remaining_minutes = id(remaining_warm_up_time) / 60;        // Вычисляем оставшиеся минуты
-                    id(set_warm_up_time).publish_state((float)remaining_minutes);   // Обновляем ползунок разминки в интерфейсе
-                  }
-                }
-                // Выполняем скрипт разминки для управления скоростью и пульсом
-                id(warm_up).execute();
+# 22.10: moved to Treadmill Time on_value (60-sensors.yaml) — its own 1 s timer ended the warm-up at T=59
+#  - interval: 1s
+#    then:
+#      - if:
+#          condition:
+#            # Проверяем, что мотор работает и разминка активна
+#            lambda: 'return id(motor_running) && id(warm_up_active);'
+#          then:
+#            - lambda: |- 
+#                if (id(remaining_warm_up_time) > 0) {                               // Если осталось время разминки
+#                  id(remaining_warm_up_time)--;                                     // Уменьшаем оставшееся время на 1 секунду
+#                  if (id(remaining_warm_up_time) % 60 == 0) {                       // Каждые 60 секунд обновляем ползунок
+#                    int remaining_minutes = id(remaining_warm_up_time) / 60;        // Вычисляем оставшиеся минуты
+#                    id(set_warm_up_time).publish_state((float)remaining_minutes);   // 16.10: одна для всех   // Обновляем ползунок разминки в интерфейсе
+#                  }
+#                }
+#                // Выполняем скрипт разминки для управления скоростью и пульсом
+#                id(warm_up).execute();
 
 
 # interval 1s — управление основной частью тренировки.
@@ -514,15 +567,7 @@ interval:
 # 2. Если условия выполняются:
 #    - запускает скрипт run_program,
 #      который отслеживает время тренировки и переводит её в фазу заминки.
-  - interval: 1s
-    then:
-      - if:
-          condition:
-            # Проверяем, что мотор работает, есть время тренировки, разминка завершена
-            lambda: 'return id(motor_running) && id(remaining_run_time) > 0 && id(remaining_warm_up_time) <= 0 && !id(warm_up_active);'
-          then:
-            # Выполняем скрипт основной программы для отслеживания времени и перехода к заминке
-            - script.execute: run_program
+# 24.10: moved to Treadmill Time on_value (60-sensors.yaml), like warm-up/HIIT/fartlek — a separate 1 s timer drifted (1 min run ended 3 s early)
 
 
 # interval 1s — управление заминкой.
@@ -535,21 +580,22 @@ interval:
 #    - уменьшает счётчик remaining_cool_down_time на 1 сек.
 #    - каждые 60 секунд обновляет ползунок set_cool_down_time в интерфейсе.
 #    - вызывает скрипт cool_down для плавного снижения скорости и завершения тренировки.
-  - interval: 1s
-    then:
-      - if:
-          condition:
-            lambda: 'return id(motor_running) && id(remaining_cool_down_time) > 0 && id(remaining_run_time) <= 0;'
-          then:
-            - lambda: |-
-                if (id(remaining_cool_down_time) > 0) {
-                  id(remaining_cool_down_time)--; // Уменьшаем время
-                  if (id(remaining_cool_down_time) % 60 == 0) { // Каждые 60 секунд
-                    int remaining_minutes = id(remaining_cool_down_time) / 60;
-                    id(set_cool_down_time).publish_state((float)remaining_minutes); // Обновляем ползунок
-                  }
-                }
-            - script.execute: cool_down                        
+# 22.10: moved to Treadmill Time on_value (60-sensors.yaml) — its own 1 s timer ended the warm-up at T=59
+#  - interval: 1s
+#    then:
+#      - if:
+#          condition:
+#            lambda: 'return id(motor_running) && id(remaining_cool_down_time) > 0 && id(remaining_run_time) <= 0;'
+#          then:
+#            - lambda: |-
+#                if (id(remaining_cool_down_time) > 0) {
+#                  id(remaining_cool_down_time)--; // Уменьшаем время
+#                  if (id(remaining_cool_down_time) % 60 == 0) { // Каждые 60 секунд
+#                    int remaining_minutes = id(remaining_cool_down_time) / 60;
+#                    id(set_cool_down_time).publish_state((float)remaining_minutes);   // 16.10: одна для всех // Обновляем ползунок
+#                  }
+#                }
+#            - script.execute: cool_down                        
 
 
 
@@ -675,15 +721,48 @@ interval:
               }
             }
 
-            // --- Расчёт MET
-            if (current_speed > 0 && current_incline >= 0) {
-              float real_incline = current_incline / 3.0f;
-              float speed_m_per_min = current_speed * 1000.0f / 60.0f;
-              float grade = real_incline / 100.0f;
-              float vo2 = 0.1f * speed_m_per_min + 1.8f * speed_m_per_min * grade + 3.5f;
+            // --- Энергия посекундно (ACSM).
+            // Уклон — реальный, по калибровке дорожки (уклон на 0 и на максимуме).
+            // Ходьба (<6 км/ч): VO₂ = 0.1·S + 1.8·S·G + 3.5; бег (>8 км/ч): 0.2·S + 0.9·S·G + 3.5;
+            // между 6 и 8 км/ч — плавный переход. S в м/мин, G — доля.
+            // Пульс выше 70% от максимума добавляет до +10% к MET. Жир — доля калорий по текущей зоне.
+            if (current_speed > 0) {
+              float ml = id(treadmill_max_incline_level).state;
+              if (!(ml >= 1.0f)) ml = 15.0f;
+              float gz = id(treadmill_real_zero_grade).state;
+              if (!(gz >= 0.0f) || gz > 10.0f) gz = 0.0f;
+              float gm = id(treadmill_real_max_grade).state;
+              if (!(gm > gz)) gm = gz + 0.1f;
+              float lvl = current_incline < 0.0f ? 0.0f : (current_incline > ml ? ml : current_incline);
+              float grade = (gz + lvl / ml * (gm - gz)) / 100.0f;
+              float s_m_min = current_speed * 1000.0f / 60.0f;
+              float run = (current_speed - 6.0f) / 2.0f;
+              if (run < 0.0f) run = 0.0f;
+              if (run > 1.0f) run = 1.0f;
+              float vo2_walk = 0.1f * s_m_min + 1.8f * s_m_min * grade + 3.5f;
+              float vo2_run = 0.2f * s_m_min + 0.9f * s_m_min * grade + 3.5f;
+              float vo2 = vo2_walk + (vo2_run - vo2_walk) * run;
               float met = vo2 / 3.5f;
+              float mhr = id(max_heart_rate);
+              if (current_heart_rate > 0 && !isnan(current_heart_rate) && mhr > 0) {
+                float r = current_heart_rate / mhr;
+                if (r > 0.7f) {
+                  float f = 1.0f + (r - 0.7f) * 0.5f;
+                  if (f > 1.1f) f = 1.1f;
+                  met *= f;
+                }
+              }
+              float kcal = met * id(weight_kg).state / 3600.0f;  // за 1 секунду
+              if (kcal > 0.0f && !isnan(kcal)) {
+                static const float FAT_SHARE[6] = {0.50f, 0.80f, 0.65f, 0.40f, 0.15f, 0.05f};
+                int z = id(current_zone);
+                if (z < 0 || z > 5) z = 0;  // 0 — пульса нет: берём середину
+                id(energy_kcal) += kcal;
+                id(fat_kcal) += kcal * FAT_SHARE[z];
+              }
               id(total_met_sum) += met;
               id(met_count)++;
+              id(vo2_sum) += vo2;
             }
 
             // --- Время в зонах
@@ -698,13 +777,13 @@ interval:
           }
 
 
-# interval 5s — обновление наклона по выбранной карте.
+# interval 1s — обновление наклона по выбранной карте (было 5 с; плавные маршруты меняют наклон каждые ~10 м — 10.10).
 # Логика работы:
-# 1. Каждые 5 секунд проверяет, что мотор работает.
+# 1. Каждую секунду проверяет, что мотор работает.
 # 2. Если условие выполняется:
 #    - запускает скрипт update_incline_by_map,
 #      который подбирает наклон по текущей дистанции и профилю маршрута.
-  - interval: 5s
+  - interval: 1s
     then:
       - if:
           condition:

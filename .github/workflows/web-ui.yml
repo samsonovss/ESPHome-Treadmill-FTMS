@@ -1,0 +1,47 @@
+name: Web UI
+
+on:
+  push:
+    paths: ['web-ui/**', 'esphome/treadmill_dashboard.h', 'esphome/packages/00-core.yaml', '.github/workflows/web-ui.yml']
+  pull_request:
+    paths: ['web-ui/**', 'esphome/treadmill_dashboard.h']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Header matches the sources
+        run: python3 web-ui/check_header.py
+      - name: JavaScript syntax and tests
+        run: |
+          for f in web-ui/*.js web-ui/demo/mock.js; do node --check "$f"; done
+          node web-ui/fit.test.js
+
+  # Live demo on GitHub Pages: the real page + a virtual treadmill (web-ui/demo/mock.js).
+  demo:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the demo page
+        run: |
+          python3 web-ui/generate.py
+          mkdir -p _site
+          cp web-ui/generated/demo.html _site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

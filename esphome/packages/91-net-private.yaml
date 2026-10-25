@@ -1,0 +1,32 @@
+# Private build: your own Wi-Fi/API/OTA secrets from secrets.yaml.
+api:
+  encryption:
+    key: !secret api_encryption_key
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+    # Bluetooth shares the radio with Wi-Fi: switch it off for the upload (faster, fewer stalls).
+    # Success reboots the board (BLE comes back on boot); on error turn it back on.
+    on_begin:
+      - logger.log: "OTA: Bluetooth off for the upload"
+      - ble.disable:
+    on_error:
+      - ble.enable:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: light  # required with BLE coexistence (Wi-Fi+BLE share the radio); was none
+  fast_connect: true
+  reboot_timeout: 0s  # never reboot when Wi-Fi is gone (would stop the belt mid-run); reconnects by itself, fallback AP stays
+  ap:
+    ssid: "Treadmill Fallback Hotspot"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+# Personal values used by the shared packages.
+substitutions:
+  tft_url: !secret nextion_tft_url

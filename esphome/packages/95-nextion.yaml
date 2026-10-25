@@ -2,8 +2,9 @@ display:
   - platform: nextion
     uart_id: uart_0
     id: display_nextion
+    tft_url: ${tft_url}
+    tft_upload_http_buffer_size_tx: 1024   # 25.10: GitHub release redirect → ~600-char signed URL; the 512-B IDF default fails «Out of buffer»
     update_interval: 1s
-    tft_url: !secret nextion_tft_url
     # command_spacing: 20ms        # Быстрее, но безопасно
     # max_queue_size: 50           # очередь — до 50 команд
     # max_commands_per_loop: 10    # Обрабатываем всё за раз
@@ -103,6 +104,19 @@ display:
                 id(display_nextion).send_command_printf("n_min.val=%d", (int)id(set_run_time).state);
                 id(display_nextion).send_command_printf("n_warm.val=%d", (int)id(set_warm_up_time).state);
                 id(display_nextion).send_command_printf("n_cool.val=%d", (int)id(set_cool_down_time).state);
+                {
+                  auto *d = id(display_nextion);
+                  const bool route = id(map_select).current_option() == treadmill_routes::CUSTOM_NAME;
+                  if (route) {
+                    const int n = treadmill_routes::count.load();
+                    const float km = (n >= 2) ? treadmill_routes::points[n - 1][0] : 0.0f;
+                    d->set_component_text_printf("tRoute", "%.2f km", km);
+                  }
+                  d->send_command_printf("vis n_min,%d", route ? 0 : 1);
+                  d->send_command_printf("tsw m1,%d", route ? 0 : 1);
+                  d->send_command_printf("tsw m2,%d", route ? 0 : 1);
+                  d->send_command_printf("vis tRoute,%d", route ? 1 : 0);
+                }
                 break;
 
               case 7:   // info
@@ -122,7 +136,10 @@ display:
               case 11:  // modeselect
                 break;
 
-              case 12:  // mapmain
+              case 12:  // mapmain: my routes list (rows r0..r4, paging)
+                treadmill_routes::nx_build();
+                treadmill_routes::nx_off = 0;
+                id(nx_routes_render).execute();
                 break;
 
               case 13:  // settings
@@ -154,13 +171,15 @@ display:
                 }
                 break;
 
-              case 18:  // zwift
+              case 18:  // HIIT presets list
+                id(nx_pre_load).execute(0);
                 break;
 
               case 19:  // bluetooth
                 break;
 
-              case 20:  // zwift1
+              case 20:  // Fartlek presets list
+                id(nx_pre_load).execute(1);
                 break;
 
               case 21:  // calibration
@@ -213,3 +232,28 @@ display:
                 id(display_nextion).set_component_text("bluetooth.battery", "-");
               }
             }
+
+# Wake the display on every start (12.10): the start may come from the web, HA or Zwift while the screen is asleep.
+# Only a wake-up + brightness; the display's own auto-off (TOF distance) works as before.
+interval:
+  - interval: 2s
+    then:
+      - lambda: |-
+          static bool was = false;
+          bool run = id(motor_running);
+          if (run && !was) {
+            id(display_nextion).send_command_printf("sleep=0");
+            id(display_nextion).send_command_printf("dim=%d", id(brightness_level) < 20 ? 20 : id(brightness_level));
+            ESP_LOGI("Nextion", "Start: display woken, brightness restored");
+          }
+          was = run;
+
+# Display (TFT) version: string variable "ver" on page "load" (global). Read once at boot, then rarely.
+text_sensor:
+  - platform: nextion
+    nextion_id: display_nextion
+    id: display_version
+    name: "Display Version"
+    entity_category: diagnostic
+    component_name: load.ver
+    update_interval: 60s

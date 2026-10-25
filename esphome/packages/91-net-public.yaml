@@ -1,0 +1,34 @@
+# Public build (GitHub releases): no secrets inside the binary.
+# Wi-Fi is entered once in the captive portal and stored in flash; OTA updates keep it.
+api:
+  reboot_timeout: 0s
+
+wifi:
+  power_save_mode: light  # required with BLE coexistence
+  fast_connect: true
+  reboot_timeout: 0s  # never reboot when Wi-Fi is gone (would stop the belt mid-run)
+  ap:
+    ssid: "Treadmill Setup"
+  on_connect:
+    - ble.enable:
+
+# Setup mode: with no saved Wi-Fi the board runs the "Treadmill Setup" hotspot.
+# Bluetooth scanning on the same radio makes the hotspot unreliable, so keep it off until Wi-Fi is up.
+esphome:
+  on_boot:
+    - priority: -100
+      then:
+        - delay: 25s
+        - if:
+            condition:
+              not:
+                wifi.connected:
+            then:
+              - logger.log: "No Wi-Fi: setup hotspot only, Bluetooth off"
+              - ble.disable:
+
+captive_portal:
+
+# Neutral defaults used by the shared packages.
+substitutions:
+  tft_url: https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases/download/display-latest/nextion_treadmill_4.3_ips_800x480.tft
