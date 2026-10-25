@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Install the treadmill firmware</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+  :root{color-scheme:dark}
+  body{margin:0;background:#0d0f13;color:#d7dce4;font:16px/1.5 system-ui,sans-serif}
+  main{max-width:680px;margin:0 auto;padding:32px 20px}
+  h1{font-size:26px;margin:0 0 4px}
+  h2{font-size:18px;margin:28px 0 8px}
+  .muted{color:#8a93a3}
+  .card{background:#161a21;border:1px solid #252b35;border-radius:12px;padding:20px;margin:20px 0}
+  ol{padding-left:22px}li{margin:4px 0}
+  a{color:#6aa8ff}
+  code{background:#252b35;border-radius:4px;padding:1px 5px}
+  esp-web-install-button button[slot=activate]{font:600 16px system-ui;background:#2f7cf6;color:#fff;border:0;border-radius:8px;padding:12px 22px;cursor:pointer}
+  .lang{float:right}
+</style>
+</head>
+<body>
+<main>
+  <span class="lang"><a href="#ru">Русский ↓</a></span>
+  <h1>Install the treadmill firmware</h1>
+  <p class="muted">ESPHome Treadmill FTMS · version <span class="v">…</span> · <a href="https://github.com/samsonovss/ESPHome-Treadmill-FTMS">GitHub</a></p>
+
+  <div class="card">
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate">Connect and install</button>
+      <span slot="unsupported">Your browser cannot flash over USB. Use Chrome or Edge on a computer.</span>
+      <span slot="not-allowed">Open this page over HTTPS.</span>
+    </esp-web-install-button>
+  </div>
+
+  <h2>Before you start</h2>
+  <ol>
+    <li>Board: <b>ESP32-S3 with 16 MB flash and 8 MB octal PSRAM</b> (<code>N16R8</code>).</li>
+    <li>Connect it to this computer with a USB data cable. If no port shows up, hold <b>BOOT</b>, press <b>RESET</b>, release <b>BOOT</b>.</li>
+    <li>The installer offers to <b>erase the board</b> first. Say yes for a board with other firmware; saved workouts are lost.</li>
+  </ol>
+
+  <h2>After the install</h2>
+  <ol>
+    <li>Join the <b>Treadmill Setup</b> Wi-Fi hotspot and pick your home network.</li>
+    <li>Open <code>http://treadmill.local</code> (or the IP from your router).</li>
+    <li>From now on updates come over Wi-Fi: <i>Settings → System</i>, one click.</li>
+  </ol>
+  <p class="muted">Prefer a file? Download <code>treadmill-fw-…factory.bin</code> from the <a href="https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases">releases</a> and flash it with <a href="https://web.esphome.io">ESPHome Web</a>.</p>
+
+  <hr style="border:0;border-top:1px solid #252b35;margin:36px 0">
+
+  <h1 id="ru">Установка прошивки дорожки</h1>
+  <p class="muted">Версия <span class="v">…</span>. Кнопка «Connect and install» выше.</p>
+  <h2>Перед началом</h2>
+  <ol>
+    <li>Плата: <b>ESP32-S3 с 16 МБ флеш-памяти и 8 МБ octal PSRAM</b> (<code>N16R8</code>).</li>
+    <li>Подключите её к компьютеру USB-кабелем с передачей данных. Если порт не появился, зажмите <b>BOOT</b>, нажмите <b>RESET</b>, отпустите <b>BOOT</b>.</li>
+    <li>Установщик предложит сначала <b>стереть плату</b>. Для платы с другой прошивкой соглашайтесь; сохранённые тренировки при этом пропадут.</li>
+    <li>Нужен Chrome или Edge на компьютере.</li>
+  </ol>
+  <h2>После установки</h2>
+  <ol>
+    <li>Подключитесь к точке доступа <b>Treadmill Setup</b> и выберите домашнюю сеть.</li>
+    <li>Откройте <code>http://treadmill.local</code> (или IP из роутера).</li>
+    <li>Дальше обновления идут по Wi-Fi: <i>Настройки → Система</i>, одна кнопка.</li>
+  </ol>
+  <p class="muted">Нужен файл? Скачайте <code>treadmill-fw-…factory.bin</code> из <a href="https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases">релизов</a> и прошейте через <a href="https://web.esphome.io">ESPHome Web</a>.</p>
+</main>
+<script>
+fetch('manifest.json').then(r=>r.json()).then(m=>document.querySelectorAll('.v').forEach(e=>e.textContent=m.version)).catch(()=>{});
+</script>
+</body>
+</html>

@@ -28,6 +28,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -40,6 +41,19 @@ jobs:
           python3 web-ui/generate.py
           mkdir -p _site
           cp web-ui/generated/demo.html _site/index.html
+      # USB install page (ESP Web Tools): the factory image of the newest fw-v* release, served from Pages
+      # because GitHub release downloads have no CORS headers.
+      - name: Build the install page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p _site/install
+          cp web-ui/install/index.html _site/install/
+          TAG=$(gh api "repos/${{ github.repository }}/releases?per_page=30" --jq '[.[]|select(.tag_name|startswith("fw-v"))|select(any(.assets[];.name|endswith(".factory.bin")))][0].tag_name')
+          if [ -z "$TAG" ]; then echo "no release with a factory image yet"; exit 0; fi
+          gh release download "$TAG" -R "${{ github.repository }}" -p '*.factory.bin' -O _site/install/firmware.factory.bin
+          printf '{"name":"Treadmill","version":"%s","new_install_prompt_erase":true,"builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.factory.bin","offset":0}]}]}\n' "${TAG#fw-v}" > _site/install/manifest.json
+          cat _site/install/manifest.json
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

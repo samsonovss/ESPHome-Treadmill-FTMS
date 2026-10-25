@@ -6,10 +6,19 @@
 
 Нужна ESP32-S3 с 16 МБ флеш-памяти и 8 МБ octal PSRAM (`N16R8`). У прошивки своя разметка флеш-памяти: 16 МБ, отдельный раздел под архив тренировок. Плату со старой сборкой или чужой прошивкой **нельзя переделать по Wi-Fi**: первый раз прошиваем по USB. Все следующие обновления идут по Wi-Fi.
 
+**Готовая прошивка (рекомендуется).** Ставить ESPHome не нужно.
+
+1. Подключите ESP32-S3 к компьютеру USB-кабелем с передачей данных (родной USB-порт).
+2. Откройте **[страницу установки](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/install/)** в Chrome или Edge и нажмите *Connect and install*. Если на плате была другая прошивка, согласитесь стереть плату.
+3. Браузер не поддерживается? Скачайте `treadmill-fw-<версия>.factory.bin` из [последнего релиза](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) и прошейте через [ESPHome Web](https://web.esphome.io) или `esptool.py write_flash 0x0 treadmill-fw-<версия>.factory.bin`.
+
+Если порт не появился, зажмите **BOOT**, нажмите **RESET**, отпустите **BOOT** и попробуйте снова.
+
+**Собрать самому** (чтобы менять код):
+
 1. Установите [ESPHome](https://esphome.io/guides/getting_started_hassio/) (дополнение Home Assistant или `pip install esphome`).
 2. Скопируйте всю папку [`esphome/`](../esphome/) в папку конфигураций ESPHome. `packages/`, `components/` и файлы `*.h` должны лежать рядом с yaml-файлами.
-3. Подключите ESP32-S3 к компьютеру кабелем USB (родной USB-порт).
-4. В панели ESPHome откройте **`treadmill-public.yaml`** и выберите *Install → Plug into this computer* (или `esphome run treadmill-public.yaml`).
+3. В панели ESPHome откройте **`treadmill-public.yaml`** и выберите *Install → Plug into this computer* (или `esphome run treadmill-public.yaml`).
 
 В публичной сборке нет секретов и пароля Wi-Fi, она подходит всем как есть. Если хотите, чтобы свой Wi-Fi, ключ API и пароль OTA были внутри прошивки, используйте приватную сборку, см. [сборку из исходников](BUILD.ru.md).
 

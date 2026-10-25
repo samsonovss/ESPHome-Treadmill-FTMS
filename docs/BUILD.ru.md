@@ -49,10 +49,10 @@ python3 generate.py      # пишет ../esphome/treadmill_dashboard.h
 Версия — это `project.version` в `packages/00-core.yaml`. Проверка обновлений сравнивает её с манифестом релизов, поэтому:
 
 - пока тестируете на своей плате, версию не меняйте;
-- перед публикацией поднимите её (`1.0.0-beta.5`, …), соберите **`treadmill-public.yaml`** и опубликуйте `firmware.ota.bin`:
+- перед публикацией поднимите её (`1.0.0-beta.6`, …), соберите **`treadmill-public.yaml`** и скачайте её в панели ESPHome дважды (*Install → Manual download*): **OTA format** и **Factory format**. Затем опубликуйте оба файла:
 
 ```sh
-PRE=1 tools/fw-release.sh 1.0.0-beta.5 path/to/firmware.ota.bin "Короткое описание"
+PRE=1 tools/fw-release.sh 1.0.0-beta.6 path/to/firmware.ota.bin path/to/firmware.factory.bin "Короткое описание"
 ```
 
-Скрипт создаёт pre-release `fw-v<версия>` и обновляет релиз `fw-manifest`, который опрашивают платы. Номер опубликованной версии повторно не используйте.
+Скрипт создаёт pre-release `fw-v<версия>` с обоими образами, обновляет релиз `fw-manifest`, который опрашивают платы для обновления по Wi-Fi, и пересобирает [страницу установки по USB](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/install/) с новым factory-образом. Номер опубликованной версии повторно не используйте.

@@ -52,13 +52,17 @@ The ESP32-S3 is the central controller. It takes commands from the web page, the
 
 ## Quick Start
 
+No compiling needed: every release ships a ready-made firmware.
+
 > [!IMPORTANT]
 > **The first install must be done over USB.** The firmware uses its own flash layout (a partition for workout history), so an older build cannot be converted over Wi-Fi. After this one USB flash, all later updates come over Wi-Fi with one click.
 
 1. **Wire the board** (see [Hardware](#hardware) and [Wiring](#wiring)). Check your motor board's voltage levels first.
-2. **Flash over USB.** Copy [`esphome/`](esphome/) into your ESPHome configuration directory, open `treadmill-public.yaml` in the ESPHome dashboard and choose *Install → Plug into this computer*. No secrets are needed for this build.
+2. **Flash over USB.** Plug the board into a computer and open the **[install page](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/install/)** in Chrome or Edge: *Connect and install*, one click. Alternatively, download `treadmill-fw-<version>.factory.bin` from the [latest release](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) and flash it with [ESPHome Web](https://web.esphome.io).
 3. **Connect to Wi-Fi.** The board opens the **`Treadmill Setup`** hotspot. Join it, pick your home network and enter the password. It is stored on the board and survives updates.
 4. **Open the treadmill's address** in a browser (shown in your router, or `http://treadmill.local`). Done: from now on, *Settings → System* shows new firmware versions and installs them over Wi-Fi.
+
+Want to change the code? Build it yourself from [`esphome/`](esphome/) with ESPHome: see [Build](docs/BUILD.md).
 
 Before the first run, test stopping, minimum speed and incline reset **without a person on the belt**.
 

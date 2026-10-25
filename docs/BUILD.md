@@ -49,10 +49,10 @@ Main sources:
 The version is `project.version` in `packages/00-core.yaml`. The update check compares it with the release manifest, so:
 
 - while testing on your own board, keep the version unchanged;
-- before publishing, bump it (`1.0.0-beta.5`, …), build **`treadmill-public.yaml`** and publish the `firmware.ota.bin`:
+- before publishing, bump it (`1.0.0-beta.6`, …), build **`treadmill-public.yaml`** and download it twice from the ESPHome dashboard (*Install → Manual download*): **OTA format** and **Factory format**. Then publish both:
 
 ```sh
-PRE=1 tools/fw-release.sh 1.0.0-beta.5 path/to/firmware.ota.bin "Short summary"
+PRE=1 tools/fw-release.sh 1.0.0-beta.6 path/to/firmware.ota.bin path/to/firmware.factory.bin "Short summary"
 ```
 
-The script creates the `fw-v<version>` pre-release and refreshes the `fw-manifest` release that boards poll. Never reuse a published version number.
+The script creates the `fw-v<version>` pre-release with both images, refreshes the `fw-manifest` release that boards poll for Wi-Fi updates, and rebuilds the [USB install page](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/install/) with the new factory image. Never reuse a published version number.

@@ -6,10 +6,19 @@
 
 You need an ESP32-S3 with 16 MB flash and 8 MB octal PSRAM (`N16R8`). The firmware uses its own flash layout: 16 MB with a separate partition for the workout archive. A board running an older build or another firmware **cannot be converted over Wi-Fi**: the first flash must be done over USB. All later updates come over Wi-Fi.
 
+**Ready-made firmware (recommended).** No ESPHome install needed.
+
+1. Connect the ESP32-S3 to the computer with a USB data cable (the native USB port).
+2. Open the **[install page](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/install/)** in Chrome or Edge and press *Connect and install*. Agree to erase the board if it ran other firmware.
+3. No browser support? Download `treadmill-fw-<version>.factory.bin` from the [latest release](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) and flash it with [ESPHome Web](https://web.esphome.io) or `esptool.py write_flash 0x0 treadmill-fw-<version>.factory.bin`.
+
+If no port appears, hold **BOOT**, press **RESET**, release **BOOT** and try again.
+
+**Build it yourself** (to change the code):
+
 1. Install [ESPHome](https://esphome.io/guides/getting_started_hassio/) (Home Assistant add-on or `pip install esphome`).
 2. Copy the whole [`esphome/`](../esphome/) directory into your ESPHome configuration directory. Keep `packages/`, `components/` and the `*.h` files next to the yaml files.
-3. Connect the ESP32-S3 to the computer with a USB cable (the native USB port).
-4. In the ESPHome dashboard open **`treadmill-public.yaml`** and choose *Install → Plug into this computer* (or run `esphome run treadmill-public.yaml`).
+3. In the ESPHome dashboard open **`treadmill-public.yaml`** and choose *Install → Plug into this computer* (or run `esphome run treadmill-public.yaml`).
 
 The public build contains no secrets and no Wi-Fi password, so it works for anyone as is. If you want your own Wi-Fi, API key and OTA password inside the firmware, use the private build instead; see [building from source](BUILD.md).
 
