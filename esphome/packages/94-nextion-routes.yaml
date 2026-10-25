@@ -1,4 +1,4 @@
-# Nextion page 12 (mapmain): "My routes" - 5 rows r0..r4 (component ids 7..11) + bUp/bDown paging.
+# Nextion page 12 (mapmain): "My routes" - 5 rows r0..r4 (component ids 6..10) + bUp/bDown paging.
 # Rows come from board sidecars (<id>.act); tapping a row loads that route and returns to page 0.
 script:
   - id: nx_routes_render
@@ -50,11 +50,11 @@ script:
           }
 
 binary_sensor:
-  - {platform: nextion, page_id: 12, component_id: 7,  id: nx_r0, internal: true, on_press: {then: [{lambda: 'id(nx_r0).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 0}}]}}
-  - {platform: nextion, page_id: 12, component_id: 8,  id: nx_r1, internal: true, on_press: {then: [{lambda: 'id(nx_r1).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 1}}]}}
-  - {platform: nextion, page_id: 12, component_id: 9,  id: nx_r2, internal: true, on_press: {then: [{lambda: 'id(nx_r2).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 2}}]}}
-  - {platform: nextion, page_id: 12, component_id: 10, id: nx_r3, internal: true, on_press: {then: [{lambda: 'id(nx_r3).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 3}}]}}
-  - {platform: nextion, page_id: 12, component_id: 11, id: nx_r4, internal: true, on_press: {then: [{lambda: 'id(nx_r4).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 4}}]}}
+  - {platform: nextion, page_id: 12, component_id: 6,  id: nx_r0, internal: true, on_press: {then: [{lambda: 'id(nx_r0).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 0}}]}}
+  - {platform: nextion, page_id: 12, component_id: 7,  id: nx_r1, internal: true, on_press: {then: [{lambda: 'id(nx_r1).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 1}}]}}
+  - {platform: nextion, page_id: 12, component_id: 8,  id: nx_r2, internal: true, on_press: {then: [{lambda: 'id(nx_r2).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 2}}]}}
+  - {platform: nextion, page_id: 12, component_id: 9,  id: nx_r3, internal: true, on_press: {then: [{lambda: 'id(nx_r3).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 3}}]}}
+  - {platform: nextion, page_id: 12, component_id: 10, id: nx_r4, internal: true, on_press: {then: [{lambda: 'id(nx_r4).publish_state(false);'}, {script.execute: {id: nx_routes_pick, row: 4}}]}}
   - platform: nextion
     page_id: 12
     component_id: 12
