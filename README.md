@@ -221,8 +221,7 @@ Videos: [control dashboard overview](https://youtube.com/shorts/wjRsA46usog) · 
 
 ## Roadmap
 
-- cadence measurement;
-- feasibility study for a custom lower power board controlling the treadmill motor and incline.
+- cadence measurement.
 
 Completed work is recorded in the [release notes](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases).
 
