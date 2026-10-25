@@ -1,6 +1,6 @@
 # Умная беговая дорожка на ESPHome с FTMS и нативным управлением наклоном из Zwift
 
-[English version](README.md) | [**Живое демо**](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/) | [Релизы](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram-сообщество](https://t.me/TreadmillSmart)
+[English version](README.md) | [**Живое демо**](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/) | [Релизы](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [HTTP API](docs/API.ru.md) | [MCP](docs/MCP.ru.md) | [Telegram-сообщество](https://t.me/TreadmillSmart)
 
 Превратите старую беговую дорожку в современный умный тренажёр. ESP32-S3 с ESPHome заменяет штатный бортовой компьютер, напрямую управляет нижней платой по UART и подключается к Zwift и другим фитнес-приложениям через Bluetooth [FTMS](docs/specs/FTMS_v1.0.pdf) без мостов и сторонних приложений. Всё работает на самой плате: полноценный веб-интерфейс, программы тренировок, управление по пульсу, история тренировок с экспортом в FIT и обновление прошивки с GitHub в одну кнопку. Home Assistant поддерживается, но не обязателен.
 
@@ -176,8 +176,8 @@ ESP32-S3 — центральный контроллер. Он получает 
 ## Интеграции
 
 - **Home Assistant**: дорожка появляется как устройство ESPHome со всеми кнопками и датчиками. Приватная сборка использует шифрование API, см. [сборку из исходников](docs/BUILD.ru.md).
-- **HTTP API**: состояние в реальном времени через стандартные REST/SSE ESPHome, плюс архив тренировок и программы. См. [описание API](docs/API.md) ([OpenAPI](docs/openapi.yaml)).
-- **ИИ-агенты (MCP)**: `http://<дорожка>/mcp` позволяет Claude и другим MCP-клиентам смотреть список тренировок, читать итоги и сохранять программы. См. [MCP](docs/MCP.md).
+- **HTTP API**: состояние в реальном времени через стандартные REST/SSE ESPHome, плюс архив тренировок и программы. См. [описание API](docs/API.ru.md) ([OpenAPI](docs/openapi.yaml)).
+- **ИИ-агенты (MCP)**: `http://<дорожка>/mcp` позволяет Claude и другим MCP-клиентам смотреть список тренировок, читать итоги и сохранять программы. См. [MCP](docs/MCP.ru.md).
 
 > [!WARNING]
 > У веб-интерфейса, API и MCP нет авторизации. Используйте их только в доверенной домашней сети.

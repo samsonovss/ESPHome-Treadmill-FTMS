@@ -1,6 +1,6 @@
 # Smart ESPHome Treadmill with FTMS and Native Zwift Incline Control
 
-[Русская версия](README.ru.md) | [**Live demo**](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/) | [Releases](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [Telegram community](https://t.me/TreadmillSmart)
+[Русская версия](README.ru.md) | [**Live demo**](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/) | [Releases](https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases) | [HTTP API](docs/API.md) | [MCP](docs/MCP.md) | [Telegram community](https://t.me/TreadmillSmart)
 
 Turn an older treadmill into a modern smart training machine. An ESP32-S3 with ESPHome replaces the original console, drives the lower motor board directly over UART and talks to Zwift and other fitness apps over Bluetooth [FTMS](docs/specs/FTMS_v1.0.pdf), without bridges or companion apps. Everything runs on the board itself: a full web interface, workout programs, heart-rate control, workout history with FIT export, and one-click firmware updates from GitHub. Home Assistant is supported but not required.
 

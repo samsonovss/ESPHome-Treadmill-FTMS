@@ -1,6 +1,6 @@
 # HTTP API
 
-[Back to README](../README.md) · [OpenAPI file](openapi.yaml)
+[Русская версия](API.ru.md) · [Back to README](../README.md) · [OpenAPI file](openapi.yaml)
 
 The treadmill speaks plain HTTP on port 80. There are two layers:
 

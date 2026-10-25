@@ -1,6 +1,6 @@
 # MCP server: AI agents
 
-[Back to README](../README.md)
+[Русская версия](MCP.ru.md) · [Back to README](../README.md)
 
 The treadmill runs a small [Model Context Protocol](https://modelcontextprotocol.io) server at `http://<treadmill>/mcp`. Claude and other MCP clients can read your workouts and store programs for you.
 
