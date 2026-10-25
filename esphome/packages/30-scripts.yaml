@@ -1224,7 +1224,7 @@ script:
 
               char buffer[40];
               if (program == "None" && route_untimed) {   // 26.10: manual run on a route without a set time
-                snprintf(buffer, sizeof(buffer), "Manual \xc2\xb7 %.2f km left",
+                snprintf(buffer, sizeof(buffer), "Route \xc2\xb7 %.2f km left",
                   fmaxf(0.0f, (treadmill_routes::count.load() >= 2 ? treadmill_routes::points[treadmill_routes::count.load() - 1][0] : 0.0f) - (id(treadmill_distance_km).state - id(route_km_offset))));
               } else if (program == "None") {   // 16.10: free run with a time limit
                 snprintf(buffer, sizeof(buffer), "Manual Mode (%d:%02d)", remaining_minutes, remaining_seconds);

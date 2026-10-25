@@ -58,7 +58,8 @@ script:
           s.zgrade = id(ble_client_connected) && id(zwift_requested_incline).has_state() && std::isfinite(id(zwift_requested_incline).state)
                          ? id(zwift_requested_incline).state : NAN;
           const auto &phase = id(pause_active) ? id(saved_program_status) : id(program_status).state;
-          const std::string program = phase == "Manual Mode" ? std::string("Manual") :
+          // 26.10: a manual run on an untimed route shows "Route · X km left" — still a manual workout in History
+          const std::string program = (phase == "Manual Mode" || (phase.rfind("Route ", 0) == 0 && id(program_select).current_option() == "None")) ? std::string("Manual") :
               (id(free_running_active) ? std::string("Free Running") :
                std::string(id(program_select).current_option().c_str()));
           std::string pname = program;
