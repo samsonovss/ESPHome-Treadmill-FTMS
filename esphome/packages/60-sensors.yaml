@@ -772,9 +772,9 @@ sensor:
               id(warm_up).execute();
             } else if (id(motor_running) && id(remaining_warm_up_time) <= 0 &&
                        (id(remaining_run_time) > 0 ||
-                        (id(route_wucd) && !id(route_cd_active) && id(remaining_cool_down_time) <= 0 && id(program_select).current_option() != "None"))) {
+                        (id(route_wucd) && !id(route_cd_active) && id(remaining_cool_down_time) <= 0))) {
               // 24.10: main part counts down on this clock (was a separate 1 s interval).
-              // 26.10: a route without a set time (remaining_run_time 0) runs here too: run_program refreshes "… km left" and the pulse status.
+              // 26.10: a route without a set time (remaining_run_time 0) runs here too: run_program refreshes "… km left" (pulse zone or manual).
               id(run_program).execute();
             } else if (id(motor_running) && id(remaining_cool_down_time) > 0 && id(remaining_run_time) <= 0) {
               id(remaining_cool_down_time)--;
