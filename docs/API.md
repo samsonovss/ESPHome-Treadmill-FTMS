@@ -49,8 +49,12 @@ Documented in [`openapi.yaml`](openapi.yaml) (open it in [Swagger Editor](https:
 | `GET /workouts/file?id=&type=csv\|json` | Samples (~1 per second, CSV) or the summary (JSON) of one workout |
 | `GET /api/workouts/trash/list` | Workouts in the trash |
 | `POST /api/workouts/trash?id=` · `/api/workouts/restore?id=` | Move to trash / restore (asynchronous, poll `/api/workouts/job?job=`) |
+| `POST /api/workouts/purge?id=` | Delete a workout from the trash for good (asynchronous, cannot be undone) |
+| `GET /api/workouts/live?from=` | Samples of the current or last workout from memory, 1200 rows per page; works while recording |
 | `GET /api/programs/list` · `GET /api/programs/file?id=` | Stored programs |
+| `POST /api/programs/save` | Save a program: JSON body, `Content-Type: application/json`, same ID overwrites (belt stopped, asynchronous) |
 | `POST /api/programs/delete?id=` | Delete a program (belt stopped) |
+| `POST /api/storage/scan` · `GET /api/storage/scan` | Start a storage scan / read the result: file count, largest files and folders |
 | `POST /mcp` | [MCP server](MCP.md) |
 
 Rules shared by the archive and program endpoints:

@@ -3,7 +3,7 @@ info:
   title: ESPHome Treadmill HTTP API
   version: "0.1-draft"
   description: |
-    Read-only API of the treadmill board (ESP32, ESPHome web_server). No authentication yet:
+    Treadmill endpoints of the board (ESP32, ESPHome web_server): workout archive, programs, storage. No authentication yet:
     use only on a trusted local network. Describes only what exists in the firmware sources.
     Live state and control use the standard ESPHome web_server (SSE /events, REST /<domain>/<name>);
     entity names are board-specific and not listed here.
@@ -63,9 +63,40 @@ paths:
       summary: Restore a workout from trash
       parameters: [{name: id, in: query, required: true, schema: {type: string}}]
       responses: {"202": {description: Queued}, "409": {description: Busy}}
+  /api/workouts/purge:
+    post:
+      summary: Delete a workout from trash permanently (cannot be undone)
+      parameters: [{name: id, in: query, required: true, schema: {type: string, pattern: "^w[0-9]{10}$"}}]
+      responses:
+        "202": {description: Queued; poll /api/workouts/job}
+        "400": {description: Invalid id (exactly one `id`, no body)}
+        "409": {description: Workout active or finalizing}
+        "503": {description: Storage not ready}
+  /api/workouts/live:
+    get:
+      summary: Samples of the current (or last) workout from RAM; works while recording
+      parameters:
+        - {name: from, in: query, schema: {type: integer, minimum: 0, default: 0}, description: First row index; up to 1200 rows per response, continue from `from + rows.length` while it is below `total`}
+      responses:
+        "200":
+          description: "OK (Cache-Control: no-store)"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string, nullable: true}
+                  active: {type: boolean}
+                  program: {type: string}
+                  start_epoch: {type: integer}
+                  total: {type: integer}
+                  from: {type: integer}
+                  columns: {type: array, items: {type: string}, description: "elapsed_s, time_s, heart_rate, speed_kmh, incline_level, distance_km, calories, paused, zone, target_zone"}
+                  rows: {type: array, items: {type: array}, description: "One array per sample in `columns` order; heart_rate and calories may be null"}
+        "400": {description: Invalid from}
   /api/workouts/job:
     get:
-      summary: State of the latest trash/restore job
+      summary: State of the latest archive job (trash, restore, purge, program_save, scan)
       parameters: [{name: job, in: query, required: true, schema: {type: integer}}]
       responses:
         "200":
@@ -81,11 +112,34 @@ paths:
       summary: One saved program (JSON)
       parameters: [{name: id, in: query, required: true, schema: {type: string}}]
       responses: {"200": {description: OK}, "404": {description: Not found}, "409": {description: Busy}}
+  /api/programs/save:
+    post:
+      summary: Save a program (same id overwrites; treadmill must be stopped)
+      description: Body is the program JSON (format in docs/MCP.md); no query string, Content-Type must be application/json, up to 8192 bytes.
+      requestBody: {required: true, content: {application/json: {schema: {type: object}}}}
+      responses:
+        "202": {description: Queued; poll /api/workouts/job}
+        "400": {description: Invalid program}
+        "409": {description: Workout active or not freshly stopped}
+        "503": {description: Storage not ready}
   /api/programs/delete:
     post:
       summary: Delete a saved program (treadmill must be stopped)
       parameters: [{name: id, in: query, required: true, schema: {type: string}}]
       responses: {"200": {description: "{deleted:true}"}, "404": {description: Not found}, "409": {description: Not stopped or busy}}
+  /api/storage/scan:
+    post:
+      summary: Start a storage scan (file counts, largest files and folders)
+      responses:
+        "202": {description: "{state: queued}"}
+        "409": {description: Workout active or finalizing}
+        "503": {description: Storage not ready}
+    get:
+      summary: Scan result
+      responses:
+        "200":
+          description: "While not finished: {state: none|queued|running|failed}. When done: {state: ready, used_bytes, total_bytes, file_count, file_bytes, largest: [...], dirs: [...]}"
+          content: {application/json: {schema: {type: object}}}
   /mcp:
     post:
       summary: MCP server (JSON-RPC 2.0, stateless)
