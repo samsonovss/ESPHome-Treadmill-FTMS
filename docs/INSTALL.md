@@ -4,7 +4,7 @@
 
 ## 1. First install: USB only
 
-The firmware uses its own flash layout: 16 MB with a separate partition for the workout archive. A board running an older build or another firmware **cannot be converted over Wi-Fi**: the first flash must be done over USB. All later updates come over Wi-Fi.
+You need an ESP32-S3 with 16 MB flash and 8 MB octal PSRAM (`N16R8`). The firmware uses its own flash layout: 16 MB with a separate partition for the workout archive. A board running an older build or another firmware **cannot be converted over Wi-Fi**: the first flash must be done over USB. All later updates come over Wi-Fi.
 
 1. Install [ESPHome](https://esphome.io/guides/getting_started_hassio/) (Home Assistant add-on or `pip install esphome`).
 2. Copy the whole [`esphome/`](../esphome/) directory into your ESPHome configuration directory. Keep `packages/`, `components/` and the `*.h` files next to the yaml files.

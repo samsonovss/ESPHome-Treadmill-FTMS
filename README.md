@@ -136,7 +136,7 @@ Another treadmill can be adapted when its control interface is accessible, but h
 
 Core components:
 
-- ESP32-S3 with PSRAM and 16 MB flash;
+- ESP32-S3 with **16 MB flash and 8 MB octal PSRAM** (`N16R8` modules, e.g. ESP32-S3-DevKitC-1-N16R8). Boards with less flash or with quad PSRAM (`N16R2`, `N8R2`) will not run this firmware;
 - treadmill with access to the lower motor controller interface;
 - bidirectional logic-level converter;
 - step-down power converter;
