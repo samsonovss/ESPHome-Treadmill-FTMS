@@ -16,7 +16,7 @@ https://github.com/user-attachments/assets/f829769c-47f4-4251-8f99-d2f9a6cf358a
 - **Built-in web interface** at the treadmill's address: live workout, programs, history, progress, settings. RU/EN, light and dark themes, works offline;
 - **Workout programs**: heart-rate zone, HIIT, fartlek, your own interval plans, routes drawn on a map or picked from the Zwift catalog;
 - **Heart-rate control**: pair a BLE chest strap from the web page; the treadmill adjusts speed to keep you in the zone;
-- **Workout history on the board**: every run is recorded to flash, with charts, a progress tab and **FIT export** for Strava and Garmin Connect;
+- **Workout history on the board**: every run is recorded to flash and compressed (gzip) after the stop, so the 7 MB archive holds roughly 100-230 hours of running, i.e. several hundred workouts. Charts, a progress tab and **FIT export** for Strava and Garmin Connect ([what goes into the FIT file](docs/WEB_UI.md#fit-export));
 - **One-click updates**: treadmill and display firmware update over Wi-Fi from GitHub releases;
 - **AI agent access (MCP)**: Claude and other agents can read workouts and create programs; they cannot move the belt;
 - **Nextion touchscreen**, **Home Assistant** integration, **laser ToF** user-position and safety zone, optical speed feedback, motor temperature monitoring;
@@ -85,7 +85,7 @@ Try it: **[live demo](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/)**. M
 - **HIIT**: work and recovery by time or by heart rate;
 - **Fartlek**: random speed and incline surges within your limits, with presets;
 - **Your own programs**: build interval plans in the web editor; they are saved on the board;
-- **Routes**: incline follows an elevation profile, from a route drawn on a map or the [Zwift route catalog](route_profiles/);
+- **Routes**: draw a running route on the map right in the web interface (map tiles and elevation need internet) or pick one from the [Zwift route catalog](route_profiles/); routes are saved on the board, and the incline follows the elevation profile;
 - **native Zwift incline** control.
 
 Treadmill behavior profiles: speed correction (`Soft`, `Precise`, `Aggressive`) and acceleration (`Soft`, `Normal`, `Fast`, `Technogym`).

@@ -14,13 +14,27 @@ One chart shows speed, incline and heart rate with the zones in the background. 
 - **HIIT**: work and recovery intervals by time or by heart rate.
 - **Fartlek**: random speed and incline surges within limits you set; presets can be saved.
 - **Your own programs**: build interval plans in the editor, drag zones and phase edges on the chart. Programs are stored on the board, also those saved by an [AI agent](MCP.md).
-- **Routes**: draw a route on the map or pick one from the Zwift catalog; the incline follows its elevation profile by distance.
+- **Routes**: draw a route on the map or pick one from the Zwift catalog; the incline follows its elevation profile by distance. Routes are saved on the board.
 
 Programs cannot be changed while the belt is running.
 
 ## History
 
 Every workout is recorded on the board (about one sample per second) without Home Assistant. Open a workout to see its charts and summary, download **FIT** (Strava, Garmin Connect and others) or CSV, or move it to the trash; trash can be restored.
+
+After the stop the workout is compressed (gzip, about 3.5-4×): one hour of running takes about 30-70 KB, so the 7 MB archive holds roughly 100-230 hours. Routes, programs and presets share the same archive.
+
+### FIT export
+
+The FIT file is built in the browser from the recorded samples and imports into Strava, Garmin Connect and others:
+
+- activity type **running / treadmill**, so no GPS track is expected;
+- every second: heart rate, speed, distance and incline;
+- pauses are marked as pause/resume events, so moving time and total time are kept apart;
+- **laps by program phase**, the way Garmin watches write them: warm-up, work, recovery and cool-down, and a separate lap for every fartlek segment; a workout without phases is one lap;
+- for each lap and for the whole workout: time, distance, calories, average and maximum speed, average and maximum heart rate.
+
+Cadence and power are not included: the treadmill does not measure them.
 
 ## Progress
 
