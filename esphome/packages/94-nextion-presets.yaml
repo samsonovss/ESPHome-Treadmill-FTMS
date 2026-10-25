@@ -1,4 +1,4 @@
-# Nextion pages 18 (HIIT presets) and 20 (Fartlek presets): copies of page 12 (rows r0..r4 ids 7..11, Up id 12, Down id 4).
+# Nextion pages 18 (HIIT presets) and 20 (Fartlek presets): copies of page 12 (rows r0..r4 ids 6..10, Up id 12, Down id 4).
 # Rows come from the board preset store (/workouts/presets/<kind>.json); tapping a row applies the preset and sets the program.
 # Components are addressed without page prefix (valid for the page currently shown).
 globals:
@@ -90,16 +90,16 @@ script:
           }
 
 binary_sensor:
-  - {platform: nextion, page_id: 18, component_id: 7, id: nx_hl0, internal: true, on_press: {then: [{lambda: 'id(nx_hl0).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 0}}]}}
-  - {platform: nextion, page_id: 18, component_id: 8, id: nx_hl1, internal: true, on_press: {then: [{lambda: 'id(nx_hl1).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 1}}]}}
-  - {platform: nextion, page_id: 18, component_id: 9, id: nx_hl2, internal: true, on_press: {then: [{lambda: 'id(nx_hl2).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 2}}]}}
-  - {platform: nextion, page_id: 18, component_id: 10, id: nx_hl3, internal: true, on_press: {then: [{lambda: 'id(nx_hl3).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 3}}]}}
-  - {platform: nextion, page_id: 18, component_id: 11, id: nx_hl4, internal: true, on_press: {then: [{lambda: 'id(nx_hl4).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 4}}]}}
-  - {platform: nextion, page_id: 20, component_id: 7, id: nx_fl0, internal: true, on_press: {then: [{lambda: 'id(nx_fl0).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 0}}]}}
-  - {platform: nextion, page_id: 20, component_id: 8, id: nx_fl1, internal: true, on_press: {then: [{lambda: 'id(nx_fl1).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 1}}]}}
-  - {platform: nextion, page_id: 20, component_id: 9, id: nx_fl2, internal: true, on_press: {then: [{lambda: 'id(nx_fl2).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 2}}]}}
-  - {platform: nextion, page_id: 20, component_id: 10, id: nx_fl3, internal: true, on_press: {then: [{lambda: 'id(nx_fl3).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 3}}]}}
-  - {platform: nextion, page_id: 20, component_id: 11, id: nx_fl4, internal: true, on_press: {then: [{lambda: 'id(nx_fl4).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 4}}]}}
+  - {platform: nextion, page_id: 18, component_id: 6, id: nx_hl0, internal: true, on_press: {then: [{lambda: 'id(nx_hl0).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 0}}]}}
+  - {platform: nextion, page_id: 18, component_id: 7, id: nx_hl1, internal: true, on_press: {then: [{lambda: 'id(nx_hl1).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 1}}]}}
+  - {platform: nextion, page_id: 18, component_id: 8, id: nx_hl2, internal: true, on_press: {then: [{lambda: 'id(nx_hl2).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 2}}]}}
+  - {platform: nextion, page_id: 18, component_id: 9, id: nx_hl3, internal: true, on_press: {then: [{lambda: 'id(nx_hl3).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 3}}]}}
+  - {platform: nextion, page_id: 18, component_id: 10, id: nx_hl4, internal: true, on_press: {then: [{lambda: 'id(nx_hl4).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 4}}]}}
+  - {platform: nextion, page_id: 20, component_id: 6, id: nx_fl0, internal: true, on_press: {then: [{lambda: 'id(nx_fl0).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 0}}]}}
+  - {platform: nextion, page_id: 20, component_id: 7, id: nx_fl1, internal: true, on_press: {then: [{lambda: 'id(nx_fl1).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 1}}]}}
+  - {platform: nextion, page_id: 20, component_id: 8, id: nx_fl2, internal: true, on_press: {then: [{lambda: 'id(nx_fl2).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 2}}]}}
+  - {platform: nextion, page_id: 20, component_id: 9, id: nx_fl3, internal: true, on_press: {then: [{lambda: 'id(nx_fl3).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 3}}]}}
+  - {platform: nextion, page_id: 20, component_id: 10, id: nx_fl4, internal: true, on_press: {then: [{lambda: 'id(nx_fl4).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 1, row: 4}}]}}
   - platform: nextion
     page_id: 18
     component_id: 12
