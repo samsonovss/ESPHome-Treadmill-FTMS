@@ -138,6 +138,9 @@ esp32:
       CONFIG_SPIRAM_USE_MALLOC: "y"
       CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY: "y"
       CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY: "y"
+      # 25.10: TLS (mbedTLS) buffers in PSRAM — internal heap is ~44 KB free / 17 KB max block, the HTTPS handshake to
+      # GitHub failed with MPI alloc errors (PK verify failed 0x10/0x4290): update check and Nextion TFT upload
+      CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: "y"
 
 
 esp32_ble:

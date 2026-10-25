@@ -286,8 +286,7 @@ bool Nextion::upload_tft(uint32_t baud_rate, bool exit_reparse) {
       .timeout_ms = static_cast<int>(this->tft_upload_http_timeout_),
       .disable_auto_redirect = false,
       .max_redirection_count = 10,
-      .buffer_size = 4096,
-      .buffer_size_tx = 1024,
+      .buffer_size_tx = this->tft_upload_http_buffer_size_tx_,  // 0 = ESP-IDF default
 #ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
       .crt_bundle_attach = esp_crt_bundle_attach,
 #endif

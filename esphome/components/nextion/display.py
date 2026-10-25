@@ -35,6 +35,7 @@ from .base_component import (
     CONF_SKIP_CONNECTION_HANDSHAKE,
     CONF_START_UP_PAGE,
     CONF_STARTUP_OVERRIDE_MS,
+    CONF_TFT_UPLOAD_HTTP_BUFFER_SIZE_TX,
     CONF_TFT_UPLOAD_HTTP_RETRIES,
     CONF_TFT_UPLOAD_HTTP_TIMEOUT,
     CONF_TFT_UPLOAD_WATCHDOG_TIMEOUT,
@@ -68,6 +69,7 @@ def _deprecated_dump_device_info(value):
 def _validate_tft_upload(config):
     has_tft_url = CONF_TFT_URL in config
     for conf_key in (
+        CONF_TFT_UPLOAD_HTTP_BUFFER_SIZE_TX,
         CONF_TFT_UPLOAD_HTTP_TIMEOUT,
         CONF_TFT_UPLOAD_HTTP_RETRIES,
         CONF_TFT_UPLOAD_WATCHDOG_TIMEOUT,
@@ -125,6 +127,9 @@ CONFIG_SCHEMA = cv.All(
             ),
             cv.Optional(CONF_START_UP_PAGE): cv.uint8_t,
             cv.Optional(CONF_TFT_UPLOAD_HTTP_RETRIES): cv.int_range(min=1, max=255),
+            cv.Optional(CONF_TFT_UPLOAD_HTTP_BUFFER_SIZE_TX): cv.All(
+                cv.only_on_esp32, cv.int_range(min=512, max=8192)
+            ),
             cv.Optional(CONF_TFT_UPLOAD_HTTP_TIMEOUT): cv.All(
                 cv.positive_time_period_milliseconds,
                 cv.Range(max=TimePeriod(milliseconds=65535)),
@@ -253,6 +258,14 @@ async def to_code(config):
             cg.add(
                 var.set_tft_upload_http_timeout(
                     config[CONF_TFT_UPLOAD_HTTP_TIMEOUT].total_milliseconds
+                )
+            )
+
+        # TFT upload HTTP TX buffer (ESP32 only; unset = ESP-IDF default)
+        if CONF_TFT_UPLOAD_HTTP_BUFFER_SIZE_TX in config:
+            cg.add(
+                var.set_tft_upload_http_buffer_size_tx(
+                    config[CONF_TFT_UPLOAD_HTTP_BUFFER_SIZE_TX]
                 )
             )
 

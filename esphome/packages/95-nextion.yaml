@@ -3,6 +3,7 @@ display:
     uart_id: uart_0
     id: display_nextion
     tft_url: ${tft_url}
+    tft_upload_http_buffer_size_tx: 1024   # 25.10: GitHub release redirect → ~600-char signed URL; the 512-B IDF default fails «Out of buffer»
     update_interval: 1s
     # command_spacing: 20ms        # Быстрее, но безопасно
     # max_queue_size: 50           # очередь — до 50 команд

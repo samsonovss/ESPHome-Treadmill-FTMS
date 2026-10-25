@@ -22,7 +22,7 @@ struct Snapshot {
   uint32_t ms=0; int64_t epoch=0; float hr=NAN,speed=0,level=0,max_level=15,max_grade=15,calories=NAN;
   // Energy (cumulative/averages from firmware) and the user profile at workout time.
   float zero_grade=0,fat_kcal=NAN,met_avg=NAN,vo2_avg=NAN,weight=NAN,age=NAN,hrmax=NAN; int male=-1;
-  int zone=0,target_zone=0; char program[64]{}; char route[192]{}; bool paused=false; float zgrade=NAN; char phase=0; // zgrade: raw road grade % sent by Zwift (NAN = no Zwift); phase: W warm-up, R main, H work, L rest, C cool-down, 0 none; route: map name at start ("" = none)
+  int zone=0,target_zone=0; char program[64]{}; char route[192]{}; bool paused=false; float zgrade=NAN; char phase=0; float tt=NAN; int phase_t=-1; float dist=NAN; /* 24.10: Treadmill Time (s) — the clock the page and programs use */ // zgrade: raw road grade % sent by Zwift (NAN = no Zwift); phase: W warm-up, R main, H work, L rest, C cool-down, 0 none; route: map name at start ("" = none)
 };
 inline bool valid_id(const std::string &s) { if(s.size()!=11 || s[0]!='w') return false; for(size_t i=1;i<s.size();i++) if(s[i]<'0'||s[i]>'9') return false; return true; }
 inline std::string number(double v) { if(!std::isfinite(v)) return "null"; char b[48]; snprintf(b,sizeof b,"%.6f",v); return b; }
@@ -56,12 +56,12 @@ class Engine {
   float zero_grade=0,fat_kcal=NAN,met_avg=NAN,vo2_avg=NAN,p_weight=NAN,p_age=NAN,p_hrmax=NAN; int p_male=-1;
   // Insights for History: seconds per firmware HR zone (0 = below Z1), target zone, max speed, climb.
   double zone_sec[6]{},max_speed=0,ascent=0; int target_zone=0;
-  std::vector<std::pair<float,char>> phases; char last_phase=0;
+  std::vector<std::pair<float,char>> phases; char last_phase=0; int last_phase_t=-1;
   std::vector<std::pair<float,float>> zprof; double zend=-1; // Zwift road profile [km, grade %] (on change ≥0.2 % or every 0.25 km) // program phase transitions (timer s), for History bands
   // 5-minute blocks of running time [end timer s, avg speed, avg grade %, avg HR (0 = no HR)] for Progress (steady-state HR trend).
   std::vector<std::array<float,4>> blocks; double b_t=0,b_sp=0,b_gr=0,b_hr=0,b_hrt=0;
   void flush_block(){if(b_t>=60&&blocks.size()<60)blocks.push_back({float(timer),float(b_sp/b_t),float(b_gr/b_t),b_hrt>=b_t*0.5?float(b_hr/b_hrt):0.0f});b_t=b_sp=b_gr=b_hr=b_hrt=0;}
-  void reset_insights(){for(auto &z:zone_sec)z=0;max_speed=ascent=0;target_zone=0;phases.clear();last_phase=0;zprof.clear();zend=-1;blocks.clear();b_t=b_sp=b_gr=b_hr=b_hrt=0;}
+  void reset_insights(){for(auto &z:zone_sec)z=0;max_speed=ascent=0;target_zone=0;phases.clear();last_phase=0;last_phase_t=-1;zprof.clear();zend=-1;blocks.clear();b_t=b_sp=b_gr=b_hr=b_hrt=0;}
   explicit Engine(std::string path):base(std::move(path)) {}
   ~Engine(){ if(file) fclose(file); }
   std::string path(const std::string &i,const char *ext) const { return base+"/"+i+"."+ext; }
@@ -169,7 +169,7 @@ class Engine {
     if(sequence>=UINT32_MAX) return fail("id_exhausted");
     char name[24]; snprintf(name,sizeof name,"w%010llu",(unsigned long long)++sequence);id=name;
     int fd=open(path(id,"csv").c_str(),O_WRONLY|O_CREAT|O_EXCL,0600); if(fd<0) return fail(errno==ENOSPC?"storage_full":"create_failed");
-    file=fdopen(fd,"wb"); if(!file) {close(fd);return fail("fdopen_failed");} setvbuf(file,nullptr,_IOFBF,4096);
+    file=fdopen(fd,"wb"); if(!file) {close(fd);return fail("fdopen_failed");} {static char *rb=nullptr;static const size_t RB=768*1024;if(!rb)rb=(char*)malloc(RB);/* 24.10: >16 KB malloc lands in PSRAM; the whole workout (~25 B/row, 2 h ≈ 180 KB) stays in RAM — the flash is written once, at the stop (flash writes stall both cores: sensor/motor hiccups mid-run) */setvbuf(file,rb,rb?_IOFBF:_IOFBF,rb?RB:4096);}
     timer=elapsed=distance=hrsum=speedsum=gradesum=maxhr=0; samples=hrcount=running_samples=unflushed=0;reset_insights();
     start_epoch=s.epoch;end_epoch=s.epoch;wall_valid=s.epoch>0;previous=s;cal=s.calories;max_level=s.max_level;max_grade=s.max_grade; memcpy(program,s.program,sizeof program);memcpy(route,s.route,sizeof route);route[sizeof route-1]=0;error.clear();active=true;
     zero_grade=std::isfinite(s.zero_grade)?s.zero_grade:0;fat_kcal=met_avg=vo2_avg=NAN;p_weight=s.weight;p_age=s.age;p_hrmax=s.hrmax;p_male=s.male;
@@ -181,7 +181,7 @@ class Engine {
     if(fsync(meta)!=0)ok=false;
     if(close(meta)!=0)ok=false;
     if(!ok)return fail(errno==ENOSPC?"storage_full":"metadata_write_failed");
-    return sample(s);
+    return true; /* 24.10: no row at the start event — it carried the speed from before the program set its own (a dip at 0:00); the first row is the first Treadmill Time tick (T=0) */
   }
   bool sample(const Snapshot &s) {
     if(!active) return false;
@@ -190,11 +190,13 @@ class Engine {
       if(std::isfinite(previous.hr)&&previous.hr>0&&previous.zone>=0&&previous.zone<=5) zone_sec[previous.zone]+=dt;
       double bg=0;
       if(max_level>0&&std::isfinite(max_grade)){float pg=zero_grade+std::max(0.0f,std::min(previous.level,max_level))/max_level*(max_grade-zero_grade);bg=pg;if(pg>0)ascent+=dd*1000.0*pg/100.0;}
+      if(std::isfinite(s.dist)&&s.dist>=distance-0.005)distance=s.dist; /* 24.10: distance = the firmware Treadmill Distance the page shows (was integrated separately from the set speed) */
+      if(std::isfinite(s.tt)&&s.tt>=timer-2)timer=s.tt; /* never backwards: a stop that already reset Treadmill Time keeps the counted time */ /* 24.10: workout time = Treadmill Time (one clock with the live page; was a separate millis count ~1 s ahead) */
       b_t+=dt;b_sp+=std::max(0.0f,previous.speed)*dt;b_gr+=bg*dt;if(std::isfinite(previous.hr)&&previous.hr>0){b_hr+=previous.hr*dt;b_hrt+=dt;}
       if(b_t>=300)flush_block(); }
     if(s.target_zone>=1&&s.target_zone<=5) target_zone=s.target_zone;
     if(std::isfinite(s.zgrade)&&!s.paused){if((zprof.empty()||std::fabs(s.zgrade-zprof.back().second)>=0.2f||distance-zprof.back().first>=0.25)&&zprof.size()<1500)zprof.emplace_back(float(distance),s.zgrade);zend=distance;}
-    if(s.phase!=last_phase&&phases.size()<400){phases.emplace_back(float(timer),s.phase);last_phase=s.phase;}
+    if((s.phase!=last_phase||(s.phase&&s.phase_t>=0&&s.phase_t!=last_phase_t))&&phases.size()<400){last_phase_t=s.phase_t;/* 24.10: a new phase start (each fartlek segment, even two Easy in a row) is its own band */phases.emplace_back(float(s.phase_t>=0&&s.phase_t<=timer+1&&s.phase_t>=timer-3?s.phase_t:timer),s.phase);last_phase=s.phase;} /* 24.10: stamped at the phase start on Treadmill Time (was the sample time, up to 1 s late) */
     wall_valid=wall_valid&&s.epoch>0&&(previous.epoch<=0||s.epoch>=previous.epoch);end_epoch=s.epoch;cal=s.calories;
     if(std::isfinite(s.fat_kcal)){fat_kcal=s.fat_kcal;}
     if(std::isfinite(s.met_avg)){met_avg=s.met_avg;}
@@ -219,7 +221,7 @@ class Engine {
      if(w_first||s.target_zone!=w_tz){snprintf(TZ,sizeof TZ,"%d",s.target_zone);w_tz=s.target_zone;}
      if(fprintf(file,"%s,%s,%.1f,%s,%.4f,%s,%s,%s,%s,%s,%s,%s,%.1f\n",T,H,s.speed,G,distance,TM,c,ST,w_first?p.c_str():"",Z,LV,TZ,elapsed)<0) return fail(errno==ENOSPC?"storage_full":"sample_write_failed");
      w_first=false;}
-    previous=s;samples++;unflushed++; if(unflushed>=5) return checkpoint();return true;
+    previous=s;samples++;unflushed++;return true; /* 24.10: no mid-run flush — saved at the stop (a crash/power loss mid-run loses this workout) */
   }
   std::string phases_json() const { std::string o; for(size_t i=0;i<phases.size();i++){char b[32];snprintf(b,sizeof b,"%s[%.0f,\"%c\"]",i?",":"",phases[i].first,phases[i].second?phases[i].second:'0');o+=b;} return o; }
   std::string zwift_json() const { if(zprof.size()<2||zend<=zprof.front().first) return "null"; std::string o="["; for(size_t i=0;i<zprof.size();i++){char b[40];snprintf(b,sizeof b,"%s[%.3f,%.2f]",i?",":"",zprof[i].first,zprof[i].second);o+=b;} char b[48];snprintf(b,sizeof b,",[%.3f,%.2f]]",zend,zprof.back().second);return o+b; }
@@ -227,7 +229,7 @@ class Engine {
   std::string blocks_json() const { std::string o; for(size_t i=0;i<blocks.size();i++){char b[80];snprintf(b,sizeof b,"%s[%.0f,%.1f,%.1f,%.0f]",i?",":"",blocks[i][0],blocks[i][1],blocks[i][2],blocks[i][3]);o+=b;} return o; }
   double trimp() const { double t=0; for(int i=1;i<6;i++)t+=zone_sec[i]*i; return t/60.0; }
   std::string summary(bool interrupted) const {
-    return "{\"schema_version\":1,\"timestamp_format\":\"iso8601_utc\",\"id\":"+json_string(id.c_str())+",\"start\":"+(start_epoch>0?json_string(epoch_text(start_epoch).c_str()):"null")+",\"end\":"+(end_epoch>0?json_string(epoch_text(end_epoch).c_str()):"null")+",\"duration_sec\":"+number(timer)+",\"elapsed_sec\":"+number(elapsed)+",\"samples\":"+std::to_string(samples)+",\"distance_km\":"+number(distance)+",\"calories\":"+number(cal)+",\"avg_speed_kmh\":"+number(running_samples?speedsum/running_samples:NAN)+",\"avg_incline_pct\":"+number(running_samples?gradesum/running_samples:NAN)+",\"avg_heart_rate\":"+number(hrcount?hrsum/hrcount:NAN)+",\"max_heart_rate\":"+number(hrcount?maxhr:NAN)+",\"wall_time_valid\":"+(wall_valid?"true":"false")+",\"interrupted\":"+(interrupted?"true":"false")+",\"grade_estimated\":true,\"distance_estimated\":true,\"calories_estimated\":true,\"calories_source\":\"firmware_total_calories\",\"speed_source\":\"live_target\",\"calibration_max_level\":"+number(max_level)+",\"calibration_real_max_grade\":"+number(max_grade)+",\"calibration_zero_grade\":"+number(zero_grade)+",\"fat_g\":"+number(fat_kcal/9.0)+",\"carbs_g\":"+number(std::isfinite(cal)&&std::isfinite(fat_kcal)?std::max(0.0,double(cal)-double(fat_kcal))/4.0:NAN)+",\"avg_met\":"+number(met_avg)+",\"avg_vo2\":"+number(vo2_avg)+",\"energy_source\":\"firmware_per_second_acsm\",\"profile\":{\"weight_kg\":"+number(p_weight)+",\"age\":"+number(p_age)+",\"sex\":"+(p_male==1?"\"male\"":p_male==0?"\"female\"":"null")+",\"hr_max\":"+number(p_hrmax)+"},\"zone_sec\":["+zones_json()+"],\"target_zone\":"+(target_zone?std::to_string(target_zone):std::string("null"))+",\"max_speed_kmh\":"+number(running_samples?max_speed:NAN)+",\"ascent_m\":"+number(ascent)+",\"phases\":["+phases_json()+"],\"trimp\":"+number(trimp())+",\"blocks_sec\":300,\"blocks\":["+blocks_json()+"],\"zwift_profile\":"+zwift_json()+",\"route\":"+(route[0]?json_string(route):std::string("null"))+",\"program\":"+json_string(program)+"}\n";
+    return "{\"schema_version\":1,\"timestamp_format\":\"iso8601_utc\",\"id\":"+json_string(id.c_str())+",\"start\":"+(start_epoch>0?json_string(epoch_text(start_epoch).c_str()):"null")+",\"end\":"+(end_epoch>0?json_string(epoch_text(end_epoch).c_str()):"null")+",\"duration_sec\":"+number(timer)+",\"elapsed_sec\":"+number(elapsed)+",\"samples\":"+std::to_string(samples)+",\"distance_km\":"+number(distance)+",\"calories\":"+number(cal)+",\"avg_speed_kmh\":"+number(running_samples?speedsum/running_samples:NAN)+",\"avg_incline_pct\":"+number(running_samples?gradesum/running_samples:NAN)+",\"avg_heart_rate\":"+number(hrcount?hrsum/hrcount:NAN)+",\"max_heart_rate\":"+number(hrcount?maxhr:NAN)+",\"wall_time_valid\":"+(wall_valid?"true":"false")+",\"interrupted\":"+(interrupted?"true":"false")+",\"grade_estimated\":true,\"distance_estimated\":true,\"calories_estimated\":true,\"calories_source\":\"firmware_total_calories\",\"speed_source\":\"live_target\",\"calibration_max_level\":"+number(max_level)+",\"calibration_real_max_grade\":"+number(max_grade)+",\"calibration_zero_grade\":"+number(zero_grade)+",\"fat_g\":"+number(fat_kcal/9.0)+",\"carbs_g\":"+number(std::isfinite(cal)&&std::isfinite(fat_kcal)?std::max(0.0,double(cal)-double(fat_kcal))/4.0:NAN)+",\"avg_met\":"+number(met_avg)+",\"avg_vo2\":"+number(vo2_avg)+",\"energy_source\":\"firmware_per_second_acsm\",\"profile\":{\"weight_kg\":"+number(p_weight)+",\"age\":"+number(p_age)+",\"sex\":"+(p_male==1?"\"male\"":p_male==0?"\"female\"":"null")+",\"hr_max\":"+number(p_hrmax)+"},\"zone_sec\":["+zones_json()+"],\"target_zone\":"+(target_zone?std::to_string(target_zone):std::string("null"))+",\"max_speed_kmh\":"+number(running_samples?max_speed:NAN)+",\"ascent_m\":"+number(ascent)+",\"phases\":["+phases_json()+"],\"trimp\":"+number(trimp())+",\"blocks_sec\":300,\"blocks\":["+blocks_json()+"],\"zwift_profile\":"+zwift_json()+",\"route\":"+(route[0]?json_string(route):std::string("null"))+",\"program\":"+json_string(program)+",\"time_base\":\"treadmill\",\"sample_clock\":\"treadmill\"}\n";
   }
   bool write_summary(bool interrupted) {
     // LittleFS VFS exposes rename: write+sync+close first, rename within same mount.
@@ -237,7 +239,7 @@ class Engine {
     if(rename(tmp.c_str(),path(id,"json").c_str())!=0) return fail("summary_rename_failed");
     return true;
   }
-  bool finish(const Snapshot &s,bool interrupted=false) { if(!active)return true; if(!sample(s)||!checkpoint())return false;flush_block();FILE *f=file;file=nullptr;active=false;if(fclose(f)!=0)return fail(errno==ENOSPC?"storage_full":"csv_close_failed");return write_summary(interrupted); }
+  bool finish(const Snapshot &fs,bool interrupted=false) { if(!active)return true; Snapshot s=fs; s.speed=previous.speed; /* 24.10: at stop the target speed already jumped to the next program step — the last row repeats the real speed */ if(!sample(s)||!checkpoint())return false;flush_block();FILE *f=file;file=nullptr;active=false;if(fclose(f)!=0)return fail(errno==ENOSPC?"storage_full":"csv_close_failed");return write_summary(interrupted); }
   void recover(const std::string &i) {
     FILE *f=fopen(path(i,"csv").c_str(),"rb");if(!f){error="recovery_open_failed";return;}
     id=i;timer=elapsed=distance=hrsum=speedsum=gradesum=maxhr=0;samples=hrcount=running_samples=0;start_epoch=end_epoch=0;wall_valid=true;cal=NAN;max_level=max_grade=NAN;program[0]=0;route[0]=0;

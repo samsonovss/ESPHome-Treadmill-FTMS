@@ -461,6 +461,19 @@ text_sensor:
     icon: "mdi:monitor-dashboard"
     lambda: |-
       return id(program_status).state;  // Просто возвращаем текущее значение
+    on_value:
+      - lambda: |-
+          // 24.10: phase clock — the Treadmill Time second this phase began (pause keeps the phase running)
+          if (id(pause_active)) return;
+          const char ph = treadmill_recorder::phase_of(x);
+          const int seg = x.rfind("Fartlek ", 0) == 0 ? atoi(x.c_str() + 8) : 0;   // fartlek: each segment is a phase (two Fast in a row too)
+          static int seg_cur = -1;
+          if (ph == treadmill_recorder::phase_cur && seg == seg_cur) return;
+          treadmill_recorder::phase_cur = ph;
+          seg_cur = seg;
+          const float T = id(treadmill_time_sec).state;
+          treadmill_recorder::phase_start_t = std::isnan(T) ? 0 : (int) T;
+          id(phase_start_sensor).publish_state(treadmill_recorder::phase_start_t);
 
   # Статус FTMS (BLE‑протокол тренажёра)
   - platform: template

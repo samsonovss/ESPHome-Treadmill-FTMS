@@ -601,7 +601,7 @@ sensor:
     name: "Treadmill Speed"
     unit_of_measurement: "km/h"
     accuracy_decimals: 1
-    update_interval: 1s
+    update_interval: never   # 24.10: published on the Treadmill Time tick only (60-sensors on_value) — its own 1-s timer put speed changes on the wrong second live
     id: treadmill_speed_goal_sensor
     icon: "mdi:run"
 
@@ -770,6 +770,8 @@ sensor:
                 if (id(remaining_warm_up_time) % 60 == 0) id(set_warm_up_time).publish_state((float) (id(remaining_warm_up_time) / 60));
               }
               id(warm_up).execute();
+            } else if (id(motor_running) && id(remaining_run_time) > 0 && id(remaining_warm_up_time) <= 0) {
+              id(run_program).execute();   // 24.10: main part counts down on this clock (was a separate 1 s interval)
             } else if (id(motor_running) && id(remaining_cool_down_time) > 0 && id(remaining_run_time) <= 0) {
               id(remaining_cool_down_time)--;
               if (id(remaining_cool_down_time) % 60 == 0) id(set_cool_down_time).publish_state((float) (id(remaining_cool_down_time) / 60));
@@ -787,6 +789,13 @@ sensor:
             lambda: 'return id(motor_running) && id(program_select).current_option() == "Fartlek" && !id(warm_up_active) && id(remaining_cool_down_time) <= 0;'
           then:
             - script.execute: fartlek_tick
+      # 24.10: speed and the record row on the same tick as the clock, after the program step — the speed change and the
+      # phase boundary land on the same second (live and History), no snapping needed
+      - component.update: treadmill_distance_km
+      - component.update: treadmill_speed_goal_sensor
+      - script.execute:
+          id: recorder_event
+          kind: 2
       - component.update: total_calories
       - lambda: |-
           int total = (int)x;
@@ -826,11 +835,14 @@ sensor:
         return current_distance_km;
       }
 
-      // При работающем моторе и без паузы считаем дистанцию
-      float speed_kph = id(target_speed) / 10.0;
-      float distance_increment_km = speed_kph / 3600.0;  // км/ч → км/сек
-      current_distance_km += distance_increment_km;
-
+      // 24.10: one clock — the seconds come from Treadmill Time (updated on its tick), each elapsed second at the set
+      // speed that was running during it (as the recorder); was its own 1-s timer, which drifted from the workout time
+      static int last_T = -1; static float last_kph = 0;
+      float Tf = id(treadmill_time_sec).state; int T = isnan(Tf) ? 0 : (int) Tf;
+      if (last_T < 0 || T < last_T) last_T = T;
+      current_distance_km += last_kph * (T - last_T) / 3600.0f;
+      last_T = T;
+      last_kph = id(target_speed_goal) / 10.0f;   // set speed, as everywhere else (chart, record, calories, FTMS)
       return current_distance_km;
     on_value:
       - lambda: |-
@@ -841,7 +853,7 @@ sensor:
           }
     unit_of_measurement: "km"
     accuracy_decimals: 2
-    update_interval: 1s
+    update_interval: never   # 24.10: updated on the Treadmill Time tick
     icon: "mdi:map-marker-distance"
     state_class: measurement
 

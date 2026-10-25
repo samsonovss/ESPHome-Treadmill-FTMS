@@ -33,6 +33,8 @@ script:
           if (kind == 6) return;
           treadmill_recorder::Snapshot s;
           s.ms = millis();
+          s.dist = id(treadmill_distance_km).has_state() ? id(treadmill_distance_km).state : NAN;   // 24.10: one distance with the page
+          s.tt = id(treadmill_time_sec).has_state() ? id(treadmill_time_sec).state : NAN;   // 24.10: one clock with the page
           const auto now = id(sntp_time).now();
           s.epoch = now.is_valid() ? now.timestamp : 0;
           s.hr = id(fit_smart).connected() && id(heart_rate_sensor).has_state() && id(heart_rate_sensor).state > 0 ? id(heart_rate_sensor).state : NAN;
@@ -70,19 +72,8 @@ script:
             snprintf(s.route, sizeof(s.route), "%.191s", r.c_str());
           }
           s.paused = kind == 4 ? true : (kind == 5 ? false : id(pause_active));
-          {
-            // Program phase from the Status text (the same strings the display shows) → History bands.
-            const std::string &st = phase; char ph = 0;
-            if (st.rfind("Warm-up", 0) == 0) ph = st.find("Done") != std::string::npos ? 'R' : 'W';
-            else if (st.rfind("Cool-down", 0) == 0) ph = 'C';
-            else if (st.rfind("High ", 0) == 0 || st.rfind("HIIT High ", 0) == 0) ph = 'H';
-            else if (st.rfind("Recovery ", 0) == 0) ph = 'L';
-            else if (st.rfind("Fartlek ", 0) == 0 && st.find(" Fast ") != std::string::npos) ph = 'H';   // 16.10: fartlek fast segment = work
-            else if (st.rfind("Fartlek ", 0) == 0 && st.find(" Easy ") != std::string::npos) ph = 'L';   // 16.10: fartlek easy segment = rest
-            else if (st.find(", Run (") != std::string::npos ||
-                     (st.size() > 3 && st[0] == 'Z' && st[1] >= '1' && st[1] <= '5' && (st[2] == ':' || st[2] == ' '))) ph = 'R';  // "Z2: 108-126 bpm (12:00)" / route "Z2 112-130 · 1.2 km left" = Pulse Zone main part
-            s.phase = ph;
-          }
+          s.phase = treadmill_recorder::phase_of(phase);   // Program phase → History bands (same function as the phase clock)
+          s.phase_t = treadmill_recorder::phase_start_t;     // 24.10: its start on Treadmill Time
           if (kind == 1) {
             if (!id(calibration_active)) treadmill_recorder::start(s);
           } else if (kind == 3) {
@@ -92,12 +83,7 @@ script:
           } else {
             treadmill_recorder::sample(s);
           }
-interval:
-  - interval: 1s
-    then:
-      - script.execute:
-          id: recorder_event
-          kind: 2
+# 24.10: the 1-s sample is taken on the Treadmill Time tick (60-sensors.yaml), not by a separate 1-s interval — one clock
 text_sensor:
   - platform: template
     id: workout_recorder_status
@@ -125,3 +111,13 @@ number:
     initial_value: 2
     on_value:
       - lambda: 'treadmill_recorder::min_save_sec = (int) lroundf(x * 60);'
+
+sensor:
+  # 24.10: Treadmill Time (s) at which the current program phase began — the page draws phase boundaries by it.
+  - platform: template
+    id: phase_start_sensor
+    name: "Phase Start"
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: never

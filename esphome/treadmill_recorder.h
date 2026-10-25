@@ -21,6 +21,21 @@ inline std::atomic<bool> control_busy{false},recording{false},io_busy{true},heal
 inline std::atomic<uint32_t> latest_id{0};
 inline std::atomic<int> min_save_sec{0};   // workouts shorter than this (workout time, s) are deleted at stop; 0 = keep all (12.10)
 inline std::atomic<int> fault{0};
+// 24.10: program phase from the Status text (the strings the display shows) — one function for the recorder and the
+// phase clock. W warm-up, R main, H work, L rest, C cool-down, 0 none.
+inline char phase_of(const std::string &st){
+  if(st.rfind("Warm-up",0)==0) return st.find("Done")!=std::string::npos?'R':'W';
+  if(st.rfind("Cool-down",0)==0) return 'C';
+  if(st.rfind("High ",0)==0||st.rfind("HIIT High ",0)==0) return 'H';
+  if(st.rfind("Recovery ",0)==0) return 'L';
+  if(st.rfind("Fartlek ",0)==0&&st.find(" Fast ")!=std::string::npos) return 'H';
+  if(st.rfind("Fartlek ",0)==0&&st.find(" Easy ")!=std::string::npos) return 'L';
+  if(st.find(", Run (")!=std::string::npos||(st.size()>3&&st[0]=='Z'&&st[1]>='1'&&st[1]<='5'&&(st[2]==':'||st[2]==' '))) return 'R';
+  return 0;
+}
+// 24.10: Treadmill Time (s) at which the current phase began — set when Status changes phase, the same instant the
+// program switched; the page and the record place phase boundaries by it (no status/time arrival race).
+inline int phase_start_t=0; inline char phase_cur=0;
 inline std::atomic<size_t> archive_total{0},archive_used{0};
 inline void capacity(){size_t t=0,u=0;if(esp_littlefs_info(treadmill_storage::PARTITION,&t,&u)==ESP_OK){archive_total=t;archive_used=u;}}
 inline std::atomic_flag fs_lock=ATOMIC_FLAG_INIT;
@@ -34,8 +49,7 @@ inline const char *fault_text(){switch(fault.load()){case 1:return "storage_unav
 inline bool busy(); // Used by the program HTTP handler defined below.
 // ---- 17.10: finished workouts are gzip-compressed in the background (worker task, PSRAM buffers, never while running).
 // <id>.csv → <id>.csvz.tmp (fsync) → rename <id>.csvz → unlink <id>.csv. A power cut at any step leaves a readable copy;
-// the next pass finishes the job. Served to the browser with Content-Encoding: gzip (decompressed transparently).
-inline std::atomic<bool> compress_pending{true};
+// the plain .csv stays and is served as is. Served to the browser with Content-Encoding: gzip (decompressed transparently).
 inline void *ps_alloc(size_t n){void *p=heap_caps_malloc(n,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);return p;}
 inline bool compress_file(const std::string &id){
   auto csv=engine.path(id,"csv"),gz=engine.path(id,"csvz"),tmp=engine.path(id,"csvz.tmp");struct stat st{};
@@ -52,19 +66,9 @@ inline bool compress_file(const std::string &id){
   if(!ok||rename(tmp.c_str(),gz.c_str())!=0){unlink(tmp.c_str());return false;}
   unlink(csv.c_str());ESP_LOGI("recorder","Workout %s compressed %u -> %u bytes",id.c_str(),unsigned(n),unsigned(z));return true;
 }
-// One step per idle tick: tidy leftovers, compress the oldest finished workout. false = nothing left to do.
-inline bool compress_step(){
-  const uint64_t max=latest_id.load();
-  for(uint64_t k=1;k<=max;k++){char n[24];snprintf(n,sizeof n,"w%010llu",(unsigned long long)k);if((k&15)==0)vTaskDelay(1);
-    struct stat st{};std::string csv=engine.path(n,"csv"),gz=engine.path(n,"csvz"),js=engine.path(n,"json"),tmp=engine.path(n,"csvz.tmp");
-    if(stat(tmp.c_str(),&st)==0)unlink(tmp.c_str());
-    const bool hc=stat(csv.c_str(),&st)==0;if(!hc)continue;
-    if(stat(gz.c_str(),&st)==0){unlink(csv.c_str());continue;}   // renamed but csv not yet removed
-    if(stat(js.c_str(),&st)!=0)continue;                          // not finished (or being recovered)
-    if(engine.active&&engine.id==n)continue;
-    compress_file(n);return true;}
-  return false;
-}
+// 25.10: only the workout just finished is compressed (its id is known) — no walk over the archive. The record is in
+// PSRAM until the stop, so a crash never leaves half-written files to tidy up.
+inline std::string compress_id;
 // ---- Storage inventory (17.10): run by the worker task, never by HTTP (a long walk in httpd tripped the task WDT).
 // Pauses after every entry; result is a small JSON kept until the next scan. Read-only: nothing is written.
 inline std::atomic<int> scan_state{0}; // 0 none, 1 queued, 2 running, 3 ready, 4 failed
@@ -110,8 +114,8 @@ inline void worker(void *) {
   latest_id=uint32_t(std::min(engine.sequence,uint64_t(UINT32_MAX)));initialized=true;healthy=engine.error.empty();if(!healthy)fault=engine.error=="storage_full"?5:2;capacity();io_busy=false;
   Event e{};for(;;){if(xQueueReceive(queue,&e,pdMS_TO_TICKS(1000))!=pdTRUE){
       if(!healthy&&engine.active){while(fs_lock.test_and_set())vTaskDelay(pdMS_TO_TICKS(1));engine.finish(engine.previous,true);io_busy=false;recording=false;fs_lock.clear();}
-      else if(compress_pending&&!recording&&!engine.active&&!control_busy&&!mutation_pending&&uxQueueMessagesWaiting(queue)==0&&!fs_lock.test_and_set()){
-        io_busy=true;if(!compress_step())compress_pending=false;capacity();io_busy=false;fs_lock.clear();}
+      else if(!compress_id.empty()&&!recording&&!engine.active&&!control_busy&&!mutation_pending&&uxQueueMessagesWaiting(queue)==0&&!fs_lock.test_and_set()){
+        io_busy=true;struct stat st{};if(stat(engine.path(compress_id,"csv").c_str(),&st)==0&&stat(engine.path(compress_id,"json").c_str(),&st)==0)compress_file(compress_id);compress_id.clear();capacity();io_busy=false;fs_lock.clear();}
       continue;
     }io_busy=true;
     if(e.kind>=4){
@@ -123,7 +127,7 @@ inline void worker(void *) {
       else if(e.kind==7){ok=engine.purge(e.id);job_error=ok?"":engine.error;}
       else if(e.kind==8){scan_state=2;ok=scan_run();scan_state=ok?3:4;}
       else {ok=engine.move_selected(e.id,e.kind==5);job_error=ok?"":engine.error;}
-      job_state=ok?3:4;capacity();mutation_pending=false;compress_pending=true;
+      job_state=ok?3:4;capacity();mutation_pending=false;
       io_busy=engine.active||uxQueueMessagesWaiting(queue)>0;fs_lock.clear();continue;
     }
     while(fs_lock.test_and_set())vTaskDelay(pdMS_TO_TICKS(1));
@@ -132,7 +136,7 @@ inline void worker(void *) {
     if(ok&&e.kind==1&&engine.active&&!was_active){std::lock_guard<std::mutex> g(live_mutex);live_rows.clear();live_rows.reserve(3600);live_id=engine.id;memcpy(live_program,engine.program,sizeof live_program);live_start_epoch=engine.start_epoch;live_active=true;}
     if(ok&&engine.samples!=before)live_push(e.s);
     if(e.kind==3||!engine.active){std::lock_guard<std::mutex> g(live_mutex);live_active=false;}
-    if(e.kind==3)compress_pending=true;
+    if(ok&&e.kind==3)compress_id=engine.id;
     if(ok&&e.kind==3&&!engine.active){int lim=min_save_sec.load();std::string fid=engine.id;
       if(lim>0&&std::isfinite(engine.timer)&&engine.timer<lim){
         bool gone=engine.purge(fid);
@@ -140,10 +144,10 @@ inline void worker(void *) {
     latest_id=uint32_t(std::min(engine.sequence,uint64_t(UINT32_MAX)));if(e.kind==3||!ok)capacity();if(!ok){fault=engine.error=="storage_full"?5:2;healthy=false;recording=false;}io_busy=engine.active||uxQueueMessagesWaiting(queue)>0;fs_lock.clear();
   }
 }
-inline void initialize(){if(queue)return;queue=xQueueCreate(32,sizeof(Event));if(!queue){fault=4;io_busy=false;return;}if(xTaskCreate(worker,"workout_io",6144,nullptr,1,nullptr)!=pdPASS){fault=4;io_busy=false;}}
+inline void initialize(){if(queue)return;queue=xQueueCreate(32,sizeof(Event));if(!queue){fault=4;io_busy=false;return;}if(xTaskCreate(worker,"workout_io",16384,nullptr,1,nullptr) /* 24.10: pinning to core 0 starved Wi-Fi/BLE (BLE events dropped) — no affinity */ /* 24.10: 6144 overflowed (crash loop at boot while finishing/recovering a workout) */!=pdPASS){fault=4;io_busy=false;}}
 inline void enqueue(uint8_t kind,const Snapshot &s){if(!queue||(!healthy&&kind!=3)){if(!fault.load())fault=4;return;}Event e{kind,s};if(xQueueSend(queue,&e,0)!=pdTRUE){fault=3;healthy=false;if(kind==1)recording=false;}}
-inline void start(const Snapshot &s){if(!healthy)return;if(recording.exchange(true))return;io_busy=true;queued_sample_ms=s.ms;enqueue(1,s);}
-inline void sample(const Snapshot &s){if(!recording||!healthy)return;if(uint32_t(s.ms-queued_sample_ms)<1000)return;queued_sample_ms=s.ms;
+inline void start(const Snapshot &s){if(!healthy)return;if(recording.exchange(true))return;io_busy=true;queued_sample_ms=s.ms-1000;enqueue(1,s);} /* 24.10: the first Treadmill Time tick (T=0) may come <500 ms after the start — it was dropped as a duplicate, the record began at T=1 (gap at the left edge) */
+inline void sample(const Snapshot &s){if(!recording||!healthy)return;if(uint32_t(s.ms-queued_sample_ms)<500)return;queued_sample_ms=s.ms; /* 24.10: was <1000 — the 1-s interval jitters ±few ms, every tick at 999 ms was dropped (rows missing, step-less speed line) */
   // Four slots reserved for lifecycle events; overflow fails visibly, never controls motor.
   if(uxQueueSpacesAvailable(queue)<=4){fault=3;healthy=false;return;}enqueue(2,s);
 }
@@ -241,7 +245,7 @@ class Handler: public AsyncWebHandler {
       uint64_t cursor=after.empty()?0:strtoull(after.substr(1).c_str(),nullptr,10),max=latest_id.load();std::string out="{\"items\":[";unsigned scanned=0,count=0;
       // At most 100 IDs / 200 stat calls per page, including gaps; no entire-directory JSON.
       while(cursor<max&&scanned++<100&&count<unsigned(limit)){
-        cursor++;char n[24];snprintf(n,sizeof n,"w%010llu",(unsigned long long)cursor);struct stat st{};
+        cursor++;char n[24];snprintf(n,sizeof n,"w%010llu",(unsigned long long)cursor);struct stat st{};if((scanned&7)==0)vTaskDelay(1);   // 25.10: yield in the stat walk (task WDT)
         char tst=engine.trash_state(n);bool tomb=tst!='0'&&tst!='D';if(trashed){if(tst=='T'){ /* purged ('P') = gone, not in the trash */if(count++)out+=',';out+="{\"id\":"+json_string(n)+"}";}continue;}if(tomb)continue;
         bool complete=stat(engine.path(n,"json").c_str(),&st)==0;
         if(!complete&&errno!=ENOENT){send(r,500,"{\"error\":\"index_read_failed\"}");return;}

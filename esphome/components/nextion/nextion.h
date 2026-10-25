@@ -1088,6 +1088,17 @@ class Nextion final : public NextionBase, public PollingComponent, public uart::
 
 #ifdef USE_ESP32
   /**
+   * @brief Set the HTTP client TX buffer size for TFT upload requests.
+   * @param size Buffer size in bytes. 0 (default) keeps the ESP-IDF default.
+   *
+   * The TX buffer holds the request line. Redirects to long signed URLs (e.g. GitHub release assets,
+   * ~600+ characters) do not fit into the default and fail with "HTTP_CLIENT: Out of buffer".
+   */
+  void set_tft_upload_http_buffer_size_tx(uint16_t size) { this->tft_upload_http_buffer_size_tx_ = size; }
+#endif  // USE_ESP32
+
+#ifdef USE_ESP32
+  /**
    * @brief Set the watchdog timeout during TFT upload.
    *
    * The system watchdog timeout is temporarily adjusted to this value
@@ -1553,6 +1564,9 @@ class Nextion final : public NextionBase, public PollingComponent, public uart::
   uint32_t original_baud_rate_ = 0;
   bool upload_first_chunk_sent_ = false;
   uint16_t tft_upload_http_timeout_{4500};  ///< HTTP timeout in ms (default: 4.5s)
+#ifdef USE_ESP32
+  uint16_t tft_upload_http_buffer_size_tx_{0};  ///< HTTP TX buffer in bytes (0 = ESP-IDF default)
+#endif  // USE_ESP32
   uint8_t tft_upload_http_retries_{5};      ///< HTTP retry count (default: 5)
 
 #ifdef USE_ESP32

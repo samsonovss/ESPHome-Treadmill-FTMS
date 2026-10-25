@@ -56,14 +56,6 @@ script:
           int m = (id(route_wu_mode).current_option() == "Pulse" ? 1 : 0) | (id(route_cd_mode).current_option() == "Pulse" ? 2 : 0);
           if (p == "HIIT") { id(wc_hiit_w) = w; id(wc_hiit_c) = c; id(wc_hiit_m) = m; }
           else if (p == "Fartlek") { id(wc_fk_w) = w; id(wc_fk_c) = c; id(wc_fk_m) = m; }
-  - id: fartlek_end
-    then:
-      - delay: 300ms
-      - lambda: |-
-          id(recorder_event).execute(3);  // archive snapshot before reset (as HIIT)
-          id(motor_running) = false;
-          id(target_speed_goal) = 0;
-          id(stop_program).execute();   // 22.10: as HIIT — without it the status/screen stayed on
   - id: fartlek_tick
     then:
       - lambda: |-
@@ -77,9 +69,7 @@ script:
             ESP_LOGI("Fartlek", "Done: %d segments, %d s", nseg, tot);
             id(auto_mode) = false;
             if (id(set_cool_down_time).state > 0) { id(begin_cool_down).execute(); return; }   // 16.10: заминка после последнего отрезка
-            id(program_status).publish_state("Fartlek: done");
-            id(display_nextion).set_component_text("speed.tstatus", "Fartlek: done");
-            id(fartlek_end).execute();   // 22.10: stop a moment later — stopping inside this tick reset Treadmill Time before the web/record got the last second (0:59)
+            id(program_end).execute(std::string("Fartlek: done"));
           };
           // parse "dur/spd[/inc]" segments (cheap: ≤255 chars, once a second)
           struct Seg { int d; float s; float i; int z; };
@@ -109,6 +99,13 @@ script:
             id(recorder_event).execute(3);
             id(motor_running) = false;
             return;
+          }
+          // 24.10: advance the clock and switch the segment FIRST, then apply speed/status for the segment now running —
+          // as HIIT: the new speed and the new status land on the same Treadmill Time second as the boundary (was 1 s late)
+          bool seg_switched = false;
+          if (id(fartlek_seg) < (int) segs.size()) {
+            id(fartlek_t) += dT;
+            if (id(fartlek_t) >= segs[id(fartlek_seg)].d) { id(fartlek_t) -= segs[id(fartlek_seg)].d; id(fartlek_seg)++; seg_switched = true; }
           }
           int k = id(fartlek_seg);
           if (k >= (int) segs.size()) { finish((int) segs.size(), total); return; }
@@ -140,9 +137,8 @@ script:
           }
           if (!std::isnan(g.i) && fabsf(id(set_incline).state - g.i) > 0.05f) id(set_incline).publish_state(g.i);
           // status: segment, speed, time left in it
-          id(fartlek_t) += dT;
           int left = g.d - id(fartlek_t); if (left < 0) left = 0;
-          if (left <= 2) id(nx_beep).execute();   // 3-2-1 countdown + change of segment
+          if ((left >= 1 && left <= 2) || seg_switched) id(nx_beep).execute();   // 24.10: as HIIT — 2, 1 before the end + the change itself (the switch now happens before this line, left<=2 missed it)
           // 22.10: "Fartlek k/N Fast|Easy … (m:ss)" — the form the web and the recorder parse (was "Fartlek k/N m:ss": web saw no phase/time left)
           const char *kind = (g.z ? g.z >= 3 : g.s > 6.0f) ? "Fast" : "Easy";
           char buf[64], nx[48];   // nx sized for the worst case (no -Wformat-truncation); real text is ~14 chars
@@ -151,10 +147,6 @@ script:
           snprintf(nx, sizeof(nx), "%d/%d %s %d:%02d", k + 1, (int) segs.size(), kind, left / 60, left % 60);   // Nextion line is short (~21 chars)
           id(program_status).publish_state(buf);
           if (id(current_page) == 1) id(display_nextion).set_component_text("speed.tstatus", nx);
-          if (id(fartlek_t) >= g.d) {   // 22.10: carry the extra second; after the last segment end now, not a tick later
-            id(fartlek_t) -= g.d; id(fartlek_seg)++;
-            if (id(fartlek_seg) >= (int) segs.size()) finish((int) segs.size(), total);
-          }
 
 # 22.10: moved to Treadmill Time on_value (60-sensors.yaml), like HIIT
 #interval:

@@ -31,4 +31,4 @@ captive_portal:
 
 # Neutral defaults used by the shared packages.
 substitutions:
-  tft_url: https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases/download/display-v1.0.1/nextion_treadmill_4.3_ips_800x480.tft
+  tft_url: https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases/download/display-latest/nextion_treadmill_4.3_ips_800x480.tft

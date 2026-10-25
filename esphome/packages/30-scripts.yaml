@@ -570,7 +570,7 @@ script:
           static int warm_up_time = 0;
           warm_up_time++;
           static int wu_wait = 0;   // 22.10: seconds since the warm-up time ran out (No Pulse Stop counts from here)
-          if (id(remaining_warm_up_time) > 0) wu_wait = 0; else wu_wait++;
+          if (id(remaining_warm_up_time) > 0) wu_wait = -1; else wu_wait++;   // 24.10: -1 — the tick the warm-up time reaches 0 is second 0 of the wait (was counted as 1: 1 min + 60 s wait ended at 1:59)
           float heart_rate = id(heart_rate_sensor).state;
           if (!(heart_rate > 0)) heart_rate = NAN;   // 22.10: no strap = 0 bpm, not NaN — 0 counted as a real low pulse (speed steps, "Need 108 bpm")
           float zone_1_min = id(hr_zone_base) + (id(max_heart_rate) - id(hr_zone_base)) * id(wu_target_pct).state / 100.0f;   // 12.10: Warm-up Target HR, как зоны (Карвонен)
@@ -611,7 +611,7 @@ script:
             if ((heart_rate >= zone_1_min && !isnan(heart_rate)) || wu_no_hr || wu_time_mode) {
               id(warm_up_active) = false;
               warm_up_time = 0;
-              wu_wait = 0;
+              wu_wait = -1;
               if (id(route_wucd)) {   // 13.10: трасса начинается с 0 км после разминки
                 float d = id(treadmill_distance_km).state;
                 id(route_km_offset) = isnan(d) ? 0 : d;
@@ -623,11 +623,12 @@ script:
               if (program == "HIIT") {
                 // --- Переход сразу в HIIT ---
                 id(interval_time) = 0;
+                id(interval_cycle_count) = 0;
                 { float T0 = id(treadmill_time_sec).state; id(hiit_last_t) = isnan(T0) ? 0 : (int) T0; }   // 22.10: HIIT starts at the current Treadmill Time
                 id(interval_phase) = "high";
                 id(auto_mode) = false;
 
-                int cycles_left = (int)id(hiit_cycles).state;
+                int cycles_left = ((int)id(hiit_cycles).state - id(interval_cycle_count));
                 std::string zone = id(zone_select).current_option();
                 std::string short_zone = "Z" + zone;
 
@@ -687,7 +688,7 @@ script:
                     ESP_LOGI("FTMS", "Отправлено уведомление: %s (0x%02X)",
                             id(training_status_to_string)(status_code).c_str(), status_code);
                   }
-                  id(run_program).execute();
+                  // 24.10: no run_program here — it counts a second each call; the main part starts counting on the next Treadmill Time tick (this extra call made a 1 min run last 59 s)
                 } else {
                   if (id(last_training_status)[1] != 0x01) {
                     id(training_status_char).set_value({0x00, 0x01});
@@ -850,16 +851,27 @@ script:
           // условие завершения заминки
           bool pulse_ok = isnan(heart_rate) || heart_rate <= zone_1_max;
           if (id(remaining_cool_down_time) <= 0 || (!cd_time_mode && pulse_ok && min_speed_timer >= (int) id(cd_hold).state)) {
-            id(recorder_event).execute(3); // archive snapshot before reset
-            id(motor_running) = false;
-            id(target_speed_goal) = 0;   // только goal, target_speed подтянется интервалом
-            id(set_speed).publish_state(0.0);
-            id(treadmill_speed_goal_sensor).publish_state(0.0);
-            id(program_status).publish_state("Cool-down: Done");
-            id(display_nextion).set_component_text("speed.tstatus", "Cool-down: Done");
-            id(stop_program).execute();
             ESP_LOGI("CoolDown", "Cool-down completed");
+            id(program_end).execute(std::string("Cool-down: Done"));   // 24.10: same end as the programs (was immediate: last second lost, speed 0 before «stopped»)
           }
+
+  # 24.10: the one end of a timed program (HIIT, fartlek, main part, cool-down). Order matters for the web/record:
+  # last second recorded → motor off → «stopped» published at once (it had its own 1-s timer: the page saw speed 0,
+  # manual mode and a phase-less «Done» while still «running») → only then the Done status and the reset.
+  - id: program_end
+    mode: single
+    parameters:
+      msg: string
+    then:
+      - delay: 300ms   # the record/web get the last second (stopping inside the tick reset Treadmill Time: 0:59)
+      - lambda: |-
+          id(recorder_event).execute(3);  // archive snapshot before reset
+          id(motor_running) = false;
+          id(target_speed_goal) = 0;
+          id(ui_control_state).update();   // «stopped» first
+          id(program_status).publish_state(msg);
+          id(display_nextion).set_component_text("speed.tstatus", msg.c_str());
+          id(stop_program).execute();
 
   - id: start_hiit
     then:
@@ -882,8 +894,8 @@ script:
 #    - Работает на фиксированной скорости hiit_low_speed.
 #    - В статусе отображается как "Recovery".
 # 4. Переключение фаз по времени (hiit_high_duration / hiit_low_duration).
-# 5. После каждого полного цикла уменьшается hiit_cycles.
-# 6. Когда hiit_cycles = 0 → тренировка завершается.
+# 5. После каждого полного цикла растёт interval_cycle_count (настройка hiit_cycles не меняется).
+# 6. Когда interval_cycle_count = hiit_cycles → тренировка завершается.
 # 7. При каждой смене фазы обновляется статус на дисплее и отправляется FTMS.
 # ============================
   - id: interval_training
@@ -921,7 +933,7 @@ script:
                     id(zone_select).current_option().c_str(),
                     id(target_heart_rate_min), id(target_heart_rate_max));
 
-            if (id(interval_time) / 4 != prev_time / 4) {   // every 4 s (T may step by 0 or 2)
+            if (id(interval_time) / 4 != prev_time / 4 || prev_time == 0) {   // every 4 s (T may step by 0 or 2); 24.10: and at once at the start of a work phase — the first speed came 4 s late
               id(adjust_speed_by_pulse_hiit).execute();
             }
 
@@ -942,32 +954,36 @@ script:
 
             if (strcmp(phase, "high") == 0) {
               id(interval_phase) = "low";
+              {   // 24.10: rest speed in the same tick as the switch (it was set one tick later, the speed line lagged the phase by 1 s)
+                int rest_speed_now = (int)(id(hiit_low_speed).state * 10.0f);
+                if (id(target_speed_goal) != rest_speed_now) {
+                  id(target_speed_goal) = rest_speed_now;
+                  id(set_speed).publish_state(id(hiit_low_speed).state);
+                }
+              }
             } else {
               id(interval_phase) = "high";
               id(interval_cycle_count)++; // завершённый цикл
-              id(hiit_cycles).publish_state(id(hiit_cycles).state - 1);
+              // 24.10: the HIIT Cycles setting is no longer counted down (it stayed 0 after a run: «0×» in the setup) — left = setting − done
 
-              id(update_heart_rate_zones).execute();
-              id(adjust_speed_by_pulse_hiit).execute();
-              ESP_LOGI("IntervalTraining", "Начало High: мгновенная корректировка скорости по пульсу");
+              if (((int)id(hiit_cycles).state - id(interval_cycle_count)) > 0) {   // 24.10: after the last rest no new work step — it showed as a speed jump in the final record row
+                id(update_heart_rate_zones).execute();
+                id(adjust_speed_by_pulse_hiit).execute();
+                ESP_LOGI("IntervalTraining", "Начало High: мгновенная корректировка скорости по пульсу");
+              }
             }
 
             // Проверка завершения
-            if ((int)id(hiit_cycles).state <= 0) {
+            if (((int)id(hiit_cycles).state - id(interval_cycle_count)) <= 0) {
               ESP_LOGI("IntervalTraining", "HIIT завершён: выполнено %d циклов", id(interval_cycle_count));
               if (id(set_cool_down_time).state > 0) { id(begin_cool_down).execute(); return; }   // 16.10: заминка после последнего интервала
-              id(recorder_event).execute(3); // archive snapshot before reset
-              id(motor_running) = false;
-              id(target_speed_goal) = 0;
-              id(program_status).publish_state("HIIT: Done");
-              id(display_nextion).set_component_text("speed.tstatus", "HIIT: Done");
-              id(stop_program).execute();   // 22.10: without cool-down the run used to end without stop_program (status stuck at 0:01, screen stayed on)
+              id(program_end).execute(std::string("HIIT: Done"));
               return;
             }
           }
 
           // --- Обновляем статус на дисплее каждую секунду ---
-          int cycles_left = (int)id(hiit_cycles).state;
+          int cycles_left = ((int)id(hiit_cycles).state - id(interval_cycle_count));
           std::string phase_str = id(interval_phase);
           std::string phase_label;
           std::string zone_label;
@@ -1266,13 +1282,7 @@ script:
               id(cool_down).execute();
             } else {
               id(remaining_cool_down_time) = 0;
-              id(recorder_event).execute(3); // archive snapshot before reset
-              id(motor_running) = false;
-              id(target_speed_goal) = 0;   // только goal, speed подтянется интервалом
-              id(set_speed).publish_state(0.0);
-              id(treadmill_speed_goal_sensor).publish_state(0.0);
-              id(program_status).publish_state("Program: Done");
-              id(stop_program).execute();
+              id(program_end).execute(std::string("Program: Done"));
             }
           }
           
@@ -1399,6 +1409,9 @@ script:
           kind: 3
       - switch.turn_off: free_running_mode_switch
       - lambda: |-
+          // 24.10: «stopped» first (any stop: button, app, program end) — before the summary/reset publishes
+          id(motor_running) = false;
+          id(ui_control_state).update();
           //# 1. Сохраняем итоговые значения
           id(last_time_stored)     = id(treadmill_time_sec).state;
           id(last_distance_stored) = id(total_distance_km);

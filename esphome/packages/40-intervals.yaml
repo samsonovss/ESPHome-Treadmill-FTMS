@@ -342,6 +342,7 @@ interval:
                 static unsigned long last_adjust_ms = 0;   // когда последний раз меняли скорость
                 unsigned long now = millis();              // текущее время в миллисекундах
                 float heart_rate = id(heart_rate_sensor).state; // текущий пульс
+                if (!(heart_rate > 0)) heart_rate = NAN;   // 24.10: no strap = 0 bpm — counted as a low pulse, the speed rose +0.5 every 10 s while «waiting for pulse» (as fixed in warm_up 22.10)
 
                 // --- Этап разминки ---
                 // Условие: не ручной режим, разминка активна, время разминки вышло,
@@ -566,15 +567,7 @@ interval:
 # 2. Если условия выполняются:
 #    - запускает скрипт run_program,
 #      который отслеживает время тренировки и переводит её в фазу заминки.
-  - interval: 1s
-    then:
-      - if:
-          condition:
-            # Проверяем, что мотор работает, есть время тренировки, разминка завершена
-            lambda: 'return id(motor_running) && id(remaining_run_time) > 0 && id(remaining_warm_up_time) <= 0 && !id(warm_up_active);'
-          then:
-            # Выполняем скрипт основной программы для отслеживания времени и перехода к заминке
-            - script.execute: run_program
+# 24.10: moved to Treadmill Time on_value (60-sensors.yaml), like warm-up/HIIT/fartlek — a separate 1 s timer drifted (1 min run ended 3 s early)
 
 
 # interval 1s — управление заминкой.
