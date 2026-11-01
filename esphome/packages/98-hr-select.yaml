@@ -51,6 +51,7 @@ text_sensor:
 
 button:
   - platform: template
+    id: hr_scan_button
     name: "HR Scan"
     icon: "mdi:magnify"
     on_press:

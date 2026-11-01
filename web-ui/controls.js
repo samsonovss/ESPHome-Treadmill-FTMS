@@ -2,13 +2,22 @@
 // Native REST only; UI never publishes firmware state or retries commands.
 class TreadmillControls {
   constructor({send,now=()=>Date.now(),changed=()=>{}}){this.send=send;this.now=now;this.changed=changed;this.reset();}
-  reset(){this.lastActivity=0;this.entities=new Map();this.online=false;this.board=null;this.pending=new Map();this.notice='';this.changed();}
+  reset(){this.lastActivity=0;this.entities=new Map();this.online=false;this.cachedUntil=0;this.board=null;this.pending=new Map();this.notice='';this.changed();}
   disconnect(){this.online=false;this.entities.clear();this.board=null;this.notice=this.pending.size?'uncertain':'';this.pending.clear();this.changed();}
-  ingest(d){const split=d.id?.match(/^([^/-]+)[/-](.*)$/);if(!split)return;const domain=d.domain||split[1],name=d.name||split[2];const key=domain+'/'+name.toLowerCase().replace(/ /g,'_');const old=this.entities.get(key)||{};this.entities.set(key,{...old,...d,domain,name});this.online=true;this.lastActivity=this.now();
+  ingest(d){const split=d.id?.match(/^([^/-]+)[/-](.*)$/);if(!split)return;const domain=d.domain||split[1],name=d.name||split[2];const key=domain+'/'+name.toLowerCase().replace(/ /g,'_');const old=this.entities.get(key)||{};this.entities.set(key,{...old,...d,domain,name,_cached:false});this.online=true;this.lastActivity=this.now();
     if(key==='text_sensor/ui_control_state'){const m=String(d.value??d.state).match(/^(running|paused|stopped)\|(manual|auto)(?:\|\d+)?$/);if(m)this.board={state:m[1],mode:m[2],at:this.now()};else this.board=null;}
     for(const [k,p] of this.pending){if(this.now()>p.at && this.confirmed(p)){this.pending.delete(k);this.notice='confirmed';}}
     this.changed();
   }
+  // Last known states saved in the browser: shown right after the page opens, until live data arrives
+  // (CACHE_MS at most). They never enable commands: allowed() still needs fresh() live data.
+  hydrate(list){if(this.online||!Array.isArray(list))return;for(const d of list){const split=d?.id?.match?.(/^([^/-]+)[/-](.*)$/);if(!split)continue;const domain=d.domain||split[1],name=d.name||split[2];this.entities.set(domain+'/'+name.toLowerCase().replace(/ /g,'_'),{...d,domain,name,_cached:true});}this.cachedUntil=this.now()+TreadmillControls.CACHE_MS;this.changed();}
+  snapshot(){return [...this.entities.values()].filter(d=>!d._cached).map(({_seen,...d})=>d);}
+  // Values may be displayed: live and fresh, or (while the page is still connecting) the saved copy merged with
+  // the first live states, until the board status arrives or CACHE_MS passes.
+  shown(){return this.fresh()||(!this.board&&this.now()<this.cachedUntil);}
+  // New SSE stream: the board re-sends every state, so keep what is shown and only drop unconfirmed commands.
+  reconnected(){this.notice=this.pending.size?'uncertain':'';this.pending.clear();this.changed();}
   // Liveness = any SSE traffic (state events or web_server ping every ~10 s), like the Silvia UI.
   // UI Control State itself is published only on change.
   activity(){this.lastActivity=this.now();}
@@ -25,4 +34,5 @@ class TreadmillControls {
   tick(){for(const [k,p] of this.pending)if(this.now()-p.at>=12000){this.pending.delete(k);this.notice='timeout';}this.changed();}
 }
 TreadmillControls.STALE_MS=15000;
+TreadmillControls.CACHE_MS=20000;
 if(typeof module!=='undefined')module.exports=TreadmillControls;

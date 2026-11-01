@@ -19,6 +19,7 @@ packages:
   99_motor_cmd: !include 99-motor-cmd.yaml
   94_nextion_routes: !include 94-nextion-routes.yaml
   94_nextion_presets: !include 94-nextion-presets.yaml
+  94_nextion_hr: !include 94-nextion-hr.yaml
   93_fw_update: !include 93-fw-update.yaml
 
 esphome:
@@ -26,7 +27,7 @@ esphome:
   friendly_name: treadmill
   project:
     name: samsonovss.treadmill
-    version: "1.0.0-beta.6"
+    version: "1.0.0-beta.7"
   includes:
     - treadmill_dashboard.h
     - treadmill_storage.h

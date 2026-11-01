@@ -3,7 +3,7 @@
 // Browser side: SSE silences and reconnects, failed/slow requests, script errors, long frames.
 // Board side (from existing entities): reboots (Uptime went back), Reset Reason, min free heap, loop time, Wi-Fi.
 const TMDiag=(()=>{
- const KEY='tm.diag.v1',MAX=200,GAP_MS=12000,SLOW_MS=3000,LONG_MS=200;
+ const KEY='tm.diag.v1',MAX=200,GAP_MS=12000,SLOW_MS=3000,LONG_MS=200,MEM_FREE=24576,MEM_BLOCK=8192,MEM_MS=60000;
  let S;try{S=JSON.parse(localStorage.getItem(KEY))||{};}catch{S={};}
  S.ev=Array.isArray(S.ev)?S.ev:[];S.b=S.b||{};
  let saveT=0;const save=()=>{clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(KEY,JSON.stringify(S));}catch{}},500);};
@@ -25,7 +25,13 @@ const TMDiag=(()=>{
   if(k==='pulse_monitor'){const on=/^подключ|^connected/i.test(String(v??''));if(on&&!b.hrOn){b.hrSince=Date.now();if(b.hrOn===false)log('hr','Пульсометр подключился');}if(!on&&b.hrOn){const run=ent.treadmill_usage;if(run===true||/^(on|true|1)$/i.test(String(run)))log('hrdrop','Пульсометр пропал во время бега');else log('hr','Пульсометр отключился');}b.hrOn=on;}
   if(k==='heap_free'&&Number.isFinite(+v)){b.heap=+v;b.heapMin=Math.min(b.heapMin??+v,+v);}
   if(k==='heap_max_block'&&Number.isFinite(+v)){b.block=+v;b.blockMin=Math.min(b.blockMin??+v,+v);}
+  // Short dips (HTTPS update check, page download, OTA) are normal; only memory that stays low for a minute counts.
+  if((k==='heap_free'||k==='heap_max_block')&&b.heap!=null&&b.block!=null){const low=b.heap<MEM_FREE||b.block<MEM_BLOCK,now=Date.now();
+   if(!low){b.lowSince=null;b.lowLogged=false;}else{b.lowSince??=now;if(!b.lowLogged&&now-b.lowSince>=MEM_MS){b.lowLogged=true;log('mem',`Мало памяти дольше минуты: свободно ${Math.round(b.heap/1024)} КБ, блок ${Math.round(b.block/1024)} КБ`);}}}
   if(k==='loop_time'&&Number.isFinite(+v)){b.loop=+v;b.loopMax=Math.max(b.loopMax??0,+v);if(+v>500)log('loop',`Цикл прошивки ${Math.round(+v)} мс`);}
+  if(k==='memory_trend'&&v){if(v==='decreasing'&&b.trend!=='decreasing')log('leak',`Свободная память уменьшается: −${ent.memory_drop??'?'} КБ с запуска`);b.trend=String(v);}
+  if(k==='memory_drop'&&Number.isFinite(+v))b.drop=+v;
+  if(k==='free_psram'&&Number.isFinite(+v))b.psram=+v;
   if(k==='esp32_wifi_signal'&&Number.isFinite(+v)){b.rssi=+v;b.rssiMin=Math.min(b.rssiMin??+v,+v);}
   save();}
  const ES=window.EventSource;
@@ -44,7 +50,7 @@ const TMDiag=(()=>{
  try{new PerformanceObserver(l=>{for(const x of l.getEntries())if(x.duration>=LONG_MS)log('long',`Страница подвисла на ${Math.round(x.duration)} мс`,{ms:Math.round(x.duration)});}).observe({type:'longtask',buffered:false});}catch{}
  log('open','Страница открыта · '+(navigator.userAgent.match(/(Chrome|Firefox|Safari|Edg)\/[\d]+/)?.[0]||'браузер'));
  const day=()=>{const from=Date.now()-864e5,ev=S.ev.filter(e=>e.t>=from),c=k=>ev.filter(e=>e.k===k).reduce((a,e)=>a+(e.n||1),0);
-  return {boots:c('boot'),gaps:c('gap'),maxGap:Math.max(0,...ev.filter(e=>e.k==='gap').map(e=>e.ms||0)),sse:c('sse'),req:c('req'),slow:c('slow'),js:c('js'),long:c('long'),loop:c('loop'),hrdrop:c('hrdrop')};};
+  return {boots:c('boot'),gaps:c('gap'),maxGap:Math.max(0,...ev.filter(e=>e.k==='gap').map(e=>e.ms||0)),sse:c('sse'),req:c('req'),slow:c('slow'),js:c('js'),long:c('long'),loop:c('loop'),hrdrop:c('hrdrop'),mem:c('mem')};};
  return {log,day,board:()=>({...S.b,uptime:ent.uptime!=null?+ent.uptime:S.b.up,rr:ent.reset_reason??S.b.rr}),events:()=>S.ev.slice(),stalled:()=>!!gapOpen,
   clear(){S.ev=[];S.b={up:S.b.up,rr:S.b.rr};save();emit();},on(f){listeners.add(f);return()=>listeners.delete(f);},
   report(){const b=this.board(),d=day(),f=t=>new Date(t).toISOString().replace('T',' ').slice(0,19);return ['Treadmill diag '+f(Date.now())+' UTC',navigator.userAgent,'board: '+JSON.stringify(b),'24h: '+JSON.stringify(d),...S.ev.slice(-80).map(e=>`${f(e.t)} ${e.k}${e.n>1?' ×'+e.n:''} ${e.m}`)].join('\n');}};

@@ -214,24 +214,7 @@ display:
               }
             }
 
-            // 2. Обновляем Bluetooth-страницу (page 19) каждую секунду
-            if (id(current_page) == 19) {
-              if (id(fit_smart).connected()) {
-                char buf[12];
-                sprintf(buf, "%.0f%%", id(battery_level_sensor).state);
-                id(display_nextion).set_component_text("bluetooth.battery", buf);
-
-                char hr_str[10];
-                sprintf(hr_str, "%.0f", id(heart_rate_sensor).state);
-                id(display_nextion).set_component_text("bluetooth.bpm", hr_str);
-
-                id(display_nextion).set_component_text("bluetooth.name_bt", id(name_bt_sensor).state.c_str());
-              } else {
-                id(display_nextion).set_component_text("bluetooth.bpm", "");
-                id(display_nextion).set_component_text("bluetooth.name_bt", "-");
-                id(display_nextion).set_component_text("bluetooth.battery", "-");
-              }
-            }
+            // 2. Bluetooth page (19) is filled every second by nx_hr_render (94-nextion-hr.yaml).
 
 # Wake the display on every start (12.10): the start may come from the web, HA or Zwift while the screen is asleep.
 # Only a wake-up + brightness; the display's own auto-off (TOF distance) works as before.
@@ -247,6 +230,33 @@ interval:
             ESP_LOGI("Nextion", "Start: display woken, brightness restored");
           }
           was = run;
+
+  # Main page (0) status bar: tTime (HH:MM), tHr (bpm) and pHr (heart: grey = no monitor, red = connected).
+  # Sent only on change; caches reset on every page change so a fresh page 0 is filled at once.
+  - interval: 1s
+    then:
+      - lambda: |-
+          static const int HR_PIC_OFF = 104, HR_PIC_ON = 103;   // Nextion picture ids: grey / red heart
+          static int page = -1, hr_shown = -2, pic_shown = -2;
+          static char time_shown[8] = "";
+          if (id(current_page) != page) { page = id(current_page); hr_shown = pic_shown = -2; time_shown[0] = 0; }
+          if (page == 19) id(nx_hr_render).execute();   // HR monitor picker (94-nextion-hr.yaml)
+          if (page != 0) return;
+          auto *d = id(display_nextion);
+          auto now = id(sntp_time).now();
+          char t[8] = "--:--";
+          if (now.is_valid()) snprintf(t, sizeof t, "%02u:%02u", (unsigned) (now.hour % 24), (unsigned) (now.minute % 60));
+          if (strcmp(t, time_shown) != 0) { d->set_component_text("mainPage.tTime", t); strcpy(time_shown, t); }
+          const bool conn = id(fit_smart).connected();
+          const float v = id(heart_rate_sensor).state;
+          const int hr = (conn && !isnan(v) && v > 0) ? (int) lroundf(v) : -1;
+          if (hr != hr_shown) {
+            if (hr > 0) d->set_component_text_printf("mainPage.tHr", "%d", hr);
+            else d->set_component_text("mainPage.tHr", "");
+            hr_shown = hr;
+          }
+          const int pic = conn ? HR_PIC_ON : HR_PIC_OFF;
+          if (pic >= 0 && pic != pic_shown) { d->send_command_printf("mainPage.pHr.pic=%d", pic); pic_shown = pic; }
 
 # Display (TFT) version: string variable "ver" on page "load" (global). Read once at boot, then rarely.
 text_sensor:

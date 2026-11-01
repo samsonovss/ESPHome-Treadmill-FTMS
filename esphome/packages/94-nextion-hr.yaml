@@ -1,0 +1,132 @@
+# Nextion page 19 (bluetooth): pick the heart-rate monitor from the display.
+# bScan (id 7) runs the same 20 s "HR Scan" as the web UI; rows h0..h3 (ids 9..12) list what was found
+# (name · rssi, strongest first; a connected monitor is listed first); tapping a row stores its address in
+# "HR Monitor MAC". tStatus shows the search state, tMac the current monitor address.
+# The selected row gets HR_ROW_BCO_SEL, the others HR_ROW_BCO (RGB565, match the page design).
+globals:
+  - id: nx_hr_macs
+    type: std::vector<std::string>
+  - id: nx_hr_note
+    type: std::string
+  - id: nx_hr_searched          # Search pressed during this visit of page 19: show its result
+    type: bool
+    initial_value: 'false'
+
+script:
+  - id: nx_hr_render
+    then:
+      - lambda: |-
+          static const int HR_ROW_BCO = 8452, HR_ROW_BCO_SEL = 34816;
+          static std::string last, last_info;
+          static uint32_t last_call = 0;
+          if (id(current_page) != 19) { last.clear(); last_info.clear(); return; }
+          if (millis() - last_call > 2500) { last.clear(); last_info.clear(); id(nx_hr_searched) = false; id(nx_hr_note).clear(); }   // page re-opened: send everything again
+          last_call = millis();
+          auto *d = id(display_nextion);
+          const uint64_t cur = id(fit_smart).get_address();
+          char cur_mac[18];
+          snprintf(cur_mac, sizeof cur_mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+                   (int) (cur >> 40) & 0xFF, (int) (cur >> 32) & 0xFF, (int) (cur >> 24) & 0xFF,
+                   (int) (cur >> 16) & 0xFF, (int) (cur >> 8) & 0xFF, (int) cur & 0xFF);
+          const bool conn = id(fit_smart).connected();
+          // A connected monitor stops advertising, so the scan cannot find it: list it first.
+          std::vector<std::string> macs, lines;
+          if (conn) {
+            const std::string &nm = id(name_bt_sensor).state;
+            macs.push_back(cur_mac); lines.push_back((nm.empty() ? std::string(cur_mac) : nm) + " \xc2\xb7 connected");
+          }
+          // Rows from "MAC|name|rssi;MAC|name|rssi;…" (empty / "scanning" / "none" = no rows).
+          const std::string res = id(nx_hr_searched) ? id(hr_scan_result).state : std::string();
+          if (res != "scanning" && res != "none") {
+            size_t p = 0;
+            while (p < res.size() && macs.size() < 4) {
+              size_t e = res.find(';', p); if (e == std::string::npos) e = res.size();
+              std::string it = res.substr(p, e - p); p = e + 1;
+              size_t a = it.find('|'), b = it.rfind('|');
+              if (a == std::string::npos || b <= a) continue;
+              std::string mac = it.substr(0, a), name = it.substr(a + 1, b - a - 1), rssi = it.substr(b + 1);
+              if (name.empty()) name = mac;
+              std::string up = mac; for (auto &c : up) c = toupper(c);
+              if (conn && up == cur_mac) continue;   // already listed as connected
+              macs.push_back(mac); lines.push_back(name + " \xc2\xb7 " + rssi + " dBm");
+            }
+          }
+          std::string status;
+          const bool scanning = id(hr_scan_until) != 0 && (int32_t) (millis() - id(hr_scan_until)) < 0;
+          if (scanning) status = "Searching... " + to_string((int) ((id(hr_scan_until) - millis()) / 1000) + 1) + " s";
+          else if (!id(nx_hr_note).empty()) status = id(nx_hr_note);
+          else if (macs.size() > (conn ? 1u : 0u)) status = "Found: " + to_string(macs.size() - (conn ? 1 : 0));
+          else if (res == "none") status = "No monitors found";
+          else status = "Tap Search";
+          if (!id(nx_hr_note).empty() && id(fit_smart).connected()) id(nx_hr_note).clear();
+          // Current monitor: status, heart rate, model, battery.
+          char hr_s[8] = "", bat_s[8] = "-";
+          if (conn) {
+            const float v = id(heart_rate_sensor).state, b = id(battery_level_sensor).state;
+            if (!isnan(v) && v > 0) snprintf(hr_s, sizeof hr_s, "%d", (int) lroundf(v));
+            if (!isnan(b)) snprintf(bat_s, sizeof bat_s, "%d%%", (int) lroundf(b));
+          }
+          const std::string model = conn ? id(name_bt_sensor).state : std::string("-");
+          // Send only when something changed (this runs every second while page 19 is open).
+          const std::string info = std::string(conn ? "1" : "0") + "#" + hr_s + "#" + bat_s + "#" + model;
+          if (info != last_info) {
+            last_info = info;
+            d->set_component_text("bluetooth.status_bt", conn ? "Connected" : "Not connected");
+            d->set_component_text("bluetooth.tHr", hr_s);
+            d->set_component_text("bluetooth.tBatt", bat_s);
+            d->set_component_text("bluetooth.tModel", model.c_str());
+          }
+          std::string key = status + "#" + cur_mac;
+          for (auto &l : lines) key += "#" + l;
+          if (key == last) return;
+          last = key;
+          id(nx_hr_macs) = macs;
+          d->set_component_text("bluetooth.tStatus", status.c_str());
+          d->set_component_text("bluetooth.tMac", cur_mac);
+          for (int i = 0; i < 4; i++) {
+            char comp[20];
+            snprintf(comp, sizeof comp, "bluetooth.h%d", i);
+            const bool has = i < (int) lines.size();
+            std::string txt = has ? lines[i] : "";
+            for (auto &c : txt) if (c == '"' || c == '\\') c = '\'';
+            d->set_component_text(comp, txt.c_str());
+            bool sel = false;
+            if (has) {
+              std::string m = macs[i];
+              for (auto &c : m) c = toupper(c);
+              sel = m == cur_mac;
+            }
+            d->send_command_printf("bluetooth.h%d.bco=%d", i, sel ? HR_ROW_BCO_SEL : HR_ROW_BCO);
+            d->send_command_printf("vis h%d,%d", i, has ? 1 : 0);
+          }
+
+  - id: nx_hr_pick
+    parameters:
+      row: int
+    then:
+      - lambda: |-
+          if (row >= (int) id(nx_hr_macs).size()) return;
+          const std::string mac = id(nx_hr_macs)[row];
+          ESP_LOGI("NxHr", "Display picked heart-rate monitor %s", mac.c_str());
+          id(nx_hr_note) = "Connecting...";
+          id(hr_monitor_mac).make_call().set_value(mac).perform();
+      - script.execute: nx_hr_render
+
+binary_sensor:
+  - platform: nextion
+    page_id: 19
+    component_id: 7
+    id: nx_hr_scan
+    internal: true
+    on_press:
+      then:
+        - lambda: |-
+            id(nx_hr_scan).publish_state(false);
+            id(nx_hr_note).clear();
+            id(nx_hr_searched) = true;
+        - button.press: hr_scan_button
+        - script.execute: nx_hr_render
+  - {platform: nextion, page_id: 19, component_id: 9,  id: nx_h0, internal: true, on_press: {then: [{lambda: 'id(nx_h0).publish_state(false);'}, {script.execute: {id: nx_hr_pick, row: 0}}]}}
+  - {platform: nextion, page_id: 19, component_id: 10, id: nx_h1, internal: true, on_press: {then: [{lambda: 'id(nx_h1).publish_state(false);'}, {script.execute: {id: nx_hr_pick, row: 1}}]}}
+  - {platform: nextion, page_id: 19, component_id: 11, id: nx_h2, internal: true, on_press: {then: [{lambda: 'id(nx_h2).publish_state(false);'}, {script.execute: {id: nx_hr_pick, row: 2}}]}}
+  - {platform: nextion, page_id: 19, component_id: 12, id: nx_h3, internal: true, on_press: {then: [{lambda: 'id(nx_h3).publish_state(false);'}, {script.execute: {id: nx_hr_pick, row: 3}}]}}

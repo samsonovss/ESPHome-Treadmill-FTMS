@@ -8,7 +8,6 @@ binary_sensor:
     lambda: |-
       return id(treadmill_speed_goal_sensor).state > 0.0;
 
-
 # Speed Up Button — физическая кнопка на GPIO13, увеличивает скорость.
   - platform: gpio
     pin:
@@ -31,7 +30,6 @@ binary_sensor:
       - delayed_on: 50ms
       - delayed_off: 50ms
 
-
 # Speed Down Button — физическая кнопка на GPIO14, уменьшает скорость.
   - platform: gpio
     pin:
@@ -53,7 +51,6 @@ binary_sensor:
     filters:
       - delayed_on: 50ms
       - delayed_off: 50ms
-
 
 # Incline Up Button — физическая кнопка на GPIO9, увеличивает наклон.
   - platform: gpio
@@ -98,7 +95,6 @@ binary_sensor:
     filters:
       - delayed_on: 50ms
       - delayed_off: 50ms
-
 
   - platform: nextion
     page_id: 1
@@ -146,55 +142,27 @@ binary_sensor:
   # Запускает ручной режим после задержки, сбрасывает выбор программы.
   - platform: nextion
     page_id: 0
-    component_id: 2
+    component_id: 3
     id: bquick_start
     on_press:
       then:
+        - lambda: 'ESP_LOGI("Nextion", "Button (bquick_start) press, start in 3.4 s");'
         - delay: 3400ms
         - script.execute: start_manual
         - lambda: |-
             id(program_select).publish_state("None");
             id(bquick_start).publish_state(false);
 
-  # bquick_start1 — кнопка быстрого старта на странице выбора карты.
-  # Аналогично запускает ручной режим, сбрасывает программу.
-  - platform: nextion
-    page_id: 11
-    component_id: 1
-    id: bquick_start1
-    on_press:
-      then:
-        - delay: 3400ms
-        - script.execute: start_manual
-        - lambda: |-
-            id(program_select).publish_state("None");
-            id(bquick_start).publish_state(false);
-
-  # bfree_run — плитка Fartlek на главной странице (как bhiit): выбирает программу Fartlek.
+  # bfartlek — плитка Fartlek на главной странице (как bhiit): выбирает программу Fartlek.
   - platform: nextion
     page_id: 0
-    component_id: 7
-    id: bfree_run
+    component_id: 8
+    id: bfartlek
     on_press:
       then:
         - lambda: |-
             id(program_select).publish_state("Fartlek");
-            id(bfree_run).publish_state(false);
-
-  # bfree_run1 — кнопка Free Run на странице выбора карты.
-  # То же самое, что и bfree_run, но с другой вкладки.
-  - platform: nextion
-    page_id: 11
-    component_id: 3
-    id: bfree_run1
-    on_press:
-      then:
-        - delay: 3400ms
-        - switch.turn_on: free_running_mode_switch
-        - script.execute: start_manual
-        - lambda: |-
-            id(program_select).publish_state("None");
-            id(bfree_run).publish_state(false);
+            id(bfartlek).publish_state(false);
 
   # b_cal — кнопка калибровки (страница caldistspeed).
   # Меняет надписи на дисплее, показывает обратный отсчёт, запускает скрипт калибровки.
@@ -239,7 +207,7 @@ binary_sensor:
   # Логирует событие, сбрасывает состояние кнопки.
   - platform: nextion
     page_id: 0
-    component_id: 5
+    component_id: 6
     id: bmap
     on_press:
       then:
@@ -251,7 +219,7 @@ binary_sensor:
   # Логирует событие, сбрасывает состояние кнопки.
   - platform: nextion
     page_id: 0
-    component_id: 6
+    component_id: 7
     id: bsettings
     on_press:
       then:
@@ -259,24 +227,11 @@ binary_sensor:
             ESP_LOGI("Nextion", "INFO tab (bsettings) press");
             id(bsettings).publish_state(false);
 
-  # map_start_hrzone — кнопка запуска программы Pulse Zone со страницы карты.
-  # Устанавливает программу Pulse Zone, логирует событие, сбрасывает кнопку.
-  - platform: nextion
-    page_id: 11
-    component_id: 2
-    id: map_start_hrzone
-    on_press:
-      then:
-        - lambda: |-
-            id(program_select).publish_state("Pulse Zone");  // Выбираем программу
-            ESP_LOGI("Nextion", "INFO tab (map start hrzone) press"); 
-            id(map_start_hrzone).publish_state(false);
-
   # bhiit — кнопка запуска программы HIIT (главная страница).
   # Устанавливает программу HIIT, сбрасывает кнопку.
   - platform: nextion
     page_id: 0
-    component_id: 4
+    component_id: 5
     id: bhiit
     on_press:
       then:
@@ -288,7 +243,7 @@ binary_sensor:
   # Устанавливает программу Pulse Zone, сбрасывает кнопку.
   - platform: nextion
     page_id: 0
-    component_id: 3
+    component_id: 4
     id: bhr_zone
     on_press:
       then:
@@ -495,5 +450,4 @@ text_sensor:
   #   name: "Pulse"
   #   service_uuid: '180d'
   #   characteristic_uuid: '2a38'
-
 

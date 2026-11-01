@@ -7,3 +7,58 @@ sensor:
     id: diag_uptime
     update_interval: 60s
     entity_category: diagnostic
+
+  # Memory trend (leak watch): how much idle free internal RAM has dropped since the baseline (KB, ≥ 0).
+  - platform: template
+    name: "Memory Drop"
+    id: mem_drop_kb
+    unit_of_measurement: "KB"
+    accuracy_decimals: 0
+    icon: "mdi:memory"
+    entity_category: diagnostic
+    update_interval: never
+
+# Leak watch. Every 10 s the free internal heap is sampled; a 10-minute window counts only if the belt was idle
+# the whole time, and its MAXIMUM is kept (transient allocations — web requests, TLS, recorder — only lower the
+# free heap for a moment; a leak lowers the maximum too). The first idle window after 1 h of uptime is the
+# baseline; the trend compares it with the median of the last 6 idle windows. History (7 days of windows) lives
+# in PSRAM. Reset on reboot by design: a reboot clears any leak, so "stable · 3 d" means 3 days without one.
+text_sensor:
+  - platform: template
+    name: "Memory Trend"
+    id: mem_trend
+    icon: "mdi:chart-line-variant"
+    entity_category: diagnostic
+    update_interval: never
+
+interval:
+  - interval: 10s
+    then:
+      - lambda: |-
+          static const uint32_t WIN_SAMPLES = 60, HIST = 7 * 24 * 6, WARMUP_S = 3600, DROP_WARN = 8 * 1024;
+          static uint32_t *hist = nullptr, n_hist = 0, base = 0, win_max = 0, win_n = 0;
+          static bool win_busy = false, started = false;
+          if (!started) { started = true; id(mem_trend).publish_state("collecting"); }
+          if (millis() / 1000 < WARMUP_S) return;
+          if (hist == nullptr) {
+            hist = (uint32_t *) heap_caps_malloc(HIST * sizeof(uint32_t), MALLOC_CAP_SPIRAM);
+            if (hist == nullptr) return;
+          }
+          const uint32_t fr = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+          if (id(motor_running)) win_busy = true;
+          if (fr > win_max) win_max = fr;
+          if (++win_n < WIN_SAMPLES) return;
+          const uint32_t w = win_max; const bool busy = win_busy;
+          win_max = 0; win_n = 0; win_busy = false;
+          if (busy) return;                                   // belt ran during this window: not comparable
+          if (n_hist < HIST) hist[n_hist++] = w;
+          else { memmove(hist, hist + 1, (HIST - 1) * sizeof(uint32_t)); hist[HIST - 1] = w; }
+          if (base == 0) base = w;
+          const uint32_t k = n_hist < 6 ? n_hist : 6;
+          uint32_t last[6];
+          for (uint32_t i = 0; i < k; i++) last[i] = hist[n_hist - k + i];
+          std::sort(last, last + k);
+          const uint32_t med = last[k / 2];
+          const uint32_t drop = base > med ? base - med : 0;
+          id(mem_drop_kb).publish_state(roundf(drop / 1024.0f));
+          id(mem_trend).publish_state(drop >= DROP_WARN ? "decreasing" : "stable");

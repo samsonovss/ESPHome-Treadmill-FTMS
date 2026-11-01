@@ -42,7 +42,6 @@ ble_client:
           // Устанавливаем значение hr в 1 (подключено)
           id(display_nextion).send_command_printf("hr=1");
           ESP_LOGI("Nextion", "Sending command for hr=1");
-          id(display_nextion).set_component_text("bluetooth.status_bt", "connected");
       - if:
           condition:
             lambda: 'return id(current_page) == 0;'
@@ -83,10 +82,9 @@ ble_client:
             ESP_LOGI("Nextion", "Sending command for mainPage.bhr_zone.aph=80 and mainPage.bhiit.aph=80");
             //id(display_nextion).send_command_printf("mainPage.bfit_test.aph=80"); 
           }
-          id(display_nextion).set_component_text("bluetooth.battery", "-");
-          id(display_nextion).set_component_text("bluetooth.bpm", "");
-          id(display_nextion).set_component_text("bluetooth.name_bt", "-");
-          id(display_nextion).set_component_text("bluetooth.status_bt", "disconnected");
+          id(display_nextion).set_component_text("bluetooth.tBatt", "-");
+          id(display_nextion).set_component_text("bluetooth.tHr", "");
+          id(display_nextion).set_component_text("bluetooth.tModel", "-");
       - sensor.template.publish:
           id: battery_level_sensor
           state: 0 # !lambda 'return NAN;'

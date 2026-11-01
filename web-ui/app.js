@@ -34,6 +34,11 @@
   function save(){try{localStorage.setItem(key,JSON.stringify(prefs));}catch{/* private mode: prefs live for this page only */}}
   const controls=new TreadmillControls({send:async path=>{const c=new AbortController(),timer=setTimeout(()=>c.abort(),10000);try{const r=await fetch(path,{method:'POST',signal:c.signal,cache:'no-store'});await r.arrayBuffer();return r;}finally{clearTimeout(timer);}},changed:()=>{}});
   Theme.apply(document.documentElement);  // colours: theme.js (dark only)
+  // Fast first paint: last known states from this browser at once; the SSE dump (~200 entities, ~5 s) then refreshes them.
+  const cacheKey='treadmill.state.v1';
+  try{const c=JSON.parse(localStorage.getItem(cacheKey));if(Array.isArray(c))controls.hydrate(c);}catch{/* no cache yet */}
+  const saveStates=()=>{if(!controls.fresh())return;try{localStorage.setItem(cacheKey,JSON.stringify(controls.snapshot()));}catch{/* quota/private mode */}};
+  setInterval(saveStates,10000);addEventListener('pagehide',saveStates);
   const settings=DeviceSettings.mount({root:$('settings'),controls,t,lang:()=>prefs.lang});
   controls.changed=()=>settings.render();
   function go(next,focus=true){page=next;render();if(focus)$('content').focus();}
@@ -50,7 +55,7 @@
   let events=null,retryTimer=0,retryDelay=2000;
   const reconnect=()=>{if(retryTimer)return;retryTimer=setTimeout(()=>{retryTimer=0;connect();},retryDelay);retryDelay=Math.min(retryDelay*2,30000);};
   const connect=()=>{events?.close();events=new EventSource('/events');
-   events.addEventListener('open',()=>{retryDelay=2000;controls.disconnect();touch();controls.activity();renderHealth();});
+   events.addEventListener('open',()=>{retryDelay=2000;controls.reconnected();touch();controls.activity();renderHealth();});
    events.addEventListener('ping',()=>{retryDelay=2000;touch();controls.activity();renderHealth();});
    events.addEventListener('state',onState);
    events.addEventListener('error',()=>{health='offline';controls.disconnect();renderHealth();if(events.readyState===EventSource.CLOSED)reconnect();});};
