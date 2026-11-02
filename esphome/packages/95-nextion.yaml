@@ -242,7 +242,7 @@ interval:
           if (id(current_page) != page) { page = id(current_page); hr_shown = pic_shown = -2; time_shown[0] = 0; }
           if (page == 19) id(nx_hr_render).execute();   // HR monitor picker (94-nextion-hr.yaml)
           if (page != 0 && page != 13) return;
-          const char *pg = (page == 0) ? "mainPage" : "settings";
+          const char *pg = (page == 0) ? "mainPage" : "setting";
           auto *d = id(display_nextion);
           auto now = id(sntp_time).now();
           char t[8] = "--:--";
