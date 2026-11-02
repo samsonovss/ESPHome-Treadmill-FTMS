@@ -231,7 +231,7 @@ interval:
           }
           was = run;
 
-  # Main page (0) status bar: tTime (HH:MM), tHr (bpm) and pHr (heart: grey = no monitor, red = connected).
+  # Main page (0) and settings page (13) status bar: tTime (HH:MM), tHr (bpm) and pHr (heart: grey = no monitor, red = connected).
   # Sent only on change; caches reset on every page change so a fresh page 0 is filled at once.
   - interval: 1s
     then:
@@ -241,22 +241,23 @@ interval:
           static char time_shown[8] = "";
           if (id(current_page) != page) { page = id(current_page); hr_shown = pic_shown = -2; time_shown[0] = 0; }
           if (page == 19) id(nx_hr_render).execute();   // HR monitor picker (94-nextion-hr.yaml)
-          if (page != 0) return;
+          if (page != 0 && page != 13) return;
+          const char *pg = (page == 0) ? "mainPage" : "settings";
           auto *d = id(display_nextion);
           auto now = id(sntp_time).now();
           char t[8] = "--:--";
           if (now.is_valid()) snprintf(t, sizeof t, "%02u:%02u", (unsigned) (now.hour % 24), (unsigned) (now.minute % 60));
-          if (strcmp(t, time_shown) != 0) { d->set_component_text("mainPage.tTime", t); strcpy(time_shown, t); }
+          if (strcmp(t, time_shown) != 0) { d->set_component_text_printf((std::string(pg) + ".tTime").c_str(), "%s", t); strcpy(time_shown, t); }
           const bool conn = id(fit_smart).connected();
           const float v = id(heart_rate_sensor).state;
           const int hr = (conn && !isnan(v) && v > 0) ? (int) lroundf(v) : -1;
           if (hr != hr_shown) {
-            if (hr > 0) d->set_component_text_printf("mainPage.tHr", "%d", hr);
-            else d->set_component_text("mainPage.tHr", "");
+            if (hr > 0) d->set_component_text_printf((std::string(pg) + ".tHr").c_str(), "%d", hr);
+            else d->set_component_text((std::string(pg) + ".tHr").c_str(), "");
             hr_shown = hr;
           }
           const int pic = conn ? HR_PIC_ON : HR_PIC_OFF;
-          if (pic >= 0 && pic != pic_shown) { d->send_command_printf("mainPage.pHr.pic=%d", pic); pic_shown = pic; }
+          if (pic >= 0 && pic != pic_shown) { d->send_command_printf("%s.pHr.pic=%d", pg, pic); pic_shown = pic; }
 
 # Display (TFT) version: string variable "ver" on page "load" (global). Read once at boot, then rarely.
 text_sensor:
