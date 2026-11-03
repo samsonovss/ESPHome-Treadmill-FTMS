@@ -158,7 +158,8 @@ display:
                 break;
 
               case 16:  // info_page
-                id(display_nextion).set_component_text_printf("tVersion", id(ESPHomeVersion).state.c_str());
+                { std::string v = id(ESPHomeVersion).state; v = v.substr(0, v.find(' '));   // "2026.10.1 (config hash ...)" -> "2026.10.1"
+                  id(display_nextion).set_component_text("tVersion", v.c_str()); }
                 break;
 
               case 17:  // motor_page
