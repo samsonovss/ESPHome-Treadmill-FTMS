@@ -29,6 +29,16 @@ esphome:
 
 captive_portal:
 
+# Upload from the ESPHome Dashboard goes through the web server (port 80) in this build.
+# Bluetooth shares the radio with Wi-Fi: switch it off for the upload, as the private build does.
+ota:
+  - platform: web_server
+    on_begin:
+      - logger.log: "OTA(web): Bluetooth off for the upload"
+      - ble.disable:
+    on_error:
+      - ble.enable:
+
 # Neutral defaults used by the shared packages.
 substitutions:
   tft_url: https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases/download/display-latest/nextion_treadmill_4.3_ips_800x480.tft
