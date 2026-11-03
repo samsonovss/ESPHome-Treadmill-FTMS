@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.0.0-beta.8 (display 1.0.4)
+
+- Time zone is stored on the board: pick it in the web UI (Settings → Time zone); the browser computes the offset and DST rules and the board applies them, so the display clock and workout records use local time. Default until set: Asia/Yekaterinburg.
+- Display: main page status bar (time, heart rate, heart icon) refreshes every 250 ms, so values appear right after opening the page.
+- Display info page: ESPHome version shown without the config hash.
+- Public build: Bluetooth is switched off during an upload from the ESPHome Dashboard (web server OTA), as in the private build; fewer stalled uploads (HTTP 408).
+- Display TFT 1.0.4: new main and settings page design; Bluetooth list rows hidden on open.
+
 ## 1.0.0-beta.7 (display 1.0.3)
 
 Firmware 1.0.0-beta.7 and display TFT 1.0.3 must be updated together: the main page button ids changed.
