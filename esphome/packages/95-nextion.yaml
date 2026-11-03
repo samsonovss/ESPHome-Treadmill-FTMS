@@ -233,7 +233,7 @@ interval:
 
   # Main page (0) and settings page (13) status bar: tTime (HH:MM), tHr (bpm) and pHr (heart: grey = no monitor, red = connected).
   # Sent only on change; caches reset on every page change so a fresh page 0 is filled at once.
-  - interval: 1s
+  - interval: 250ms
     then:
       - lambda: |-
           static const int HR_PIC_OFF = 104, HR_PIC_ON = 103;   // Nextion picture ids: grey / red heart

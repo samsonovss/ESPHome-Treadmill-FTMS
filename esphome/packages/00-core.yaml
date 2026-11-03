@@ -173,5 +173,6 @@ debug:
 time:
   - platform: sntp
     id: sntp_time
+    timezone: Asia/Yekaterinburg   # device clock/history; change to your zone
 
 
