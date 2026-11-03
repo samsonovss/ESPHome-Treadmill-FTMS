@@ -51,7 +51,7 @@
   // Reconnecting SSE: a stream can end up CLOSED after sleep/network change/ESP reboot, or go silent without an error.
   // ESPHome re-sends a full state dump on every new connection.
   const touch=()=>{lastEvent=Date.now();health='online';};
-  function onState(e){try{const data=typeof e.data==='string'?JSON.parse(e.data):e.data;if(typeof data.id!=='string')return;touch();controls.ingest({...data,_seen:Date.now()});}catch{/* Ignore malformed events without inventing data. */}}
+  function onState(e){try{const data=typeof e.data==='string'?JSON.parse(e.data):e.data;if(typeof data.id!=='string')return;touch();controls.ingest({...data,_seen:Date.now()});if(/^text[-/]time[_ ]zone$/i.test(data.id))boardTz();}catch{/* Ignore malformed events without inventing data. */}}
   let events=null,retryTimer=0,retryDelay=2000;
   const reconnect=()=>{if(retryTimer)return;retryTimer=setTimeout(()=>{retryTimer=0;connect();},retryDelay);retryDelay=Math.min(retryDelay*2,30000);};
   const connect=()=>{events?.close();events=new EventSource('/events');
@@ -65,12 +65,29 @@
   addEventListener('online',()=>{clearTimeout(retryTimer);retryTimer=0;retryDelay=2000;connect();});
   setInterval(()=>controls.tick(),1000);
   addEventListener('pagehide',()=>events?.close());
-  // Time zone: '' = device; otherwise an IANA zone applied to every displayed date/time.
+  // Time zone: stored on the board (text "Time Zone" = "IANA|std|dst|start|end", see 00-core.yaml) so the display
+  // clock and workout records use it too. The browser derives the POSIX offsets and DST rules from its own zone data.
+  // Old firmware without the entity: browser-only, '' = this browser's zone.
   const tzSel=$('tz'),validTz=z=>{try{new Intl.DateTimeFormat('en',{timeZone:z});return true;}catch{return false;}};if(prefs.tz&&!validTz(prefs.tz))prefs.tz='';
   const tzOff=z=>{try{const p=new Intl.DateTimeFormat('en',{timeZone:z,timeZoneName:'shortOffset'}).formatToParts(new Date()).find(x=>x.type==='timeZoneName');return p?p.value.replace('GMT','UTC'):'';}catch{return '';}};
   const zones=(Intl.supportedValuesOf?Intl.supportedValuesOf('timeZone'):['UTC','Europe/Moscow','Asia/Yekaterinburg']);
-  tzSel.append(new Option((prefs.lang==='ru'?'Как на устройстве':'Device')+' ('+Intl.DateTimeFormat().resolvedOptions().timeZone+')',''),...zones.map(z=>new Option(z.replace(/_/g,' ')+' · '+tzOff(z),z)));tzSel.value=prefs.tz||'';
-  tzSel.addEventListener('change',()=>{prefs.tz=tzSel.value;save();render();tickClock();});
+  const localTz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+  tzSel.append(new Option((prefs.lang==='ru'?'Как в браузере':'Browser')+' ('+localTz+')',''),...zones.map(z=>new Option(z.replace(/_/g,' ')+' · '+tzOff(z),z)));tzSel.value=prefs.tz||'';
+  const tzRule=z=>{const f=new Intl.DateTimeFormat('en',{timeZone:z,timeZoneName:'longOffset'});
+   const off=ms=>{const m=(f.formatToParts(new Date(ms)).find(x=>x.type==='timeZoneName')?.value||'').match(/([+-])(\d\d):?(\d\d)?/);return m?(m[1]==='-'?-1:1)*(+m[2]*60+(+m[3]||0)):0;}; // minutes east of UTC
+   const D=864e5,t0=Date.UTC(new Date().getUTCFullYear(),0,1),ch=[];let prev=off(t0);
+   for(let d=1;d<=366;d++){const o=off(t0+d*D);if(o===prev)continue;let a=t0+(d-1)*D,b=t0+d*D;while(b-a>6e4){const m=a+Math.floor((b-a)/12e4)*6e4;if(off(m)===prev)a=m;else b=m;}ch.push({at:b,from:prev,to:o});prev=o;}
+   const R=(at,lo)=>{const l=new Date(at+lo*6e4),dd=l.getUTCDate(),dim=new Date(Date.UTC(l.getUTCFullYear(),l.getUTCMonth()+1,0)).getUTCDate();return 'M'+(l.getUTCMonth()+1)+'.'+(dd+7>dim?5:Math.ceil(dd/7))+'.'+l.getUTCDay()+'/'+(l.getUTCHours()*3600+l.getUTCMinutes()*60);};
+   const std=Math.min(off(t0),...ch.map(c=>c.to)),dst=Math.max(off(t0),...ch.map(c=>c.to)),s=ch.find(c=>c.from===std&&c.to===dst),e=ch.find(c=>c.from===dst&&c.to===std);
+   if(std===dst||!s||!e){const now=off(Date.now());return [z,-now*60,-now*60,'',''].join('|');} // POSIX sign: positive = west
+   return [z,-std*60,-dst*60,R(s.at,std),R(e.at,dst)].join('|');};
+  const sendTz=z=>{const d=controls.entities.get('text/time_zone');if(!d||!validTz(z))return;try{const v=tzRule(z);if((d.value??d.state)!==v)controls.send('/text/'+encodeURIComponent(d.name)+'/set?value='+encodeURIComponent(v));}catch{}};
+  // Board value arrived: it wins over this browser; empty = firmware default, so set it to this browser's zone once.
+  // Same zone with different rules (new year, newer zone data) is re-sent so the board stays exact.
+  function boardTz(){const d=controls.entities.get('text/time_zone');if(!d)return;const v=String(d.value??d.state??''),z=v.split('|')[0];
+   if(!z||!validTz(z)){sendTz(prefs.tz||localTz);return;}
+   if(prefs.tz!==z){prefs.tz=z;tzSel.value=z;save();render();tickClock();}sendTz(z);}
+  tzSel.addEventListener('change',()=>{prefs.tz=tzSel.value;save();render();tickClock();sendTz(prefs.tz||localTz);});
   const tickClock=()=>{try{$('clock-now').textContent=new Intl.DateTimeFormat(prefs.lang==='ru'?'ru-RU':'en-GB',{hour:'2-digit',minute:'2-digit',timeZone:prefs.tz||undefined}).format(new Date());$('clock-now').title=prefs.tz||Intl.DateTimeFormat().resolvedOptions().timeZone;}catch{}};
   tickClock();setInterval(tickClock,10000);
   render();

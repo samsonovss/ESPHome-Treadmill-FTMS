@@ -206,7 +206,7 @@ const el=(tag,cls,html)=>{const n=document.createElement(tag);if(cls)n.className
  // ---- Motor temperature: current value on a 3-band scale (bands follow the overheat limit) ----
  // Motor board PSA15H-0200 (11.10): everything learned from the original console — service menu (written like the
  // console does, board echoes each value), incline auto-calibration ([FADJ] + [ZT] polling), deck position, RESET.
- {const tz=root.querySelector('#tz')?.closest('label');if(tz&&customs.tz){tz.classList.add('tz-row');const sp=tz.querySelector('span');if(sp)sp.textContent=W('Часовой пояс','Time zone');customs.tz.append(tz);customs.tz.append(tx(el('small','is-note'),'Для часов и дат в истории. Хранится в этом браузере.','For the clock and history dates. Stored in this browser.'));}}
+ {const tz=root.querySelector('#tz')?.closest('label');if(tz&&customs.tz){tz.classList.add('tz-row');const sp=tz.querySelector('span');if(sp)sp.textContent=W('Часовой пояс','Time zone');customs.tz.append(tz);customs.tz.append(tx(el('small','is-note'),'Хранится на дорожке: часы на дисплее, записи тренировок и даты в истории.','Stored on the treadmill: display clock, workout records and history dates.'));}}
  {const c=customs.board,box=el('div','bd');c.append(box);
   const P=[['Board Wheel Size','WSIZE',W('Колесо (коэффициент скорости)','Wheel size (speed factor)'),'',183,W('Пересчёт км/ч в обороты мотора.','km/h → motor speed.')],
    ['Board Max Speed','SPDMAX',W('Макс. скорость','Max speed'),W('км/ч','km/h'),13.4,''],

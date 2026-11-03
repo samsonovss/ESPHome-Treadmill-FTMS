@@ -173,6 +173,49 @@ debug:
 time:
   - platform: sntp
     id: sntp_time
-    timezone: Asia/Yekaterinburg   # device clock/history; change to your zone
+    # Default until the web UI sets "Time Zone" below. Must stay set: without it ESPHome drops time zone support.
+    timezone: Asia/Yekaterinburg
+
+# Time zone chosen in the web UI, stored on the board: "IANA|std|dst|start|end".
+# std/dst: POSIX offsets in seconds (positive = west of UTC); start/end: "Mm.w.d/seconds" DST rules or empty.
+# The browser computes the rules from its time zone database, so DST works without the web UI open.
+text:
+  - platform: template
+    id: time_zone
+    name: "Time Zone"
+    icon: "mdi:map-clock"
+    entity_category: config
+    mode: text
+    min_length: 0
+    max_length: 120
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    on_value:
+      - lambda: |-
+          namespace et = esphome::time;
+          std::vector<std::string> f;
+          for (size_t p = 0;;) { size_t q = x.find('|', p); f.push_back(x.substr(p, q == std::string::npos ? q : q - p)); if (q == std::string::npos) break; p = q + 1; }
+          if (f.size() != 5) { ESP_LOGI("tz", "Time zone: firmware default"); return; }
+          auto rule = [](const std::string &r, et::DSTRule &d) -> bool {
+            if (r.size() < 6 || r[0] != 'M') return false;
+            char *e; const long m = strtol(r.c_str() + 1, &e, 10); if (*e != '.') return false;
+            const long w = strtol(e + 1, &e, 10); if (*e != '.') return false;
+            const long wd = strtol(e + 1, &e, 10); long t = 7200;
+            if (*e == '/') t = strtol(e + 1, &e, 10);
+            if (*e || m < 1 || m > 12 || w < 1 || w > 5 || wd < 0 || wd > 6 || t < -167 * 3600 || t > 167 * 3600) return false;
+            d.type = et::DSTRuleType::MONTH_WEEK_DAY; d.month = m; d.week = w; d.day_of_week = wd; d.time_seconds = t; d.day = 0;
+            return true;
+          };
+          char *e1, *e2;
+          et::ParsedTimezone tz{};
+          tz.std_offset_seconds = strtol(f[1].c_str(), &e1, 10);
+          tz.dst_offset_seconds = strtol(f[2].c_str(), &e2, 10);
+          if (f[1].empty() || *e1 || *e2 || abs(tz.std_offset_seconds) > 14 * 3600) { ESP_LOGW("tz", "Bad time zone value '%s'", x.c_str()); return; }
+          if (!(rule(f[3], tz.dst_start) && rule(f[4], tz.dst_end))) {
+            tz.dst_start = et::DSTRule{}; tz.dst_end = et::DSTRule{}; tz.dst_offset_seconds = tz.std_offset_seconds;
+          }
+          et::set_global_tz(tz);
+          ESP_LOGI("tz", "Time zone %s (UTC%+.2g%s)", f[0].c_str(), -tz.std_offset_seconds / 3600.0, tz.has_dst() ? ", DST" : "");
 
 
