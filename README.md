@@ -82,6 +82,12 @@ The treadmill serves its own interface on port 80. The whole page is built into 
 
 Try it: **[live demo](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/)**. More in the [web interface guide](docs/WEB_UI.md).
 
+**Full screen as an app (PWA).** The page ships a web app manifest, icons and a service worker, so it can be added to the home screen and open without browser bars:
+
+- **iPhone / iPad:** Safari → Share → *Add to Home Screen*. Works over plain `http://<treadmill-ip>`.
+- **Android, Windows, macOS (Chrome, Edge):** browsers install web apps only over HTTPS. Put the treadmill behind your own HTTPS reverse proxy (Keenetic domain, Home Assistant with NGINX/Caddy, etc.) on a subdomain, then use *Install app*. The proxy must pass `/events` (server-sent events) unbuffered. The service worker caches nothing, so firmware updates always show the new interface.
+
+
 ## Workout Modes
 
 - manual control and **Free Run** (belt speed follows your position, laser ToF);

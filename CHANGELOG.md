@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Web UI is installable as an app (PWA): manifest, icons (`web-ui/pwa/`), iOS home-screen tags and an install-only service worker without cache. iPhone/iPad: full screen over plain http; Android/desktop: install over your own HTTPS proxy.
+
 ## 1.0.0-beta.8 (display 1.0.4)
 
 - Time zone is stored on the board: pick it in the web UI (Settings → Time zone); the browser computes the offset and DST rules and the board applies them, so the display clock and workout records use local time. Default until set: Asia/Yekaterinburg.
