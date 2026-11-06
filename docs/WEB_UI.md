@@ -54,4 +54,6 @@ The header shows a red monitor icon when new display firmware is available and a
 
 ### Motor speed factor
 
+![Motor speed factor](images/motor-speed-factor.png)
+
 *Settings → Motor board → Command format → Factor* (0.5–3.0, default 1.0). Every speed command sent to the motor board is multiplied by it: with 2.0 a set 10 km/h goes out as `[SETSPD:200]`. Use it when another motor sits on the same board and the belt runs at a fraction of the set speed (measured with an external speed sensor). The speed corrector then only trims the small remainder, so the belt reaches the speed quickly. The 18 km/h limit applies to the set speed, before the factor. If the board itself caps the command, raise its *Max speed* (SPDMAX, now up to 40) in the service menu and press *Write to board*.
