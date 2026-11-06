@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Motor speed factor (Settings → Motor board → Command format, entity `Motor Speed Factor`, 0.5–3.0, default 1.0): every speed command is multiplied by it, for another motor on the same board that runs at a fraction of the commanded speed; the speed corrector trims the rest. Board max speed (SPDMAX) can now be set up to 40 km/h so the board does not cap the multiplied command.
+
 - Web UI is installable as an app (PWA): manifest, icons (`web-ui/pwa/`), iOS home-screen tags and an install-only service worker without cache. iPhone/iPad: full screen over plain http; Android/desktop: install over your own HTTPS proxy.
 
 ## 1.0.0-beta.8 (display 1.0.4)

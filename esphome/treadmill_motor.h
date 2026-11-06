@@ -69,6 +69,9 @@ inline void note_reply(const std::string &cmd, const std::string &val, uint32_t 
 inline const char *DEFAULT_SPD_TPL = "[SETSPD:%03d]";
 inline std::string spd_tpl = DEFAULT_SPD_TPL;
 inline int spd_scale = 10;        // command value = round(km/h * spd_scale)
+// Speed factor (6.11): the board runs the belt at 1/factor of the command (other motor on the same board) —
+// the command is multiplied up front so the speed corrector only trims the remainder. 1.0 = original behaviour.
+inline float spd_factor = 1.0f;
 inline bool valid_spd_tpl(const std::string &t) {
   if (t.rfind("[SETSPD:", 0) != 0) return false;
   std::string x = "[SETINC:" + t.substr(8);  // same rules as the incline template
@@ -77,7 +80,7 @@ inline bool valid_spd_tpl(const std::string &t) {
 // tenths = km/h × 10 (target_speed_goal units)
 inline std::string speed_cmd(int tenths) {
   const std::string &t = valid_spd_tpl(spd_tpl) ? spd_tpl : std::string(DEFAULT_SPD_TPL);
-  long v = lroundf(tenths * (float) spd_scale / 10.0f);
+  long v = lroundf(tenths * spd_factor * (float) spd_scale / 10.0f);
   char b[32];
   snprintf(b, sizeof(b), t.c_str(), (int) v);
   return b;
