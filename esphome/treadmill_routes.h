@@ -2,7 +2,10 @@
 // Route library (opaque UI JSON files on LittleFS) + one "Custom route" incline slot.
 // No motor writes here: update_incline_by_map reads the slot only while the belt runs;
 // every HTTP write requires a fresh STOP gate (plan_stopped) and the archive lease.
+#ifndef TREADMILL_ROUTES_HOST_TEST
 #include "treadmill_recorder.h"
+#endif
+#include "treadmill_library_owner.h"
 #include <dirent.h>
 #include <algorithm>
 #include <vector>
@@ -15,7 +18,14 @@ inline constexpr const char *CUSTOM_NAME = "Custom route";
 inline float (*points)[2] = nullptr;
 inline std::atomic<int> count{0};
 inline std::string active_name; // only touched on the HTTP task
-inline std::string dir(){return std::string(treadmill_storage::BASE_PATH)+"/routes";}
+inline std::string dir(){return library_dir("routes");}
+inline std::string active_owner,nx_owner;
+inline std::atomic<uint32_t> revision{0};
+inline uint32_t nx_revision=0;
+inline bool active_current(){return !active_owner.empty()&&active_owner==treadmill_profiles::library_owner();}
+// Called under FsLease by profile apply, only through the existing stopped/idle gate.
+inline void profile_changed(const std::string &owner){if(active_owner!=owner){count=0;active_name.clear();active_owner=owner;}}
+
 inline bool route_id(const char *s){if(strlen(s)!=17||s[0]!='r')return false;for(int i=1;i<17;i++)if(!((s[i]>='0'&&s[i]<='9')||(s[i]>='a'&&s[i]<='f')))return false;return true;}
 inline bool utf8_name(const std::string &name){
   if(name.empty()||name.size()>80)return false;
@@ -44,7 +54,7 @@ inline bool apply_active(const PsString &body){
     staging[n][0]=km;staging[n][1]=level;prev=km;n++;p=le+(nl?1:0);
   }
   if(n<2)return false;
-  count=0;memcpy(points,staging,sizeof(float)*2*n);count=n;active_name=name;return true;
+  count=0;memcpy(points,staging,sizeof(float)*2*n);count=n;active_name=name;active_owner=treadmill_profiles::library_owner();return !active_owner.empty();
 }
 
 // Display sidecars: <id>.act holds the ready-to-apply active body (computed by the web with calibration).
@@ -63,7 +73,7 @@ inline std::vector<ActItem> nx_items;
 inline int nx_off=0;
 // Rebuilds nx_items from sidecars; returns the Nextion TextSelect path ("Name · 5.2 km" joined by the two characters backslash-r, which Nextion turns into a line break).
 inline std::string nx_build(){
-  nx_items.clear();std::string path;FsLease lease;if(!lease.owned||!treadmill_storage::mounted)return path;
+  nx_items.clear();nx_off=0;nx_owner.clear();std::string path;FsLease lease;if(!lease.owned||!treadmill_storage::mounted||!initialized||!library_prepare("routes"))return path;nx_owner=treadmill_profiles::library_owner();nx_revision=revision.load();
   DIR *dd=opendir(dir().c_str());if(!dd)return path;
   while(auto *e=readdir(dd)){std::string f=e->d_name;if(f.size()!=21||f.substr(17)!=".act"||!route_id(f.substr(0,17).c_str()))continue;
     if(nx_items.size()>=40)break;PsString b;ActItem it;it.id=f.substr(0,17);if(!read_act(it.id,b)||!act_meta(b,it.name,it.km))continue;nx_items.push_back(it);}
@@ -73,7 +83,7 @@ inline std::string nx_build(){
   nx_items.resize(shown);return path;}
 inline bool nx_open(int idx){
   if(idx<0||idx>=int(nx_items.size())||!plan_stopped())return false;
-  FsLease lease;if(!lease.owned)return false;PsString b;if(!read_act(nx_items[idx].id,b))return false;return apply_active(b);}
+  FsLease lease;if(!lease.owned||nx_owner.empty()||nx_owner!=treadmill_profiles::library_owner()||nx_revision!=revision.load())return false;PsString b;if(!read_act(nx_items[idx].id,b))return false;return apply_active(b);}
 class RouteHandler:public AsyncWebHandler {
   PsString body_;httpd_req_t *body_request_=nullptr;bool body_valid_=false;size_t body_max_=0;
  public:
@@ -90,17 +100,20 @@ class RouteHandler:public AsyncWebHandler {
     auto u=r->url_to(std::span<char,AsyncWebServerRequest::URL_BUF_SIZE>(uri.get(),AsyncWebServerRequest::URL_BUF_SIZE));
     httpd_req_t *raw=*r;const char *q=strchr(raw->uri,'?');
     const bool post=r->method()==HTTP_POST;
+    FsLease lease;if(!lease.owned){drop();reply(r,409,"{\"error\":\"archive_busy\"}");return;}
+    if(!initialized||!treadmill_storage::mounted){drop();reply(r,503,"{\"error\":\"storage_not_ready\"}");return;}
+    // Reads are pinned too: an old tab must not receive another user's files.
+    if(!library_expected(r)){drop();reply(r,409,"{\"error\":\"owner_changed\"}");return;}
+    if(!library_prepare("routes")){drop();reply(r,503,"{\"error\":\"library_not_ready\"}");return;}
     if(u=="/api/route/active"){
-      if(!post){std::string out="{\"name\":";out+=json_string(count.load()?active_name.c_str():"");out+=",\"option\":";out+=json_string(CUSTOM_NAME);out+=",\"points\":[";
-        char b2[40];const int n=count.load();for(int i=0;i<n;i++){snprintf(b2,sizeof b2,"%s[%.4f,%g]",i?",":"",points[i][0],points[i][1]);out+=b2;}out+="]}";reply(r,200,out);return;}
+      if(!post){std::string out="{\"name\":";out+=json_string(active_current()&&count.load()?active_name.c_str():"");out+=",\"option\":";out+=json_string(CUSTOM_NAME);out+=",\"points\":[";
+        char b2[40];const int n=active_current()?count.load():0;for(int i=0;i<n;i++){snprintf(b2,sizeof b2,"%s[%.4f,%g]",i?",":"",points[i][0],points[i][1]);out+=b2;}out+="]}";reply(r,200,out);return;}
       if(q||!body_valid_||body_request_!=raw||body_.size()!=r->contentLength()||body_.size()>ACTIVE_BODY_MAX){drop();reply(r,400,"{\"error\":\"invalid_route\"}");return;}
-      if(!plan_stopped()){drop();reply(r,409,"{\"error\":\"fresh_stop_required\"}");return;}
+      if(busy()||!plan_stopped()){drop();reply(r,409,"{\"error\":\"fresh_stop_required\"}");return;}
       const bool ok=apply_active(body_);drop();
       if(!ok){reply(r,400,"{\"error\":\"invalid_route_or_traits\"}");return;}
       reply(r,200,"{\"ok\":true,\"points\":"+std::to_string(count.load())+"}");return;
     }
-    FsLease lease;if(!lease.owned){drop();reply(r,409,"{\"error\":\"archive_busy\"}");return;}
-    if(!initialized||!treadmill_storage::mounted){drop();reply(r,503,"{\"error\":\"storage_not_ready\"}");return;}
     const std::string d=dir();
     if(u=="/api/routes/list"){
       std::string out="{\"items\":[";DIR *dd=opendir(d.c_str());if(!dd&&errno!=ENOENT){reply(r,500,"{\"error\":\"route_list_failed\"}");return;}
@@ -121,7 +134,7 @@ class RouteHandler:public AsyncWebHandler {
     if(u=="/api/routes/delete"){
       if(r->contentLength()!=0){drop();reply(r,400,"{\"error\":\"unexpected_body\"}");return;}
       if(unlink(path.c_str())!=0){reply(r,errno==ENOENT?404:500,"{\"error\":\"route_delete_failed\"}");return;}
-      unlink(act_path(std::string(q+4)).c_str());capacity();reply(r,200,"{\"ok\":true}");return;
+      unlink(act_path(std::string(q+4)).c_str());++revision;capacity();reply(r,200,"{\"ok\":true}");return;
     }
     if(u=="/api/routes/act"){
       const bool bok=body_valid_&&body_request_==raw&&body_.size()==r->contentLength();PsString tst;if(bok)tst=body_;drop();
@@ -131,7 +144,7 @@ class RouteHandler:public AsyncWebHandler {
       const std::string ap=act_path(std::string(q+4)),tp=ap+".tmp";FILE *f=fopen(tp.c_str(),"wb");if(!f){reply(r,500,"{\"error\":\"route_open_failed\"}");return;}
       bool ok=fwrite(tst.data(),1,tst.size(),f)==tst.size();if(fflush(f)!=0)ok=false;if(fsync(fileno(f))!=0)ok=false;if(fclose(f)!=0)ok=false;
       if(!ok||rename(tp.c_str(),ap.c_str())!=0){unlink(tp.c_str());reply(r,500,"{\"error\":\"route_write_failed\"}");return;}
-      reply(r,200,"{\"ok\":true}");return;
+      ++revision;reply(r,200,"{\"ok\":true}");return;
     }
     // save
     auto ct=r->get_header("Content-Type");
@@ -143,7 +156,7 @@ class RouteHandler:public AsyncWebHandler {
     const std::string tmp=path+".tmp";FILE *f=fopen(tmp.c_str(),"wb");if(!f){drop();reply(r,500,"{\"error\":\"route_open_failed\"}");return;}
     bool ok=fwrite(body_.data(),1,body_.size(),f)==body_.size();if(fflush(f)!=0)ok=false;if(fsync(fileno(f))!=0)ok=false;if(fclose(f)!=0)ok=false;drop();
     if(!ok||rename(tmp.c_str(),path.c_str())!=0){unlink(tmp.c_str());reply(r,500,"{\"error\":\"route_write_failed\"}");return;}
-    capacity();reply(r,200,"{\"ok\":true}");
+    ++revision;capacity();reply(r,200,"{\"ok\":true}");
   }
 };
 inline RouteHandler handler;

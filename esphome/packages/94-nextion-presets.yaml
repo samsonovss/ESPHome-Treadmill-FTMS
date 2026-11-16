@@ -1,5 +1,5 @@
 # Nextion pages 18 (HIIT presets) and 20 (Fartlek presets): copies of page 12 (rows r0..r4 ids 6..10, Up id 12, Down id 4).
-# Rows come from the board preset store (/workouts/presets/<kind>.json); tapping a row applies the preset and sets the program.
+# Personal rows first, then generated web standards; read-only, never seeded into personal storage.
 # Components are addressed without page prefix (valid for the page currently shown).
 globals:
   - {id: nx_pre_kind, type: int, initial_value: '0'}
@@ -23,6 +23,7 @@ script:
     then:
       - lambda: |-
           using namespace treadmill_recorder;
+          if (nx_pre_owner != treadmill_profiles::library_owner()) treadmill_recorder::load_profile_presets(id(nx_pre_kind) == 0 ? "hiit" : "fartlek");
           const int n = (int) nx_pre_items.size();
           if (nx_pre_off >= n) nx_pre_off = 0;
           const int off = nx_pre_off;
@@ -56,7 +57,7 @@ script:
     then:
       - lambda: |-
           id(nx_pre_kind) = kind;
-          treadmill_recorder::nx_pre_load(kind == 0 ? "hiit" : "fartlek");
+          treadmill_recorder::load_profile_presets(kind == 0 ? "hiit" : "fartlek");
       - script.execute: nx_pre_render
 
   - id: nx_pre_pick
@@ -66,6 +67,7 @@ script:
     then:
       - lambda: |-
           using namespace treadmill_recorder;
+          if (busy() || !plan_stopped() || row < 0 || row >= 5 || nx_pre_loaded_kind != (kind == 0 ? "hiit" : "fartlek") || nx_pre_revision != presets_rev.load() || nx_pre_owner.empty() || nx_pre_owner != treadmill_profiles::library_owner()) { nx_pre_items.clear(); nx_pre_off = 0; id(nx_pre_load).execute(kind); return; }
           const int idx = nx_pre_off + row;
           if (idx >= (int) nx_pre_items.size()) return;
           const NxPre &p = nx_pre_items[idx];
@@ -88,6 +90,8 @@ script:
               id(set_cool_down_time).publish_state(p.cool);
             }
           }
+          if (p.wmode == "Time" || p.wmode == "Pulse") id(route_wu_mode).publish_state(p.wmode);
+          if (p.cmode == "Time" || p.cmode == "Pulse") id(route_cd_mode).publish_state(p.cmode);
 
 binary_sensor:
   - {platform: nextion, page_id: 18, component_id: 6, id: nx_hl0, internal: true, on_press: {then: [{lambda: 'id(nx_hl0).publish_state(false);'}, {script.execute: {id: nx_pre_pick, kind: 0, row: 0}}]}}
@@ -144,3 +148,9 @@ binary_sensor:
             id(nx_fl_down).publish_state(false);
             if (treadmill_recorder::nx_pre_off + 5 < (int) treadmill_recorder::nx_pre_items.size()) treadmill_recorder::nx_pre_off += 5;
         - script.execute: nx_pre_render
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          if ((id(current_page) == 18 || id(current_page) == 20) && (treadmill_recorder::nx_pre_owner != treadmill_profiles::library_owner() || treadmill_recorder::nx_pre_revision != treadmill_recorder::presets_rev.load())) id(nx_pre_load).execute(id(current_page) == 18 ? 0 : 1);

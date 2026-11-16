@@ -76,6 +76,9 @@ script:
           s.phase = treadmill_recorder::phase_of(phase);   // Program phase → History bands (same function as the phase clock)
           s.phase_t = treadmill_recorder::phase_start_t;     // 24.10: its start on Treadmill Time
           if (kind == 1) {
+            // Main-loop applied owner, copied before enqueue; unaffected by FS worker locks.
+            snprintf(s.profile_id, sizeof s.profile_id, "%s", treadmill_profiles::applied_owner_id);
+            snprintf(s.profile_name, sizeof s.profile_name, "%s", treadmill_profiles::applied_owner_name);
             if (!id(calibration_active)) treadmill_recorder::start(s);
           } else if (kind == 3) {
             treadmill_recorder::finish(s);
@@ -122,3 +125,48 @@ sensor:
     accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: never
+
+# Stage 2 profiles: no history ownership; component mutations stay on main loop.
+interval:
+  - interval: 2s
+    then:
+      - lambda: |-
+          using treadmill_profiles::Profile;
+          if (!treadmill_profiles::capture) {
+            treadmill_profiles::capture = []() {
+              Profile p;
+              p.age = (int) id(age_number).state;
+              p.weight = (int) id(weight_kg).state;
+              p.gender = id(gender_select).current_option();
+              p.hr_max_mode = id(hr_max_mode).current_option();
+              p.hr_max_manual = (int) id(hr_max_manual).state;
+              p.resting_heart_rate = (int) id(resting_heart_rate).state;
+              p.hr_zone_method = id(hr_zone_method).current_option();
+              return p;
+            };
+            treadmill_profiles::locked = []() {
+              return id(treadmill_running) || id(motor_running) || id(pause_active) || id(calibration_active) ||
+                  id(free_running_active) || treadmill_motor::returning || treadmill_motor::cal_active || treadmill_motor::svc_busy;
+            };
+            treadmill_profiles::apply = [](const Profile &p) {
+              const bool other_route_owner = treadmill_routes::active_owner != p.id;
+              treadmill_routes::profile_changed(p.id);
+              if (other_route_owner && id(map_select).current_option() == treadmill_routes::CUSTOM_NAME)
+                id(map_select).publish_state("None");
+              auto number = [](auto *entity, int value) {
+                if (entity->state != value) { auto c = entity->make_call(); c.set_value(value); c.perform(); }
+              };
+              auto select = [](auto *entity, const std::string &value) {
+                if (entity->current_option() != value) { auto c = entity->make_call(); c.set_option(value); c.perform(); }
+              };
+              number(id(age_number), p.age);
+              number(id(weight_kg), p.weight);
+              number(id(hr_max_manual), p.hr_max_manual);
+              number(id(resting_heart_rate), p.resting_heart_rate);
+              select(id(gender_select), p.gender);
+              select(id(hr_max_mode), p.hr_max_mode);
+              select(id(hr_zone_method), p.hr_zone_method);
+              id(update_heart_rate_zones).execute();
+            };
+          }
+          treadmill_profiles::tick();

@@ -223,6 +223,10 @@ interval:
   - interval: 2s
     then:
       - lambda: |-
+          if (id(current_page) == 12 &&
+              (treadmill_routes::nx_owner != treadmill_profiles::library_owner() ||
+               treadmill_routes::nx_revision != treadmill_routes::revision.load())) id(nx_routes_render).execute();
+      - lambda: |-
           static bool was = false;
           bool run = id(motor_running);
           if (run && !was) {
@@ -240,10 +244,21 @@ interval:
           static const int HR_PIC_OFF = 104, HR_PIC_ON = 103;   // Nextion picture ids: grey / red heart
           static int page = -1, hr_shown = -2, pic_shown = -2;
           static char time_shown[8] = "";
-          if (id(current_page) != page) { page = id(current_page); hr_shown = pic_shown = -2; time_shown[0] = 0; }
+          static std::string user_shown;
+          static bool user_dirty = true;
+          if (id(current_page) != page) { page = id(current_page); hr_shown = pic_shown = -2; time_shown[0] = 0; user_dirty = true; }
           if (page == 19) id(nx_hr_render).execute();   // HR monitor picker (94-nextion-hr.yaml)
           if (page != 0) return;
           auto *d = id(display_nextion);
+          // Applied profile only; display changes do not switch users.
+          std::string user = treadmill_profiles::applied_owner_name;
+          // Protect the Nextion quoted text command against user-entered quotes/backslashes.
+          for (char &c : user) if (c == '"' || c == '\\') c = ' ';
+          if (user_dirty || user != user_shown) {
+            d->set_component_text("mainPage.tUser", user.c_str());
+            user_shown = user;
+            user_dirty = false;
+          }
           auto now = id(sntp_time).now();
           char t[8] = "--:--";
           if (now.is_valid()) snprintf(t, sizeof t, "%02u:%02u", (unsigned) (now.hour % 24), (unsigned) (now.minute % 60));

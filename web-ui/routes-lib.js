@@ -5,10 +5,13 @@
 const RoutesLib=(()=>{
  const CUSTOM='Custom route',LS='tm.routes.v1',FAV='tm.routes.fav';
  let cal=(()=>{try{const c=JSON.parse(localStorage.getItem('tm.routes.cal'));if(c&&c.gmax-c.g0>=0.1&&c.max>=1)return c;}catch{}return {g0:0,gmax:15,max:15,mstep:0.3};})() /* last known treadmill calibration — no redraw with defaults before the entities arrive (13.10) */,items=new Map(),loaded=false,loading=null,active=null,activeAt=0,listeners=new Set();
- try{for(const r of JSON.parse(localStorage.getItem(LS)||'[]'))if(r&&r.id&&Array.isArray(r.geom))items.set(r.id,r);}catch{}
+ // Personal cache is advisory only, never imported into another board/profile.
+ let owner=window.treadmillHistoryOwner||'',epoch=0;
+ const key=k=>k+'.'+owner, token=()=>({owner,epoch}),check=t=>{if(!t.owner||t.owner!==owner||t.epoch!==epoch)throw Error('owner_changed');};
  const notify=()=>{for(const f of listeners)try{f();}catch{}};
- const persist=()=>{try{localStorage.setItem(LS,JSON.stringify([...items.values()]));}catch{}};
- const favs=()=>{try{return new Set(JSON.parse(localStorage.getItem(FAV)||'[]'));}catch{return new Set();}};
+ const persist=()=>{if(owner)try{localStorage.setItem(key(LS),JSON.stringify([...items.values()]));}catch{}};
+ const favs=()=>{try{return new Set(JSON.parse(localStorage.getItem(key(FAV))||'[]'));}catch{return new Set();}};
+ window.addEventListener('treadmill-profile',()=>{const next=window.treadmillHistoryOwner||'';if(next===owner)return;owner=next;++epoch;items.clear();loaded=false;loading=null;active=null;activeAt=0;placeTried.clear();notify();});
  const rad=d=>d*Math.PI/180;
  function hav(a,b){const dl=rad(b[0]-a[0]),dn=rad(b[1]-a[1]),h=Math.sin(dl/2)**2+Math.cos(rad(a[0]))*Math.cos(rad(b[0]))*Math.sin(dn/2)**2;return 12742*Math.asin(Math.min(1,Math.sqrt(h)));}
  function cumulative(g){const d=[0];for(let i=1;i<g.length;i++)d.push(d[i-1]+hav(g[i-1],g[i]));return d;}
@@ -90,30 +93,30 @@ const RoutesLib=(()=>{
   return c.map(p=>[p[1],p[0],Number.isFinite(p[2])?p[2]:0]);}
  const newId=()=>'r'+[...crypto.getRandomValues(new Uint8Array(8))].map(b=>b.toString(16).padStart(2,'0')).join('');
  // Board Wi-Fi is slow while BLE shares the radio (~2–8 KB/s on 30–40 KB files) → generous timeout.
- async function req(path,opt={}){const {timeout=45000,...o}=opt,c=new AbortController(),t=setTimeout(()=>c.abort(),timeout);try{const r=await fetch(path,{cache:'no-store',...o,signal:c.signal});let j=null;try{j=await r.json();}catch{}if(!r.ok)throw Error(j?.error==='workout_active_or_finalizing'||j?.error==='fresh_stop_required'?'Дорожка должна стоять':j?.error||('HTTP '+r.status));return j;}finally{clearTimeout(t);}}
- async function load(force=false){if(loading)return loading;if(loaded&&!force)return;loading=(async()=>{try{const l=await req('/api/routes/list'),ids=new Set();
-   for(const it of l.items||[]){ids.add(it.id);const have=items.get(it.id);if(have&&have._size===it.size)continue;try{const r=await req('/api/routes/file?id='+it.id);if(r&&r.id===it.id&&Array.isArray(r.geom)){r._size=it.size;items.set(it.id,r);}}catch{}}
-   for(const id of [...items.keys()])if(!ids.has(id))items.delete(id);loaded=true;persist();for(const r of items.values())await syncAct(r);}catch{loaded=true;}finally{loading=null;notify();}})();return loading;}
+ async function req(path,opt={}){const {timeout=45000,scope=token(),...o}=opt;check(scope);const c=new AbortController(),t=setTimeout(()=>c.abort(),timeout);try{const r=await fetch(path,{cache:'no-store',...o,headers:{...o.headers,'X-Library-Owner':scope.owner},signal:c.signal});let j=null;try{j=await r.json();}catch{}check(scope);if(!r.ok)throw Error(j?.error==='workout_active_or_finalizing'||j?.error==='fresh_stop_required'?'Дорожка должна стоять':j?.error||('HTTP '+r.status));return j;}finally{clearTimeout(t);}}
+ async function load(force=false){if(!owner)return;if(loading)return loading;if(loaded&&!force)return;const scope=token();loading=(async()=>{try{const l=await req('/api/routes/list',{scope}),next=new Map();
+   for(const it of l.items||[]){check(scope);const have=items.get(it.id);if(have&&have._size===it.size){next.set(it.id,have);continue;}const r=await req('/api/routes/file?id='+it.id,{scope});if(r&&r.id===it.id&&Array.isArray(r.geom)){r._size=it.size;next.set(it.id,r);}}
+   check(scope);items=next;loaded=true;persist();for(const r of items.values()){check(scope);await syncAct(r,scope);}}catch{}finally{if(scope.epoch===epoch){loading=null;notify();}}})();return loading;}
  const placeTried=new Set();
  async function geocode(g,lang='ru'){try{const c=new AbortController(),tm=setTimeout(()=>c.abort(),4000);const j=await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=${lang==='en'?'en':'ru,en'}&lat=${g[0][0]}&lon=${g[0][1]}`,{signal:c.signal})).json();clearTimeout(tm);const a=j.address||{},city=a.city||a.town||a.village||a.municipality||a.county||a.state||'';return [city,a.country||''].filter(Boolean).join(', ').slice(0,60);}catch{return '';}}
  // Fills «place» (city, country) for saved routes that lack it; one request per route per page load, gently paced.
  let placeBusy=false;
  const sleep=ms=>new Promise(k=>setTimeout(k,ms)),lang=()=>document.querySelector('.concept-host')?.dataset.lang==='en'?'en':'ru';
- async function fillPlaces(){if(placeBusy)return;placeBusy=true;try{for(const r of [...items.values()]){if((r.place&&r.placeEn)||/^zwift/.test(r.source||'')||!r.geom?.length||placeTried.has(r.id))continue;placeTried.add(r.id);let pl=r.place||'',en=r.placeEn||'';if(!pl){pl=await geocode(r.geom,'ru');await sleep(1100);}if(pl&&!en)en=await geocode(r.geom,'en');if(pl&&(en||!r.place))await save({...r,place:pl,placeEn:en});await sleep(1100);}}finally{placeBusy=false;}}
- async function save(r){if(r.place==null&&!/^zwift/.test(r.source||'')&&r.geom?.length&&!(r.id&&placeTried.has(r.id))){const ru=await geocode(r.geom,'ru');await sleep(1100);r={...r,place:ru,placeEn:ru?await geocode(r.geom,'en'):''};}const body={v:1,place:String(r.place||'').slice(0,60),placeEn:String(r.placeEn||'').slice(0,60),id:r.id||newId(),name:String(r.name||'Маршрут').slice(0,80),created:r.created||Date.now(),intensity:r.intensity??1,source:r.source||'',detail:[10,25,40].includes(r.detail)?r.detail:50,quality:r.quality??null,geom:r.geom};
-  const text=JSON.stringify(body);if(text.length>65000)throw Error('Маршрут слишком большой');await req('/api/routes/save?id='+body.id,{method:'POST',headers:{'Content-Type':'application/json'},body:text});body._size=text.length;items.set(body.id,body);persist();notify();syncAct(body);return body;}
- async function remove(id){await req('/api/routes/delete?id='+id,{method:'POST'});items.delete(id);persist();notify();}
+ async function fillPlaces(){if(placeBusy||!owner)return;const scope=token();placeBusy=true;try{for(const r of [...items.values()]){check(scope);if((r.place&&r.placeEn)||/^zwift/.test(r.source||'')||!r.geom?.length||placeTried.has(r.id))continue;placeTried.add(r.id);let pl=r.place||'',en=r.placeEn||'';if(!pl){pl=await geocode(r.geom,'ru');await sleep(1100);}if(pl&&!en)en=await geocode(r.geom,'en');if(pl&&(en||!r.place))await save({...r,place:pl,placeEn:en},scope);await sleep(1100);}}catch{}finally{placeBusy=false;}}
+ async function save(r,scope=token()){check(scope);if(r.place==null&&!/^zwift/.test(r.source||'')&&r.geom?.length&&!(r.id&&placeTried.has(r.id))){const ru=await geocode(r.geom,'ru');await sleep(1100);r={...r,place:ru,placeEn:ru?await geocode(r.geom,'en'):''};}check(scope);const body={v:1,place:String(r.place||'').slice(0,60),placeEn:String(r.placeEn||'').slice(0,60),id:r.id||newId(),name:String(r.name||'Маршрут').slice(0,80),created:r.created||Date.now(),intensity:r.intensity??1,source:r.source||'',detail:[10,25,40].includes(r.detail)?r.detail:50,quality:r.quality??null,geom:r.geom};
+  const text=JSON.stringify(body);if(text.length>65000)throw Error('Маршрут слишком большой');await req('/api/routes/save?id='+body.id,{scope,method:'POST',headers:{'Content-Type':'application/json'},body:text});body._size=text.length;items.set(body.id,body);persist();notify();syncAct(body,scope).catch(()=>{});return body;}
+ async function remove(id,scope=token()){check(scope);await req('/api/routes/delete?id='+id,{scope,method:'POST'});items.delete(id);persist();notify();}
  function actBody(r){const p=profile(r);if(!p)throw Error('Пустой маршрут');if(p.points.length>1024)throw Error('Слишком много точек профиля');
   const name=String(r.name).replace(/[\x00-\x1f\x7f]/g,' ').slice(0,60)||'Маршрут';
   return {name,p,text:'TREADMILL-ROUTE 1\n'+name+'\n'+p.points.map(([k,v])=>k.toFixed(3)+' '+(+v.toFixed(1))).join('\n')+'\n'};}
- async function upload(r){const {name,p,text}=actBody(r);
-  await req('/api/route/active',{method:'POST',headers:{'Content-Type':'text/plain'},body:text});
+ async function upload(r,scope=token()){check(scope);const {name,p,text}=actBody(r);
+  await req('/api/route/active',{scope,method:'POST',headers:{'Content-Type':'text/plain'},body:text});
   active={name,points:p.points};activeAt=Date.now();}
  // Display card (<id>.act on the board): ready-made profile so the Nextion can load the route without the web.
- async function syncAct(r){if(!r?.id||!r.geom?.length)return;const k='tm.act.'+r.id,sig=(r._size||0)+'|'+r.name+'|'+JSON.stringify(cal);
+ async function syncAct(r,scope=token()){if(!r?.id||!r.geom?.length)return;check(scope);const k=key('tm.act.'+r.id),sig=(r._size||0)+'|'+r.name+'|'+JSON.stringify(cal);
   try{if(localStorage.getItem(k)===sig)return;}catch{}
-  const body=actBody(r).text;for(let t=0;t<3;t++){try{await req('/api/routes/act?id='+r.id,{method:'POST',headers:{'Content-Type':'text/plain'},body});try{localStorage.setItem(k,sig);}catch{}return;}catch(e){if(t===2)console.warn('act sync',r.id,e.message||e);else await sleep(1500);}}}
- async function refreshActive(){if(Date.now()-activeAt<5000)return active;activeAt=Date.now();try{const j=await req('/api/route/active');active=j&&Array.isArray(j.points)&&j.points.length>1?{name:j.name,points:j.points}:null;}catch{}notify();return active;}
+  const body=actBody(r).text;for(let t=0;t<3;t++){try{await req('/api/routes/act?id='+r.id,{scope,method:'POST',headers:{'Content-Type':'text/plain'},body});try{localStorage.setItem(k,sig);}catch{}return;}catch(e){if(scope.epoch!==epoch)return;if(t===2)console.warn('act sync',r.id,e.message||e);else await sleep(1500);}}}
+ async function refreshActive(){if(!owner)return null;if(Date.now()-activeAt<5000)return active;activeAt=Date.now();try{const j=await req('/api/route/active');active=j&&Array.isArray(j.points)&&j.points.length>1?{name:j.name,points:j.points}:null;}catch{}notify();return active;}
  // Display name → route; names unique against the built-ins.
  function byName(builtin={}){const out={};for(const r of [...items.values()].sort((a,b)=>(a.created||0)-(b.created||0))){const p=profile(r);if(!p)continue;let n=r.name;while(builtin[n]||out[n])n+=' ·';const zr=r.source==='zwift-rec';out[n]={points:p.points,endKm:p.endKm,custom:r.id,ascent:p.ascent,geom:zr?null:r.geom,zwrec:zr,zwsaved:r.source==='zwift',detail:r.detail,intensity:r.intensity,quality:r.quality??null,place:(lang()==='en'&&r.placeEn)||r.place||''};}return out;}
  // Zwift catalog (09.10): index + per-route files on GitHub (route_profiles/zwift/). Index cached in this browser;
@@ -143,7 +146,7 @@ const RoutesLib=(()=>{
    const real=zwGeoms.get(r.slug)??null,p=profile({geom:synth(r),detail:10}),ps=real?profile({geom:real,detail:10}):null;if(!p)continue;let n=r.name;while(taken[n]||out[n])n+=' ·';
    out[n]={points:ps?.points??p.points,cardPoints:p.points,smooth:!!ps,endKm:p.endKm,cat:r.slug,noele:!!r.noele,run:!!r.run,world:r.world,up:r.up,locked:!!r.locked,geom:real,detail:ps?10:50,intensity:1};}
   return (zwCache={k,out}).out;}
- function toggleFav(name){const f=favs();f.has(name)?f.delete(name):f.add(name);try{localStorage.setItem(FAV,JSON.stringify([...f]));}catch{}notify();}
- return {CUSTOM,difficulty,quality,slice,climbs,setCal,cal:()=>cal,levelPct,series,pointAt,kmNear,at,load,save,remove,upload,refreshActive,fillPlaces,lang,profile,parseGPX,brouter,byName,favs,toggleFav,cumulative,zwLevelsGeom:slug=>{const r=zw?.routes.find(x=>x.slug===slug);return r?synth(r):null;},thin:(g,n=500)=>simplify(g,n),zwLoad,zwGeom,zwByName,zwState:()=>zwState,zwInfo:()=>zw&&{generated:zw.generated,count:zw.routes.length,url:zw.url},ZW_URL,
+ function toggleFav(name){const f=favs();f.has(name)?f.delete(name):f.add(name);try{localStorage.setItem(key(FAV),JSON.stringify([...f]));}catch{}notify();}
+ return {scope:token,checkScope:check,CUSTOM,difficulty,quality,slice,climbs,setCal,cal:()=>cal,levelPct,series,pointAt,kmNear,at,load,save,remove,upload,refreshActive,fillPlaces,lang,profile,parseGPX,brouter,byName,favs,toggleFav,cumulative,zwLevelsGeom:slug=>{const r=zw?.routes.find(x=>x.slug===slug);return r?synth(r):null;},thin:(g,n=500)=>simplify(g,n),zwLoad,zwGeom,zwByName,zwState:()=>zwState,zwInfo:()=>zw&&{generated:zw.generated,count:zw.routes.length,url:zw.url},ZW_URL,
   get:id=>items.get(id),list:()=>[...items.values()],active:()=>active,loaded:()=>loaded,on:f=>{listeners.add(f);return()=>listeners.delete(f);}};
 })();

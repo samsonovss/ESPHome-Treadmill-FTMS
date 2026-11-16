@@ -19,6 +19,7 @@ struct Event { uint8_t kind; Snapshot s; char id[12]{}; }; // start=1 sample=2 f
 inline QueueHandle_t queue=nullptr;
 inline std::atomic<bool> control_busy{false},recording{false},io_busy{true},healthy{false},initialized{false};
 inline std::atomic<uint32_t> latest_id{0};
+inline std::atomic<uint32_t> archive_revision{0};
 inline std::atomic<int> min_save_sec{0};   // workouts shorter than this (workout time, s) are deleted at stop; 0 = keep all (12.10)
 inline std::atomic<int> fault{0};
 // 24.10: program phase from the Status text (the strings the display shows) — one function for the recorder and the
@@ -100,6 +101,7 @@ struct LiveRow { float elapsed,timer,hr,speed,level,distance,calories; uint8_t p
 constexpr size_t LIVE_MAX_ROWS=18000; // 5 h at 1 Hz, ~576 KB in PSRAM
 inline std::mutex live_mutex; // guards everything below
 inline std::vector<LiveRow,PsramAllocator<LiveRow>> live_rows;
+inline char live_owner_id[25]{},live_owner_name[61]{};
 inline std::string live_id; inline char live_program[64]{}; inline int64_t live_start_epoch=0; inline bool live_active=false;
 inline void live_push(const Snapshot &s){
   LiveRow r{float(engine.elapsed),float(engine.timer),std::isfinite(s.hr)&&s.hr>0?s.hr:NAN,s.speed,s.level,float(engine.distance),engine.cal,uint8_t(s.paused),uint8_t(std::max(0,std::min(255,s.zone))),uint8_t(std::max(0,std::min(255,s.target_zone))),0};
@@ -108,7 +110,39 @@ inline void live_push(const Snapshot &s){
 } // namespace treadmill_recorder
 #include "treadmill_programs.h"
 #include "treadmill_presets.h"
+#include "treadmill_profiles.h"
 namespace treadmill_recorder {
+// Fail closed for absent, malformed, oversized, or unassigned summaries. FsLease required.
+inline bool summary_owned(const std::string &wid,const std::string &owner){
+ if(owner.empty())return false;
+ const auto path=engine.path(wid,"json");struct stat st{};
+ if(stat(path.c_str(),&st)!=0||st.st_size<1||st.st_size>8192)return false;
+ FILE *f=fopen(path.c_str(),"rb");if(!f)return false;
+ std::string body(size_t(st.st_size),'\0');bool good=fread(body.data(),1,body.size(),f)==body.size();if(fclose(f)!=0)good=false;
+ return good&&esphome::json::parse_json(body,[&](JsonObject root)->bool{return root["profile"]["id"].is<const char*>()&&root["profile"]["id"].as<std::string>()==owner;});
+}
+inline std::string live_owner_json(){return std::string("{\"id\":")+(live_owner_id[0]?json_string(live_owner_id):"null")+",\"name\":"+(live_owner_id[0]?json_string(live_owner_name):"null")+"}";}
+// Runs under the worker FS lease; never changes samples or historical settings.
+inline bool assign_owner(const Event &e){
+  if(!treadmill_profiles::ready||treadmill_profiles::pending_apply)return false;
+  bool target=false;for(const auto &p:treadmill_profiles::items)if(p.id==e.s.profile_id)target=true;
+  if(!target||engine.tombstoned(e.id))return false;
+  const auto dest=engine.path(e.id,"json"),tmp=dest+".owner.tmp";struct stat st{};
+  if(stat(dest.c_str(),&st)!=0||st.st_size<=0||st.st_size>65536)return false;
+  FILE*f=fopen(dest.c_str(),"rb");if(!f)return false;std::string body(size_t(st.st_size),'\0');bool ok=fread(body.data(),1,body.size(),f)==body.size();fclose(f);if(!ok)return false;
+  std::string out;
+  ok=esphome::json::parse_json(body,[&](JsonObject root)->bool{
+    if(root["id"].as<std::string>()!=e.id)return false;
+    if(!root["profile"].isNull()&&!root["profile"].is<JsonObject>())return false;
+    JsonObject profile=root["profile"].isNull()?root["profile"].to<JsonObject>():root["profile"].as<JsonObject>();
+    if(!profile["id"].isNull()&&(!profile["id"].is<const char*>()||profile["id"].as<std::string>()!=""))return false;
+    profile["id"]=e.s.profile_id;profile["name"]=e.s.profile_name;
+    serializeJson(root,out);return !out.empty();
+  });
+  if(!ok)return false;
+  f=fopen(tmp.c_str(),"wb");if(!f)return false;ok=fwrite(out.data(),1,out.size(),f)==out.size();if(fflush(f)!=0)ok=false;if(fsync(fileno(f))!=0)ok=false;if(fclose(f)!=0)ok=false;
+  if(ok)ok=rename(tmp.c_str(),dest.c_str())==0;if(!ok)unlink(tmp.c_str());return ok;
+}
 inline void worker(void *) {
   if(!treadmill_storage::mounted||!engine.initialize()){fault=1;io_busy=false;vTaskDelete(nullptr);return;}
   latest_id=uint32_t(std::min(engine.sequence,uint64_t(UINT32_MAX)));initialized=true;healthy=engine.error.empty();if(!healthy)fault=engine.error=="storage_full"?5:2;capacity();io_busy=false;
@@ -124,19 +158,21 @@ inline void worker(void *) {
       job_state=2;bool ok=false;
       if(control_busy||recording||engine.active||uxQueueMessagesWaiting(queue)>0)job_error="workout_active_or_finalizing";
       else if(e.kind==6){ok=plan_write();plan_payload.clear();}
+      else if(e.kind==9){ok=assign_owner(e);job_error=ok?"":"assignment_failed_or_already_owned";}
       else if(e.kind==7){ok=engine.purge(e.id);job_error=ok?"":engine.error;}
       else if(e.kind==8){scan_state=2;ok=scan_run();scan_state=ok?3:4;}
       else {ok=engine.move_selected(e.id,e.kind==5);job_error=ok?"":engine.error;}
+      if(ok&&(e.kind==4||e.kind==5||e.kind==7||e.kind==9))++archive_revision;
       job_state=ok?3:4;capacity();mutation_pending=false;
       io_busy=engine.active||uxQueueMessagesWaiting(queue)>0;fs_lock.clear();continue;
     }
     while(fs_lock.test_and_set())vTaskDelay(pdMS_TO_TICKS(1));
     const unsigned before=engine.samples;const bool was_active=engine.active;
     bool ok=e.kind==1?engine.start(e.s):(e.kind==3?engine.finish(e.s,fault.load()==3):(!engine.active||engine.sample(e.s)));
-    if(ok&&e.kind==1&&engine.active&&!was_active){std::lock_guard<std::mutex> g(live_mutex);live_rows.clear();live_rows.reserve(3600);live_id=engine.id;memcpy(live_program,engine.program,sizeof live_program);live_start_epoch=engine.start_epoch;live_active=true;}
+    if(ok&&e.kind==1&&engine.active&&!was_active){std::lock_guard<std::mutex> g(live_mutex);live_rows.clear();live_rows.reserve(3600);live_id=engine.id;snprintf(live_owner_id,sizeof live_owner_id,"%s",engine.profile_id);snprintf(live_owner_name,sizeof live_owner_name,"%s",engine.profile_name);memcpy(live_program,engine.program,sizeof live_program);live_start_epoch=engine.start_epoch;live_active=true;}
     if(ok&&engine.samples!=before)live_push(e.s);
     if(e.kind==3||!engine.active){std::lock_guard<std::mutex> g(live_mutex);live_active=false;}
-    if(ok&&e.kind==3)compress_id=engine.id;
+    if(ok&&e.kind==3){compress_id=engine.id;++archive_revision;}
     if(ok&&e.kind==3&&!engine.active){int lim=min_save_sec.load();std::string fid=engine.id;
       if(lim>0&&std::isfinite(engine.timer)&&engine.timer<lim){
         bool gone=engine.purge(fid);
@@ -160,7 +196,7 @@ class Handler: public AsyncWebHandler {
     std::unique_ptr<char[]> b(new (std::nothrow) char[AsyncWebServerRequest::URL_BUF_SIZE]);if(!b)return false;
     auto u=r->url_to(std::span<char,AsyncWebServerRequest::URL_BUF_SIZE>(b.get(),AsyncWebServerRequest::URL_BUF_SIZE));
     return (r->method()==HTTP_GET&&(u=="/workouts/status"||u=="/workouts/list"||u=="/workouts/file"||u=="/api/workouts/job"||u=="/api/workouts/trash/list"||u=="/api/workouts/live"||u=="/api/storage/scan")) ||
-      (r->method()==HTTP_POST&&(u=="/api/workouts/trash"||u=="/api/workouts/restore"||u=="/api/workouts/purge"||u=="/api/storage/scan"));
+      (r->method()==HTTP_POST&&(u=="/api/workouts/trash"||u=="/api/workouts/restore"||u=="/api/workouts/purge"||u=="/api/workouts/assign"||u=="/api/storage/scan"));
   }
   void send(AsyncWebServerRequest *r,int code,const std::string &s){auto *res=r->beginResponse(code,"application/json",s);res->addHeader("Cache-Control","no-store");res->addHeader("X-Content-Type-Options","nosniff");r->send(res);}
   std::string param(AsyncWebServerRequest *r,const char *name){auto *p=r->getParam(name);return p?p->value().c_str():"";}
@@ -189,6 +225,7 @@ class Handler: public AsyncWebHandler {
       out+=",\"recording\":";out+=busy()?"true":"false";
       out+=",\"archive_available\":";out+=initialized?"true":"false";
       out+=",\"error\":";out+=json_string(fault_text());
+      out+=",\"history_token\":"+json_string((std::to_string(treadmill_profiles::generation)+":"+std::to_string(latest_id.load())+":"+std::to_string(archive_revision.load())).c_str());
       out+=",\"total_bytes\":";out+=std::to_string(archive_total.load());
       out+=",\"used_bytes\":";out+=std::to_string(archive_used.load());
       out+='}';send(r,200,out);return;
@@ -200,7 +237,7 @@ class Handler: public AsyncWebHandler {
       {std::lock_guard<std::mutex> g(live_mutex);const size_t n=live_rows.size(),end=std::min(n,from+1200);
        out.reserve(160+(end>from?end-from:0)*72);
        out="{\"id\":";out+=live_id.empty()?"null":json_string(live_id.c_str());out+=",\"active\":";out+=live_active?"true":"false";
-       out+=",\"program\":";out+=json_string(live_program);out+=",\"start_epoch\":";out+=std::to_string((long long)live_start_epoch);
+       out+=",\"profile\":"+live_owner_json();out+=",\"program\":";out+=json_string(live_program);out+=",\"start_epoch\":";out+=std::to_string((long long)live_start_epoch);
        out+=",\"total\":";out+=std::to_string(n);out+=",\"from\":";out+=std::to_string(from);out+=",\"columns\":[\"elapsed_s\",\"time_s\",\"heart_rate\",\"speed_kmh\",\"incline_level\",\"distance_km\",\"calories\",\"paused\",\"zone\",\"target_zone\"],\"rows\":[";
        char line[160];auto num=[](char *b,size_t sz,float v,const char *fmt){if(std::isfinite(v))snprintf(b,sz,fmt,v);else snprintf(b,sz,"null");};
        for(size_t i=from;i<end;i++){const auto &x=live_rows[i];char h[16],c[16];num(h,sizeof h,x.hr,"%.0f");num(c,sizeof c,x.calories,"%.1f");
@@ -216,6 +253,20 @@ class Handler: public AsyncWebHandler {
       if(!job_number||strtoull(j.c_str(),nullptr,10)!=job_number){send(r,404,"{\"error\":\"unknown_job\"}");return;}
       const char *states[]={"unknown","queued","running","succeeded","failed"};
       send(r,200,"{\"job\":"+std::to_string(job_number.load())+",\"state\":"+json_string(states[job_state.load()])+",\"operation\":"+json_string(job_operation.c_str())+",\"id\":"+json_string(job_id.c_str())+",\"error\":"+json_string(job_error.c_str())+"}");return;
+    }
+    if(u=="/api/workouts/assign"){
+      const auto id=param(r,"id"),target=param(r,"profile");
+      httpd_req_t *raw=*r;const char*q=strchr(raw->uri,'?');
+      if(r->method()!=HTTP_POST||r->contentLength()!=0||!valid_id(id)||!q||std::string(q+1)!="id="+id+"&profile="+target){send(r,400,"{\"error\":\"invalid_assignment\"}");return;}
+      if(busy()||!treadmill_profiles::ready||treadmill_profiles::pending_apply){send(r,409,"{\"error\":\"busy\"}");return;}
+      if(!initialized||!queue||!treadmill_storage::mounted){send(r,503,"{\"error\":\"storage_unavailable\"}");return;}
+      const treadmill_profiles::Profile *p=nullptr;for(const auto &v:treadmill_profiles::items)if(v.id==target)p=&v;
+      if(!p){send(r,400,"{\"error\":\"unknown_profile\"}");return;}
+      Event e{};e.kind=9;memcpy(e.id,id.c_str(),12);snprintf(e.s.profile_id,sizeof e.s.profile_id,"%s",p->id.c_str());snprintf(e.s.profile_name,sizeof e.s.profile_name,"%s",p->name.c_str());
+      mutation_pending=true;job_id=id;job_operation="assign";job_error.clear();job_state=1;
+      if(xQueueSend(queue,&e,0)!=pdTRUE){mutation_pending=false;job_state=0;send(r,503,"{\"error\":\"queue_unavailable\"}");return;}
+      ++job_number;if(!job_number)++job_number;
+      send(r,202,"{\"job\":"+std::to_string(job_number.load())+",\"id\":"+json_string(id.c_str())+"}");return;
     }
     if(u=="/api/workouts/trash"||u=="/api/workouts/restore"||u=="/api/workouts/purge"){
       if(r->method()!=HTTP_POST){send(r,405,"{\"error\":\"method_not_allowed\"}");return;}
@@ -237,28 +288,40 @@ class Handler: public AsyncWebHandler {
     }
     if(busy()){send(r,409,"{\"error\":\"workout_active_or_finalizing\"}");return;}
     if(!initialized){send(r,503,"{\"error\":\"storage_not_ready_or_error\"}");return;}
+    // Optional pin: legacy UI requests without owner retain their original archive view.
+    const auto owner=param(r,"owner");
+    if(!owner.empty()&&!treadmill_profiles::expected_owner(owner)){send(r,409,"{\"error\":\"owner_changed\"}");return;}
     if(u=="/workouts/list"||u=="/api/workouts/trash/list") {
       bool trashed=u=="/api/workouts/trash/list";
+      if(trashed&&!owner.empty()){send(r,400,"{\"error\":\"owner_filter_not_supported_for_trash\"}");return;}
       auto after=param(r,"after");if(!after.empty()&&!valid_id(after)){send(r,400,"{\"error\":\"invalid_cursor\"}");return;}
       auto l=param(r,"limit");int limit=l.empty()?20:atoi(l.c_str());if(limit<1||limit>20){send(r,400,"{\"error\":\"invalid_limit\"}");return;}
       const bool with_summary=!trashed&&param(r,"summaries")=="1";
-      uint64_t cursor=after.empty()?0:strtoull(after.substr(1).c_str(),nullptr,10),max=latest_id.load();std::string out="{\"items\":[";unsigned scanned=0,count=0;
+      // Bound bulk JSON per response: live 13 KB pages stalled mid-body, while
+      // one/two-summary pages completed. This mitigates transport pressure; it
+      // does not diagnose its underlying cause. Cursor pagination is unchanged.
+      if(with_summary&&limit>2)limit=2;
+      const bool descending=!trashed&&param(r,"order")=="desc";
+      const uint64_t max=latest_id.load();uint64_t cursor=after.empty()?(descending?max+1:0):strtoull(after.substr(1).c_str(),nullptr,10);std::string out="{\"items\":[";unsigned scanned=0,count=0;
       // At most 100 IDs / 200 stat calls per page, including gaps; no entire-directory JSON.
-      while(cursor<max&&scanned++<100&&count<unsigned(limit)){
-        cursor++;char n[24];snprintf(n,sizeof n,"w%010llu",(unsigned long long)cursor);struct stat st{};if((scanned&7)==0)vTaskDelay(1);   // 25.10: yield in the stat walk (task WDT)
+      while((descending?cursor>1:cursor<max)&&scanned++<100&&count<unsigned(limit)){
+        if(descending)--cursor;else ++cursor;char n[24];snprintf(n,sizeof n,"w%010llu",(unsigned long long)cursor);struct stat st{};if((scanned&7)==0)vTaskDelay(1);   // 25.10: yield in the stat walk (task WDT)
         char tst=engine.trash_state(n);bool tomb=tst!='0'&&tst!='D';if(trashed){if(tst=='T'){ /* purged ('P') = gone, not in the trash */if(count++)out+=',';out+="{\"id\":"+json_string(n)+"}";}continue;}if(tomb)continue;
         bool complete=stat(engine.path(n,"json").c_str(),&st)==0;
         if(!complete&&errno!=ENOENT){send(r,500,"{\"error\":\"index_read_failed\"}");return;}
         bool exists=complete||stat(engine.path(n,"csv").c_str(),&st)==0||stat(engine.path(n,"csvz").c_str(),&st)==0;
         if(!exists&&errno!=ENOENT){send(r,500,"{\"error\":\"index_read_failed\"}");return;}
+        if(exists&&!owner.empty()&&!summary_owned(n,owner))continue;
         if(exists){if(count++)out+=',';out+="{\"id\":"+json_string(n)+",\"summary_available\":"+(complete?"true":"false");
-          if(with_summary&&complete&&st.st_size>0&&st.st_size<=2048){FILE *sf=fopen(engine.path(n,"json").c_str(),"rb");if(sf){std::string js(size_t(st.st_size),'\0');size_t got=fread(js.data(),1,js.size(),sf);fclose(sf);if(got==js.size()&&js.front()=='{'&&js.back()=='}'){out+=",\"summary\":";out+=js;}}}
+          if(with_summary&&complete&&st.st_size>0&&st.st_size<=2048){FILE *sf=fopen(engine.path(n,"json").c_str(),"rb");if(sf){std::string js(size_t(st.st_size),'\0');size_t got=fread(js.data(),1,js.size(),sf);fclose(sf);// Recorder/recovery writers may terminate JSON with a newline. Keep bulk summaries usable.
+            auto last=js.find_last_not_of(" \t\r\n");if(got==js.size()&&!js.empty()&&js.front()=='{'&&last!=std::string::npos&&js[last]=='}'){out+=",\"summary\":";out+=js;}}}
           out+="}";}
       }
-      out+="],\"next\":";if(cursor<max){char n[24];snprintf(n,sizeof n,"w%010llu",(unsigned long long)cursor);out+=json_string(n);}else out+="null";send(r,200,out+"}");return;
+      out+="],\"next\":";if(descending?cursor>1:cursor<max){char n[24];snprintf(n,sizeof n,"w%010llu",(unsigned long long)cursor);out+=json_string(n);}else out+="null";if(descending)out+=",\"order\":\"desc\"";if(!owner.empty())out+=",\"owner\":"+json_string(owner.c_str())+",\"context\":"+treadmill_profiles::context();send(r,200,out+"}");return;
     }
     auto id=param(r,"id"),type=param(r,"type");if(!valid_id(id)||(type!="csv"&&type!="json")){send(r,400,"{\"error\":\"invalid_file\"}");return;}
     if(engine.tombstoned(id)){send(r,404,"{\"error\":\"workout_in_trash\"}");return;}
+    if(!owner.empty()&&!summary_owned(id,owner)){send(r,404,"{\"error\":\"workout_not_found_for_owner\"}");return;}
     // 16 KB chunks from PSRAM: far fewer httpd round trips than 1 KB; internal 1 KB fallback.
     size_t CHUNK_SIZE=16384;
     char *buf=static_cast<char*>(heap_caps_malloc(CHUNK_SIZE,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT));
@@ -282,5 +345,5 @@ class Handler: public AsyncWebHandler {
   }
 };
 inline Handler handler;
-inline void register_handler(){if(esphome::web_server_base::global_web_server_base)esphome::web_server_base::global_web_server_base->add_handler(&handler);if(esphome::web_server_base::global_web_server_base)esphome::web_server_base::global_web_server_base->add_handler(&program_handler);if(esphome::web_server_base::global_web_server_base)esphome::web_server_base::global_web_server_base->add_handler(&preset_handler);}
+inline void register_handler(){if(esphome::web_server_base::global_web_server_base)esphome::web_server_base::global_web_server_base->add_handler(&treadmill_profiles::handler);if(esphome::web_server_base::global_web_server_base)esphome::web_server_base::global_web_server_base->add_handler(&handler);if(esphome::web_server_base::global_web_server_base)esphome::web_server_base::global_web_server_base->add_handler(&program_handler);if(esphome::web_server_base::global_web_server_base)esphome::web_server_base::global_web_server_base->add_handler(&preset_handler);}
 }

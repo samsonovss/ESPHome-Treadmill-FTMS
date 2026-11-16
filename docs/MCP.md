@@ -79,3 +79,28 @@ JSON-RPC 2.0 over HTTP `POST /mcp`, stateless (no sessions, no SSE). Methods: `i
 curl -s http://treadmill.local/mcp -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_status","arguments":{}}}'
 ```
+
+## Applied profile and pinned analysis
+
+1. Call `get_active_profile`; require `ready=true`, `pending=false`, and pin
+   `profile.id` as `owner`. Context returns applied stored `name`, `age`,
+   `weight_kg`, `sex` (`Male`/`Female`), `hr_max_mode`, `hr_max_manual`,
+   `resting_heart_rate`, `hr_zone_method`, plus `generation`/`applied_revision`.
+   It does **not** claim a live computed HR maximum or zone boundaries.
+2. Pass the same explicit `owner` to `list_workouts`, `get_workout_summary`,
+   `list_programs`, `get_program`, `save_program`, and `delete_program`.
+   History excludes other owners, unknown/unassigned and unreadable summaries.
+   Follow `next` as `after` until null, **even for an empty page** (100 IDs scanned
+   per request). Do not infer no history from an empty intermediate page.
+3. Save the plan with that same owner, never a newly selected user. A mismatch,
+   pending switch or unavailable profile fails closed. Stop analysis, re-read
+   context, and explicitly retry for the intended user; do not silently change
+   owner. Queued saves recheck ownership before writing. Settings revisions are
+   context metadata, not a revision precondition for plans.
+
+`get_live` is shared machine telemetry, not personal analysis history. Its
+`profile.id/name` is the recorded workout owner (or null), retained even after
+selection changes; it must not be attributed to the current user. No new motor
+controls or authentication boundary are introduced.
+
+Routes are not exposed as MCP tools in this version; the Web/Nextion personal route library uses the pinned-owner HTTP API documented in [API](API.md). Public Zwift catalog access remains shared.

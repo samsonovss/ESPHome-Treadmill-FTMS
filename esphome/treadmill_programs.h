@@ -1,14 +1,15 @@
 #pragma once
 // Bounded custom-plan storage only: no runner and no motor/control writes.
 #include "esphome/components/json/json_util.h"
+#include "treadmill_library_owner.h"
 namespace treadmill_recorder {
 inline std::atomic<float> plan_speed_min{NAN},plan_speed_max{NAN},plan_speed_step{NAN},plan_incline_min{NAN},plan_incline_max{NAN},plan_incline_step{NAN};
 inline std::atomic<uint32_t> plan_gate_ms{0};
 inline std::atomic<uint32_t> programs_rev{0};
 inline bool plan_stopped(){return plan_gate_ms.load()!=0 && uint32_t(millis()-plan_gate_ms.load())<2500 && !control_busy && !recording;}
-inline std::string plan_payload,plan_target;
+inline std::string plan_payload,plan_target,plan_owner;
 inline bool plan_id(const std::string &s){if(s.size()!=17||s[0]!='p')return false;for(size_t i=1;i<s.size();i++)if(!((s[i]>='0'&&s[i]<='9')||(s[i]>='a'&&s[i]<='f')))return false;return true;}
-inline std::string plan_dir(){return std::string(treadmill_storage::BASE_PATH)+"/programs";}
+inline std::string plan_dir(){return library_dir("programs");}
 inline bool plan_grid(double x,float lo,float hi,float step){return std::isfinite(x)&&std::isfinite(lo)&&std::isfinite(hi)&&std::isfinite(step)&&step>0&&x>=lo-0.00001&&x<=hi+0.00001&&fabs((x-lo)/step-round((x-lo)/step))<0.0001;}
 inline bool plan_validate(const std::string &body,std::string &id){
  if(body.empty()||body.size()>8192)return false;
@@ -26,7 +27,7 @@ inline bool plan_validate(const std::string &body,std::string &id){
  });
 }
 inline bool plan_write(){
- std::string validated;if(!plan_stopped()||!plan_validate(plan_payload,validated)||validated!=plan_target){job_error="stopped_or_traits_validation_failed";return false;}
+ std::string validated;if(plan_owner.empty()||plan_owner!=treadmill_profiles::library_owner()||!library_prepare("programs")){job_error="owner_changed_or_migration_failed";return false;}if(!plan_stopped()||!plan_validate(plan_payload,validated)||validated!=plan_target){job_error="stopped_or_traits_validation_failed";return false;}
  const std::string dir=plan_dir();if(mkdir(dir.c_str(),0700)!=0&&errno!=EEXIST){job_error="program_directory_failed";return false;}
  // Fixed directory bound: no hidden unbounded collection or automatic erasure.
  DIR *d=opendir(dir.c_str());if(!d){job_error="program_directory_failed";return false;}size_t count=0;bool existing=false;while(auto *entry=readdir(d)){std::string n=entry->d_name;if(n.size()==22&&n.substr(17)==".json"&&plan_id(n.substr(0,17))){count++;if(n==plan_target+".json")existing=true;}}closedir(d);if(!existing&&count>=64){job_error="program_limit_64";return false;}
@@ -55,11 +56,13 @@ class ProgramHandler:public AsyncWebHandler {
  void reply(AsyncWebServerRequest *r,int code,const std::string &s){auto *res=r->beginResponse(code,"application/json",s);res->addHeader("Cache-Control","no-store");res->addHeader("X-Content-Type-Options","nosniff");r->send(res);}
  void handleRequest(AsyncWebServerRequest *r)override{
   std::unique_ptr<char[]> uri(new(std::nothrow)char[AsyncWebServerRequest::URL_BUF_SIZE]);if(!uri){reply(r,503,"{\"error\":\"memory_unavailable\"}");return;}auto u=r->url_to(std::span<char,AsyncWebServerRequest::URL_BUF_SIZE>(uri.get(),AsyncWebServerRequest::URL_BUF_SIZE));FsLease lease;if(!lease.owned||busy()){reply(r,409,"{\"error\":\"workout_active_or_finalizing\"}");return;}if(!initialized||!treadmill_storage::mounted||!queue){reply(r,503,"{\"error\":\"storage_not_ready\"}");return;}
+  if(!library_prepare("programs")){reply(r,503,"{\"error\":\"library_not_ready\"}");return;}
+  if(r->method()==HTTP_POST&&!library_expected(r)){reply(r,409,"{\"error\":\"owner_changed\"}");return;}
   if(u=="/api/programs/save"){
    httpd_req_t *raw=*r;auto ct=r->get_header("Content-Type");std::string id;
    if(strchr(raw->uri,'?')||!ct.has_value()||ct.value()!="application/json"||!body_valid_||body_request_!=raw||body_.size()!=r->contentLength()||!plan_validate(body_,id)){body_.clear();body_valid_=false;reply(r,400,"{\"error\":\"invalid_program_or_traits\"}");return;}
    if(!plan_stopped()){body_.clear();body_valid_=false;reply(r,409,"{\"error\":\"fresh_stop_required\"}");return;}
-   plan_payload=std::move(body_);body_valid_=false;plan_target=id;Event e{};e.kind=6;mutation_pending=true;job_id=id;job_operation="program_save";job_error.clear();job_state=1;
+   plan_owner=treadmill_profiles::library_owner();plan_payload=std::move(body_);body_valid_=false;plan_target=id;Event e{};e.kind=6;mutation_pending=true;job_id=id;job_operation="program_save";job_error.clear();job_state=1;
    if(xQueueSend(queue,&e,0)!=pdTRUE){mutation_pending=false;job_state=0;plan_payload.clear();reply(r,503,"{\"error\":\"queue_unavailable\"}");return;}++job_number;if(!job_number)++job_number;reply(r,202,"{\"job\":"+std::to_string(job_number.load())+",\"state\":\"queued\"}");return;
   }
   if(u=="/api/programs/delete"){

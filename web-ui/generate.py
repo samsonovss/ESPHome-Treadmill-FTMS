@@ -2,8 +2,11 @@
 """Deterministic offline single-document/header generator; no remote assets."""
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 p = Path(__file__).resolve().parent
+# Generate Nextion standards from these same canonical web definitions.
+subprocess.run(['node',str(p.parent/'tools/nextion-history/generate-builtins.cjs')],cwd=p.parent,check=True)
 # 17.10: built-in routes removed from the firmware — the page only knows routes saved on the treadmill
 map_profiles = {'options':['None'],'routes':{}}
 html = (p/'index.html').read_text()
@@ -20,7 +23,7 @@ for marker, body in [('STYLE',(p/'style.css').read_text()),
                      ('CONTROLS',(p/'diag.js').read_text()+'\n'+(p/'controls.js').read_text()),
                      ('DATA','const MAP_PROFILES = '+json.dumps(map_profiles,ensure_ascii=False,separators=(',',':'))+';\n'+(p/'fit.js').read_text()+'\n'+(p/'history.js').read_text()),
                      ('PAGE',(p/'routes-lib.js').read_text()+'\n'+(p/'routes-map.js').read_text()+'\n'+concept_js+'\n'+(p/'concept-live.js').read_text()),
-                     ('APP',(p/'settings.js').read_text()+'\n'+(p/'app.js').read_text())]:
+                     ('APP',(p/'profiles.js').read_text()+'\n'+(p/'settings.js').read_text()+'\n'+(p/'app.js').read_text())]:
     assert html.count('/*'+marker+'*/') == 1
     html = html.replace('/*'+marker+'*/', body)
 assert ')TREADUI"' not in html

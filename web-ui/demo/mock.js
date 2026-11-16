@@ -78,7 +78,7 @@ function finalize(x){const id=wid(nextId++),r=x.rows,h=hrModel(),hrs=r.map(q=>q[
   avg_incline_pct:+(r.reduce((s,q)=>s+q[10],0)/Math.max(1,r.length)).toFixed(2),ascent_m:+(x.asc??0).toFixed(1),avg_heart_rate:hrs.length?+(hrs.reduce((a,b)=>a+b,0)/hrs.length).toFixed(1):null,max_heart_rate:hrs.length?Math.max(...hrs):null,
   wall_time_valid:true,interrupted:false,grade_estimated:true,distance_estimated:true,calories_estimated:true,calories_source:'firmware_total_calories',speed_source:'live_target',
   calibration_max_level:cfg.maxLvl,calibration_real_max_grade:cfg.gmax,calibration_zero_grade:cfg.g0,fat_g:+(x.cal*0.45/9).toFixed(1),carbs_g:+(x.cal*0.55/4).toFixed(1),avg_met:+met.toFixed(2),avg_vo2:+(met*3.5).toFixed(1),
-  profile:{weight_kg:cfg.weight,age:num('number/Age'),sex:str('select/Gender')==='Female'?'female':'male',hr_max:h.max},zone_sec:x.zs,target_zone:PULSE.includes(cfg.program)?cfg.zone:null,
+  profile:{...x.owner,weight_kg:cfg.weight,age:num('number/Age'),sex:str('select/Gender')==='Female'?'female':'male',hr_max:h.max},zone_sec:x.zs,target_zone:PULSE.includes(cfg.program)?cfg.zone:null,
   phases:x.phases,trimp:+trimp.toFixed(1),blocks_sec:300,blocks,zwift_profile:null,route:x.routeName??null,program:cfg.program==='None'?'':cfg.program};
  W.set(id,{summary,rows:r,program:cfg.program});return id;}
 function csv(id){const w=W.get(id);if(w.raw)return w.raw;const s0=Date.parse(w.summary.start);let o='timestamp,heart_rate,speed_kmh,incline_pct,distance_km,time_s,calories,status,program,zone,incline_level,target_zone,elapsed_s\n';
@@ -99,7 +99,7 @@ function profileOf(text){try{const g=JSON.parse(text).geom,R=6371,rad=Math.PI/18
 let S={st:'stopped',x:null},speed=1;
 function pubIdle(){set('binary_sensor/Treadmill Usage',false);set('text_sensor/UI Control State','stopped|'+(str('select/Workout Program')==='None'?'manual':'auto'));}
 function start(){if(S.st!=='stopped')return;const cfg=cfgNow();if(cfg.program==='None'&&num('number/Set Speed')<0.6)set('number/Set Speed',3);
- const x=newSession(cfg,Date.now());x.hr=S.hr??x.hr;const m=str('select/Map');if(m==='Custom route'&&ROUTE.points.length>1){x.route=true;x.routeName=ROUTE.name;}
+ const x=newSession(cfg,Date.now());x.owner={id:currentProfile().id,name:currentProfile().name};x.hr=S.hr??x.hr;const m=str('select/Map');if(m==='Custom route'&&ROUTE.points.length>1){x.route=true;x.routeName=ROUTE.name;}
  S={st:'running',x};set('binary_sensor/Treadmill Usage',true);set('text_sensor/UI Control State','running|'+(cfg.program==='None'?'manual':'auto'));set('text_sensor/Workout Recorder Status','recording');set('text_sensor/Training Status','Running');}
 function stop(){if(S.st==='stopped')return;const x=S.x;S={st:'stopped',x:null,hr:x.hr};if(x.t>=num('number/Min Workout To Save')*60){const id=finalize(x),s=W.get(id).summary;
   for(const [k,v] of [['Last Time',s.duration_sec],['Last Distance',s.distance_km],['Last Calories',s.calories],['Last Avg Speed',s.avg_speed_kmh],['Last Avg HR',s.avg_heart_rate??0],['Last Max HR',s.max_heart_rate??0]])set('sensor/'+k,v);}
@@ -123,13 +123,37 @@ const PROG=new Map([['p1a2b3c4d5e6f7a8b',{version:1,id:'p1a2b3c4d5e6f7a8b',name:
 const ROUTES=new Map(Object.entries({...SAMPLE_ROUTES,...LS.get('routes',{})}));   // sample routes (Ufa) + the visitor's own
 let ROUTE={name:'',points:[]};
 let jobN=0;const JOBS=new Map();
+// Demo profiles are browser-local; never contact or mutate a real device.
+let profiles=LS.get('profiles',null),profileRevision=1;
+const demoProfile=(id,name,gender)=>({id,name,gender,age:35,weight:gender==='Female'?62:78,hr_max_mode:'Formula',hr_max_manual:185,resting_heart_rate:60,hr_zone_method:'Karvonen'});
+if(!profiles?.items?.length)profiles={version:1,active:'p1',items:[demoProfile('p1','Алексей','Male'),demoProfile('p2','Мария','Female')]};
+const currentProfile=()=>profiles.items.find(x=>x.id===profiles.active);
+const profileStatus=()=>({...profiles,generation:1,revision:profileRevision,applied_revision:profileRevision,pending:false,locked:S.st!=='stopped',error:''});
+function applyProfile(){const a=currentProfile();for(const [id,v] of [['number/Age',a.age],['number/Weight',a.weight],['select/Gender',a.gender],['select/HR Max Mode',a.hr_max_mode],['number/HR Max Manual',a.hr_max_manual],['number/Resting Heart Rate',a.resting_heart_rate],['select/HR Zone Method',a.hr_zone_method]])set(id,v);pubZones();}
+applyProfile();
+let historyIndex=0;for(const w of W.values()){const a=profiles.items[historyIndex++%profiles.items.length];w.summary.profile={...w.summary.profile,id:a.id,name:a.name};}
+const programStores=new Map([[profiles.active,PROG]]),routeStores=new Map([[profiles.active,ROUTES]]);
+function switchLibraries(){programStores.set(profiles.active,new Map(PROG));routeStores.set(profiles.active,new Map(ROUTES));}
+
 
 // --- HTTP: ESPHome REST + treadmill endpoints ---
 const J=(o,status=200)=>new Response(JSON.stringify(o),{status,headers:{'Content-Type':'application/json'}}),T=(t,status=200,type='text/plain')=>new Response(t,{status,headers:{'Content-Type':type}});
-async function handle(method,u,body){const p=decodeURIComponent(u.pathname),q=u.searchParams;
+async function handle(method,u,body,headers={}){const p=decodeURIComponent(u.pathname),q=u.searchParams;
+ if(p==='/api/profiles'){
+  if(method==='GET')return J(profileStatus());
+  let d;try{d=JSON.parse(body);}catch{return J({error:'bad_json'},400);}
+  if(S.st!=='stopped')return J({error:'busy'},409);
+  if(d.generation!==1||d.revision!==profileRevision)return J({error:'conflict'},409);
+  if(d.version!==1||!Array.isArray(d.items)||!d.items.length||d.items.length>8||!d.items.some(x=>x.id===d.active)||new Set(d.items.map(x=>x.id)).size!==d.items.length)return J({error:'invalid_profiles'},400);
+  switchLibraries();profiles={version:1,active:d.active,items:d.items};LS.set('profiles',profiles);++profileRevision;
+  PROG.clear();for(const [k,v] of programStores.get(profiles.active)||[])PROG.set(k,v);
+  ROUTES.clear();for(const [k,v] of routeStores.get(profiles.active)||[])ROUTES.set(k,v);
+  ROUTE={name:'',points:[]};applyProfile();return J({generation:1,target_revision:profileRevision},202);
+ }
+ if(method==='POST'&&/^\/api\/(presets|programs|routes)(?:\/|$)/.test(p)&&new Headers(headers).get('X-Library-Owner')!==profiles.active)return J({error:'owner_changed'},409);
  if(p==='/workouts/status')return J({state:S.st==='stopped'?'idle':'recording',recording:S.st!=='stopped',archive_available:true,error:'',total_bytes:7340032,used_bytes:180000+W.size*42000});
- if(p==='/workouts/list'||p==='/api/workouts/trash/list'){const tr=p!=='/workouts/list',ids=[...W.keys()].filter(i=>TRASH.has(i)===tr).sort(),after=q.get('after')||'',lim=Math.min(20,+q.get('limit')||20),rest=ids.filter(i=>i>after),page=rest.slice(0,lim);
-  return J({items:page.map(id=>({id,summary_available:true,...(q.get('summaries')?{summary:W.get(id).summary}:{})})),next:rest.length>lim?page.at(-1):null});}
+ if(p==='/workouts/list'||p==='/api/workouts/trash/list'){const tr=p!=='/workouts/list',desc=q.get('order')==='desc',ids=[...W.keys()].filter(i=>TRASH.has(i)===tr&&(!q.get('owner')||W.get(i).summary.profile?.id===q.get('owner'))).sort();if(desc)ids.reverse();const after=q.get('after')||'',lim=Math.min(2,+q.get('limit')||2),rest=ids.filter(i=>!after||(desc?i<after:i>after)),page=rest.slice(0,lim);
+  return J({order:desc?'desc':'asc',items:page.map(id=>({id,summary_available:true,...(q.get('summaries')?{summary:W.get(id).summary}:{})})),next:rest.length>lim?page.at(-1):null});}
  if(p==='/workouts/file'){const id=q.get('id');if(!W.has(id)||TRASH.has(id))return J({error:'not_found'},404);return q.get('type')==='csv'?T(csv(id),200,'text/csv'):J(W.get(id).summary);}
  if(/^\/api\/workouts\/(trash|restore|purge)$/.test(p)&&method==='POST'){const op=p.split('/').pop(),id=q.get('id');if(!W.has(id))return J({error:'invalid_id'},404);if(op==='trash')TRASH.add(id);if(op==='restore')TRASH.delete(id);if(op==='purge'){W.delete(id);TRASH.delete(id);}
   const job=++jobN;JOBS.set(job,{job,state:'succeeded',operation:op,id,error:''});return J({job,state:'queued',operation:op,id});}
@@ -137,15 +161,15 @@ async function handle(method,u,body){const p=decodeURIComponent(u.pathname),q=u.
  if(p==='/api/workouts/live'){const x=S.x,from=+q.get('from')||0,rows=x?x.rows.slice(from,from+300).map(r=>[r[0],r[1],r[2],r[3],r[4],r[5],r[6],r[7],r[8],r[9]]):[];
   return J({id:x?wid(nextId):null,active:!!x,program:x?x.cfg.program:'',start_epoch:x?Math.floor(x.start/1000):0,total:x?x.rows.length:0,from,columns:['elapsed_s','time_s','heart_rate','speed_kmh','incline_level','distance_km','calories','paused','zone','target_zone'],rows});}
  if(p==='/api/storage/scan')return J({state:'ready',used_bytes:180000+W.size*42000,total_bytes:7340032,file_count:W.size*2,file_bytes:W.size*42000});
- if(p==='/api/presets'){const k=q.get('kind');if(method==='POST'){try{LS.set('presets.'+k,JSON.parse(body).items);}catch{return J({error:'bad_json'},400);}return J({saved:true});}return J({items:LS.get('presets.'+k,[])});}
+ if(p==='/api/presets'){const k=q.get('kind');if(method==='POST'){try{LS.set('presets.'+profiles.active+'.'+k,JSON.parse(body).items);}catch{return J({error:'bad_json'},400);}return J({saved:true});}return J({items:LS.get('presets.'+profiles.active+'.'+k,[])});}
  if(p==='/api/programs/list')return J({items:[...PROG.keys()].map(id=>({id}))});
  if(p==='/api/programs/file')return PROG.has(q.get('id'))?J(PROG.get(q.get('id'))):J({error:'program_not_found'},404);
  if(p==='/api/programs/delete'){PROG.delete(q.get('id'));set('sensor/Programs Revision',num('sensor/Programs Revision')+1);return J({deleted:true});}
  if(p==='/api/programs/save'){try{const o=JSON.parse(body);PROG.set(o.id,o);}catch{return J({error:'bad_json'},400);}set('sensor/Programs Revision',num('sensor/Programs Revision')+1);return J({saved:true});}
  if(p==='/api/routes/list')return J({items:[...ROUTES.entries()].map(([id,t])=>({id,size:t.length}))});
  if(p==='/api/routes/file')return ROUTES.has(q.get('id'))?T(ROUTES.get(q.get('id')),200,'application/json'):J({error:'not_found'},404);
- if(p==='/api/routes/save'){ROUTES.set(q.get('id'),body);LS.set('routes',Object.fromEntries(ROUTES));return J({saved:true});}
- if(p==='/api/routes/delete'){ROUTES.delete(q.get('id'));LS.set('routes',Object.fromEntries(ROUTES));return J({deleted:true});}
+ if(p==='/api/routes/save'){ROUTES.set(q.get('id'),body);LS.set('routes.'+profiles.active,Object.fromEntries(ROUTES));return J({saved:true});}
+ if(p==='/api/routes/delete'){ROUTES.delete(q.get('id'));LS.set('routes.'+profiles.active,Object.fromEntries(ROUTES));return J({deleted:true});}
  if(p==='/api/routes/act')return J({saved:true});
  if(p==='/api/route/active'){if(method==='POST'){const l=String(body).trim().split('\n');ROUTE={name:l[1]||'',points:l.slice(2).map(s=>s.split(' ').map(Number)).filter(a=>a.length===2&&a.every(Number.isFinite))};return J({saved:true});}return J({name:ROUTE.name,option:'Custom route',points:ROUTE.points});}
  if(p==='/mcp')return J({jsonrpc:'2.0',id:null,error:{code:-32601,message:'MCP is not available in the demo'}});
@@ -169,7 +193,7 @@ function act(e,a,q){const id=e.id;
 const realFetch=window.fetch.bind(window);
 window.fetch=async(input,init={})=>{const u=new URL(typeof input==='string'?input:input.url,location.href);
  if(u.origin!==location.origin||/\.(html|js|css|json|png|svg|ico)$/.test(u.pathname)&&!u.pathname.startsWith('/api/'))return realFetch(input,init);
- const method=(init.method||'GET').toUpperCase();await new Promise(r=>setTimeout(r,40+rnd()*60));return handle(method,u,init.body);};
+ const method=(init.method||'GET').toUpperCase();await new Promise(r=>setTimeout(r,40+rnd()*60));return handle(method,u,init.body,init.headers);};
 class DemoEventSource{constructor(){this.readyState=0;this.l={};listeners.add(this.f=(t,d)=>this.fire(t,{data:d}));
  setTimeout(()=>{this.readyState=1;this.fire('open',{});for(const e of E.values())this.fire('state',{data:JSON.stringify(e)});},120);this.ping=setInterval(()=>this.fire('ping',{data:''}),5000);}
  addEventListener(t,f){(this.l[t]??=[]).push(f);}removeEventListener(t,f){this.l[t]=(this.l[t]||[]).filter(x=>x!==f);}

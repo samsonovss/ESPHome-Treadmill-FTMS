@@ -57,19 +57,53 @@ const ConceptLive={api({controls,t}){
    const wuHr=(()=>{const b=String(val('text_sensor/hr_zones')??'').match(/b=([\d.,]+)/)?.[1]?.split(',').map(Number),pc=num('number/warm-up_target_hr')??60;return b?.length===6&&b.every(Number.isFinite)?Math.round(b[0]+(b[5]-b[0])*(pc-50)/50):null;})();
    return {wuHr,routeOff:num('sensor/route_km_offset')??0,warmUp:phase==='warm',state:controls.state()==='unknown'?'stopped':controls.state(),fresh,mode,byPulse,name,sub,total,zones:z,route:r?.points??null,routeGeom:r?.geom??null,motorTemp:num('sensor/motor'),minSave:num('number/min_workout_to_save'),freeRunAvail:!!ent('switch/free_running_mode'),freeRun:controls.fresh()&&[true,'ON'].includes(val('switch/free_running_mode')),beltPos:num('sensor/my_distance'),belt:{L:num('number/tm_length'),A:num('number/tm_accel'),D:num('number/tm_decel')},hrLink:controls.shown()?val('text_sensor/pulse_monitor'):null,appLink:controls.shown()?val('text_sensor/zwift'):null,btModel:controls.shown()?val('text_sensor/bt_model'):null,ftmsStatus:controls.shown()?val('text_sensor/ftms_status'):null,overheatLimit:num('number/overheat_stop_temperature'),routeDetail:r?.detail??null,routeName:r?.name??null,hiit,notice,status:st,phase,prem,wait,cycLeft,plan,phaseStart:num('sensor/phase_start'),
     sample:{t:num('sensor/treadmill_time'),hr:hr>0?hr:null,spd:num('sensor/treadmill_speed')??num('sensor/treadmill_speed_motor'),inc:num('sensor/treadmill_incline'),dist:num('sensor/treadmill_distance'),cal:num('sensor/calories_burned')}};},
+  libraryOwner:()=>window.treadmillHistoryOwner||'',
   programs:(()=>{const hc=typeof TreadmillHistory!=='undefined'?new TreadmillHistory.Client():null;return {
    cache:new Map(),rev:()=>num('sensor/programs_revision'),
-   async list(){const l=JSON.parse(await hc.request('/api/programs/list',false)),ids=(l.items||[]).map(x=>x.id),out=[];for(const k of [...this.cache.keys()])if(!ids.includes(k))this.cache.delete(k);for(const id of ids){if(!this.cache.has(id)){try{this.cache.set(id,JSON.parse(await hc.request('/api/programs/file?id='+id,false)));}catch{continue;}}out.push(this.cache.get(id));}return out;},
-   async remove(id){await hc.request('/api/programs/delete?id='+encodeURIComponent(id),false,'POST');this.cache.delete(id);}};})(),
+   async list(){const owner=window.treadmillHistoryOwner;if(!owner)throw Error('profile');this.cache.clear();const l=JSON.parse(await hc.request('/api/programs/list',false)),out=[];for(const {id} of l.items||[]){const p=JSON.parse(await hc.request('/api/programs/file?id='+id,false));if(owner!==window.treadmillHistoryOwner)throw Error('owner_changed');out.push(p);}if(owner!==window.treadmillHistoryOwner)throw Error('owner_changed');return out;},
+   async remove(id,owner=window.treadmillHistoryOwner){if(!owner||owner!==window.treadmillHistoryOwner)throw Error('owner_changed');const r=await hc.fetcher('/api/programs/delete?id='+encodeURIComponent(id),{method:'POST',headers:{'X-Library-Owner':owner}});if(!r.ok)throw Error('delete');}};})(),
   presets:(()=>{const hc=typeof TreadmillHistory!=='undefined'?new TreadmillHistory.Client():null;return {
-   async get(kind){const d=JSON.parse(await hc.request('/api/presets?kind='+kind,false));if(!d||!Array.isArray(d.items))throw Error('presets');return d.items;},
-   async save(kind,items){const r=await hc.fetcher('/api/presets?kind='+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});if(!r.ok)throw Error('presetsSave');}};})(),
+   async get(kind){const owner=window.treadmillHistoryOwner;if(!owner)throw Error("profile");const d=JSON.parse(await hc.request('/api/presets?kind='+kind,false));if(owner!==window.treadmillHistoryOwner)throw Error("owner_changed");if(!d||!Array.isArray(d.items))throw Error('presets');return d.items;},
+   async save(kind,items,owner=window.treadmillHistoryOwner){if(!owner||owner!==window.treadmillHistoryOwner)throw Error("owner_changed");const r=await hc.fetcher('/api/presets?kind='+kind,{method:'POST',headers:{'Content-Type':'application/json','X-Library-Owner':owner},body:JSON.stringify({items})});if(!r.ok)throw Error('presetsSave');}};})(),
   history:(()=>{const hc=typeof TreadmillHistory!=='undefined'?new TreadmillHistory.Client():null,num=v=>v===''||v==null?null:(Number.isFinite(+v)?+v:null);
    const parse=text=>{const lines=text.trim().split(/\r?\n/),head=lines.shift().split(','),ix=k=>head.indexOf(k);const keep=['status','incline_level','incline_pct','target_zone'].map(ix),prev=[];/* compact CSV: empty = previous value */return lines.map(l=>{const c=l.split(',');for(const i of keep)if(i>=0){if(c[i]==='')c[i]=prev[i]??'';else prev[i]=c[i];}return c;}).filter(c=>c[ix('status')]!=='paused').map(c=>({t:num(c[ix('elapsed_s')])??num(c[ix('time_s')]),hr:(v=>v>0?v:null)(num(c[ix('heart_rate')])),spd:num(c[ix('speed_kmh')]),inc:num(c[ix('incline_level')])??num(c[ix('incline_pct')]),dist:num(c[ix('distance_km')]),cal:num(c[ix('calories')]),tz:num(c[ix('target_zone')]),tm:num(c[ix('time_s')])??num(c[ix('elapsed_s')])})).filter(r=>r.t!=null);};
    return {
     meta:new Map(),
     // summaries=1 (new firmware) embeds each summary JSON in the list: one request instead of one per workout.
-    async ids(){if(!hc)return [];await hc.check();const out=[];let after='';for(let i=0;i<50;i++){const page=JSON.parse(await hc.request('/workouts/list?'+(after?'after='+after+'&':'')+'limit=20&summaries=1',false));if(!page||!Array.isArray(page.items)||page.items.some(x=>!TreadmillHistory.validId(x.id)))throw Error('historyInvalid');for(const x of page.items){out.push(x.id);if(x.summary&&typeof x.summary==='object')this.meta.set(x.id,x.summary);}if(!page.next||page.next===after)break;after=page.next;}return out.reverse();},
+    listCache:null,
+    async unchanged(){const s=await hc.check();const same=!!(this.listCache&&this.listCache.ids.every(id=>this.meta.has(id))&&s.history_token&&s.history_token===this.listCache.token);if(same)this.listCache.meta=new Map(this.meta);return same;},
+    async ids(onPage){if(!hc)throw Error('historyError');const status=await hc.check(),token=status.history_token;
+     if(token&&this.listCache?.token===token){this.meta=new Map(this.listCache.meta);await onPage?.([...this.listCache.ids],true);return [...this.listCache.ids];}
+     const out=[],seen=new Set();this.meta.clear();let after='',descending=null;
+     for(let i=0;i<2048;i++){
+      const page=JSON.parse(await hc.request('/workouts/list?order=desc&'+(after?'after='+after+'&':'')+'limit=20&summaries=1',false));
+      if(!page||!Array.isArray(page.items)||page.items.length>20||page.items.some(x=>!TreadmillHistory.validId(x.id)))throw Error('historyInvalid');
+      if(descending===null)descending=page.order==='desc';else if(descending!==(page.order==='desc'))throw Error('historyInvalid');
+      let previous=after;
+      for(const x of page.items){if(seen.has(x.id)||(previous&&(descending?x.id>=previous:x.id<=previous)))throw Error('historyInvalid');previous=x.id;seen.add(x.id);out.push(x.id);if(x.summary&&typeof x.summary==='object')this.meta.set(x.id,x.summary);}
+      if(page.next!=null&&page.next!==''&&(!TreadmillHistory.validId(page.next)||(after&&(descending?page.next>=after:page.next<=after))||(previous&&(descending?page.next>previous:page.next<previous))))throw Error('historyInvalid');
+      // Old firmware ignores order=desc: don't auto-open an old record mid-scan.
+      const ids=descending?[...out]:[...out].reverse();await onPage?.(ids,descending||!page.next);
+      if(!page.next){this.listCache=token?{token,ids:[...ids],meta:new Map(this.meta)}:null;return ids;}after=page.next;
+     }throw Error('historyIncomplete');},
+    async assign(id,profile){
+      // One mutation only. A lost reply or a busy archive is not a failed write.
+      await this.idle();
+      let ack,failed=false;
+      try{ack=await hc.request('/api/workouts/assign?id='+id+'&profile='+encodeURIComponent(profile),true,'POST');}catch{}
+      for(let i=0;i<40;i++){
+        await new Promise(r=>setTimeout(r,500));
+        if(Number.isSafeInteger(ack?.job)&&ack.id===id){try{
+          const j=await hc.request('/api/workouts/job?job='+ack.job);
+          if(j.id===id&&j.operation==='assign'&&j.state==='failed')failed=true;
+        }catch{}}
+        // Read back even after success: this also waits for the worker's FS lease.
+        let m;try{m=JSON.parse(await hc.file(id,'json'));}catch{continue;}
+        if(m.id===id&&m.profile?.id===profile)return;
+        if(failed)throw Error('assignment_failed');
+      }
+      throw Error('assignment_unconfirmed');
+    },
     async summary(id){return JSON.parse(await hc.file(id,'json'));},
     async rows(id){return parse(await hc.file(id,'csv'));},
     async download(id,type){let content,mime='text/plain';if(type==='fit'){const sm=JSON.parse(await hc.file(id,'json'));content=TreadmillFit.build(TreadmillFit.parseCSV(await hc.file(id,'csv'),sm.interrupted===true),sm);mime='application/octet-stream';}else{/* compact CSV on the board → full CSV for the user (every cell filled) */const raw=await hc.file(id,'csv'),rows=TreadmillFit.parseCSV(raw),head=raw.slice(0,raw.indexOf('\n')).split(','),q=v=>/[",\n]/.test(v)?'"'+String(v).replace(/"/g,'""')+'"':v;content=head.join(',')+'\n'+rows.map(r=>head.map(k=>q(r[k]??'')).join(',')).join('\n')+'\n';mime='text/csv';}const url=URL.createObjectURL(new Blob([content],{type:mime})),a=document.createElement('a');a.href=url;a.download=id+'.'+type;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);},
@@ -89,7 +123,7 @@ const ConceptLive={api({controls,t}){
    const keys={run:'number/set_run_time',warm:'number/set_warm-up_time',cool:'number/set_cool-down_time',rwarm:'number/set_warm-up_time',rcool:'number/set_cool-down_time',hi:'number/hiit_high_duration',lo:'number/hiit_low_duration',low:'number/hiit_low_speed',high:'number/hiit_high_speed',cycles:'number/hiit_cycles'},out={fplan:v('text/fartlek_plan'),fname:v('text/fartlek_name'),program:v('select/workout_program'),zone:v('select/heart_rate_zone'),map:(m=>m===RL?.CUSTOM?(RL.refreshActive(),customName()??m):m)(v('select/map')),programs:opts('select/workout_program'),zones:opts('select/heart_rate_zone'),maps:opts('select/map'),hiitMode:v('select/hiit_work_mode'),rwMode:v('select/warm-up_mode'),rcMode:v('select/cool-down_mode'),hiitModes:opts('select/hiit_work_mode'),traits:{},keys};
    for(const [k,key]of Object.entries(keys)){out[k]=num(key);out.traits[k]=tr(key);}return out;},
   canApply:()=>controls.fresh()&&controls.state()==='stopped'&&!controls.pending.size,
-  async apply(list){if(!controls.fresh()||controls.state()!=='stopped')throw Error('Дорожка должна стоять');for(let [key,value]of list){if(key==='select/map'&&RL&&value!=='None'&&!builtins()[value]){const r=allRoutes()[value];if(r?.cat){await RL.upload({name:value,geom:await RL.zwGeom(r.cat),detail:10,intensity:1});}else{if(!r?.custom)throw Error('Маршрут не найден');await RL.upload({...RL.get(r.custom),name:value});}value=RL.CUSTOM;}const d=ent(key);if(!d)throw Error('нет сущности '+key);const path='/'+d.domain+'/'+encodeURIComponent(d.name)+'/set?'+(d.domain==='select'?'option=':'value=')+encodeURIComponent(value);const r=await controls.send(path);if(!r.ok)throw Error('HTTP '+(r.status??''));await new Promise(res=>setTimeout(res,60));}},
+  async apply(list){const scope=RL?.scope();if(!controls.fresh()||controls.state()!=='stopped')throw Error('Дорожка должна стоять');for(let [key,value]of list){if(RL)RL.checkScope(scope);if(key==='select/map'&&RL&&value!=='None'&&!builtins()[value]){const r=allRoutes()[value];if(r?.cat){await RL.upload({name:value,geom:await RL.zwGeom(r.cat),detail:10,intensity:1},scope);}else{if(!r?.custom)throw Error('Маршрут не найден');await RL.upload({...RL.get(r.custom),name:value},scope);}value=RL.CUSTOM;}if(RL)RL.checkScope(scope);const d=ent(key);if(!d)throw Error('нет сущности '+key);const path='/'+d.domain+'/'+encodeURIComponent(d.name)+'/set?'+(d.domain==='select'?'option=':'value=')+encodeURIComponent(value);const r=await controls.send(path);if(!r.ok)throw Error('HTTP '+(r.status??''));await new Promise(res=>setTimeout(res,60));}},
   // Whole current workout from the recorder's PSRAM buffer (new firmware); null on old firmware.
   async live(){const rows=[];let from=0,meta=null;for(let i=0;i<20;i++){const c=new AbortController(),tm=setTimeout(()=>c.abort(),10000);let j;try{const r=await fetch('/api/workouts/live?from='+from,{cache:'no-store',signal:c.signal});if(!r.ok)return null;j=await r.json();}catch{return null;}finally{clearTimeout(tm);}
     meta=j;if(!Array.isArray(j.rows))return null;for(const x of j.rows)if(Array.isArray(x)&&!x[7])rows.push({t:x[1],hr:x[2]>0?x[2]:null,spd:x[3],inc:x[4],dist:x[5],cal:x[6]});from+=j.rows.length;if(!j.rows.length||from>=j.total)break;}return {id:meta?.id,active:!!meta?.active,rows};},

@@ -144,6 +144,7 @@ function chart(x,W,H,{route,inc='var(--z3)',muted='var(--gray-59)',hoverKm=null}
   return `<b style="color:${R[1]}">● Качество трека: ${R[0]}</b><span>${src}${pts}</span>${why}<span>Рекомендуем: <b>${rec}</b>${cur!==q.detail?' · <em>сейчас выбрано другое</em>':''}</span>`;}
  // ---- Editor overlay ----
  function editor(root,{route=null,onSaved,onDeleted}={}){
+  const scope=RoutesLib.scope();
   const RL=RoutesLib,ov=document.createElement('div');ov.className='rm-ov';
   ov.innerHTML=`<div class="rm-dlg"><div class="rm-emap"><div class="rm-map"></div><div class="rm-hint">Кликайте по карте — маршрут проложится по дорогам и тропам. Или загрузите GPX.</div><div class="rm-dist" hidden></div><button class="rm-ecolor"></button><div class="rm-find"><input class="rm-fq" placeholder="Найти место… (например, Trollstigen)" autocomplete="off"><div class="rm-fres" hidden></div></div><div class="rm-glegend" hidden></div></div>
   <div class="rm-side"><h3>${route?'Маршрут':'Новый маршрут'}</h3>
@@ -196,8 +197,8 @@ function chart(x,W,H,{route,inc='var(--z3)',muted='var(--gray-59)',hoverKm=null}
   const close=()=>{closed=true;for(const d of dots)d.style.animationPlayState='';for(const o of obs)o.disconnect();map?.remove();map=null;ov.remove();};
   $('.rm-cancel').onclick=close;ov.addEventListener('click',e=>{if(e.target===ov)close();});
   $('.rm-save').onclick=async()=>{const name=$('.rm-name').value.trim();if(!name){msg('Введите название',true);$('.rm-name').focus();return;}st.busy=true;update();msg('Сохраняю…');
-   try{const r=await RL.save({id:route?.id,created:route?.created,name,intensity:st.intensity,detail:st.detail,quality:st.quality,geom:st.geom,...plc(),source:route?.source??(st.wps.length?'brouter':'gpx')});close();onSaved?.(r);}catch(e){st.busy=false;msg(e.message,true);update();}};
-  if(route)$('.rm-del').onclick=async()=>{if(!confirm('Удалить маршрут «'+route.name+'»?'))return;try{await RL.remove(route.id);close();onDeleted?.();}catch(e){msg(e.message,true);}};
+   try{const r=await RL.save({id:route?.id,created:route?.created,name,intensity:st.intensity,detail:st.detail,quality:st.quality,geom:st.geom,...plc(),source:route?.source??(st.wps.length?'brouter':'gpx')},scope);close();onSaved?.(r);}catch(e){st.busy=false;msg(e.message,true);update();}};
+  if(route)$('.rm-del').onclick=async()=>{if(!confirm('Удалить маршрут «'+route.name+'»?'))return;try{await RL.remove(route.id,scope);close();onDeleted?.();}catch(e){msg(e.message,true);}};
   update();return {close};
  }
  const STYLE=`.rwrap.on{display:grid;grid-template-columns:minmax(280px,400px) 1fr;gap:12px;align-items:start}.rwrap.on #proglist.routes{grid-template-columns:1fr;max-height:820px;overflow:auto;margin:0}.rwrap.picked .rmap{height:480px}

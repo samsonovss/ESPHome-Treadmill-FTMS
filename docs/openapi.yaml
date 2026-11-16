@@ -20,8 +20,9 @@ paths:
           content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}
   /workouts/list:
     get:
-      summary: Page of saved workout IDs (ascending)
+      summary: Page of saved workout IDs (ascending; optional applied owner pin)
       parameters:
+        - {name: owner, in: query, schema: {type: string}, description: "Optional applied profile ID; mismatch or pending returns 409. Omit for legacy unfiltered reads."}
         - {name: after, in: query, schema: {type: string, pattern: "^w[0-9]{10}$"}, description: Cursor = `next` of the previous page}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 20, default: 20}}
       responses:
@@ -34,6 +35,7 @@ paths:
     get:
       summary: Workout file (gzip when the client accepts it)
       parameters:
+        - {name: owner, in: query, schema: {type: string}, description: "Optional applied profile ID; mismatch or pending returns 409. Omit for legacy unfiltered reads."}
         - {name: id, in: query, required: true, schema: {type: string, pattern: "^w[0-9]{10}$"}}
         - {name: type, in: query, required: true, schema: {type: string, enum: [csv, json]}}
       responses:

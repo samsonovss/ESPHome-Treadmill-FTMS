@@ -64,3 +64,23 @@ Rules shared by the archive and program endpoints:
 - workout IDs look like `w0000000001`, program IDs like `p` + 16 hex digits.
 
 Routes (`/api/routes/*`) and presets (`/api/presets`) are used by the web page as well. Their format may still change, so they are not described here yet.
+
+## Optional owner-pinned workout reads
+
+Agents should first read `GET /api/profiles`: require `pending=false` and use
+`active` with its matching `items` entry (stored applied settings). MCP offers
+`get_active_profile` as a compact equivalent; see [MCP workflow](MCP.md#applied-profile-and-pinned-analysis).
+`GET /workouts/list?owner=p1` and `/workouts/file?id=w0000000001&type=json&owner=p1`
+(or `type=csv`) restrict reads to that applied owner. Mismatch/not-ready/pending
+returns 409 `owner_changed`; a file outside the owner returns 404. Lists include
+`owner` and `context`; follow `next` even on empty pages. Missing/malformed owner
+metadata is excluded. Requests **without owner** retain the legacy unfiltered
+view for existing UI and assignment; `/api/workouts/assign` is unchanged.
+Filtered trash lists are not supported (400). `/api/workouts/live` adds recorded
+`profile.id/name` or null, not the current selected user. This is not access control.
+
+### Personal routes
+
+`/api/routes/list`, `/api/routes/file?id=…`, `/api/routes/save?id=…`, `/api/routes/delete?id=…`, `/api/routes/act?id=…` and GET/POST `/api/route/active` require `X-Library-Owner: <applied profile id>` (409 `owner_changed` if missing/stale). Obtain the applied owner through `/api/profiles`; do not write while pending. Existing route IDs/body formats remain unchanged: IDs are namespaced by profile in `personal-routes/<owner>/`. JSON geometry, detail and other fields remain opaque; `.act` is the independent Nextion-ready sidecar. Writes retain stopped/recorder gates.
+
+Legacy `/routes` is atomically renamed to the durable original owner (p1, otherwise first persistent profile), using the existing library binding and `legacy-backup-routes` byte copies; conflicting destinations fail closed. Browser legacy caches are not imported or deleted. Favorites and sidecar cache markers are per profile; public catalog/calibration and display-layer preferences stay shared. Switching applied user clears the old volatile Custom route and deselects it; it does not restore a different route automatically. Nextion lists reload and reject stale row selection.

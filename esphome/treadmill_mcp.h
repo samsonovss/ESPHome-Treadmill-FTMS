@@ -48,6 +48,10 @@ class McpHandler: public AsyncWebHandler {
   static std::string tool(const std::string &id,const std::string &text,bool is_error){return ok(id,"{\"content\":[{\"type\":\"text\",\"text\":"+json_string(text.c_str())+"}],\"isError\":"+(is_error?"true":"false")+"}");}
 
   std::string call(const std::string &id,const std::string &name,const std::string &args){
+    if(name=="get_active_profile"){
+      FsLease lease;if(!lease.owned)return tool(id,"archive_busy: retry",true);
+      return tool(id,treadmill_profiles::context(),false);
+    }
     if(name=="get_status"){
       std::string o="{\"state\":"+json_string(recording?"recording":(io_busy?"finalizing":"idle"))+",\"archive_available\":"+(initialized?"true":"false")+",\"error\":"+json_string(fault_text())+",\"total_bytes\":"+std::to_string(archive_total.load())+",\"used_bytes\":"+std::to_string(archive_used.load())+"}";
       return tool(id,o,false);
@@ -59,13 +63,15 @@ class McpHandler: public AsyncWebHandler {
        else{const auto &x=live_rows.back();auto num=[](float v,char *b,size_t sz,const char *fmt){if(std::isfinite(v))snprintf(b,sz,fmt,v);else snprintf(b,sz,"null");};
         char hr[16],sp[16],lv[16],di[16],ca[16];num(x.hr,hr,sizeof hr,"%.0f");num(x.speed,sp,sizeof sp,"%.1f");num(x.level,lv,sizeof lv,"%.0f");num(x.distance,di,sizeof di,"%.3f");num(x.calories,ca,sizeof ca,"%.1f");
         snprintf(line,lb.size(),"\"elapsed_s\":%.0f,\"time_s\":%.0f,\"heart_rate\":%s,\"speed_kmh\":%s,\"incline_level\":%s,\"distance_km\":%s,\"calories\":%s,\"paused\":%s,\"zone\":%u,\"target_zone\":%u",x.elapsed,x.timer,hr,sp,lv,di,ca,x.paused?"true":"false",unsigned(x.zone),unsigned(x.target_zone));
-        o=std::string("{\"active\":")+(live_active?"true":"false")+",\"id\":"+(live_id.empty()?"null":json_string(live_id.c_str()))+",\"program\":"+json_string(live_program)+",\"rows\":"+std::to_string(live_rows.size())+","+line+"}";}}
+        o=std::string("{\"active\":")+(live_active?"true":"false")+",\"id\":"+(live_id.empty()?"null":json_string(live_id.c_str()))+",\"profile\":"+live_owner_json()+",\"program\":"+json_string(live_program)+",\"rows\":"+std::to_string(live_rows.size())+","+line+"}";}}
       return tool(id,o,false);
     }
     if(name=="list_workouts"||name=="get_workout_summary"){
       if(busy())return tool(id,"workout_active_or_finalizing: retry after the treadmill is stopped",true);
       if(!initialized)return tool(id,"storage_not_ready",true);
       FsLease lease;if(!lease.owned)return tool(id,"archive_busy: retry in a moment",true);
+      const std::string owner=jstr(jraw(args,"owner"));
+      if(!treadmill_profiles::expected_owner(owner))return tool(id,"owner_changed: pin get_active_profile profile.id; pending/not-ready/mismatch requires explicit retry for intended user",true);
       if(name=="list_workouts"){
         std::string after=jstr(jraw(args,"after")),lr=jraw(args,"limit");if(!after.empty()&&!valid_id(after))return tool(id,"invalid after",true);
         int limit=20;if(!lr.empty()){limit=atoi(lr.c_str());if(limit<1||limit>20)return tool(id,"limit must be 1..20",true);}
@@ -75,12 +81,14 @@ class McpHandler: public AsyncWebHandler {
           if(engine.tombstoned(n))continue;
           bool complete=stat(engine.path(n,"json").c_str(),&st)==0;
           bool exists=complete||stat(engine.path(n,"csv").c_str(),&st)==0;
+          if(exists&&!summary_owned(n,owner))continue;
           if(exists){if(count++)out+=',';out+="{\"id\":"+json_string(n)+",\"summary_available\":"+(complete?"true":"false")+"}";}
         }
-        out+="],\"next\":";if(cursor<max){char n[24];snprintf(n,sizeof n,"w%010llu",(unsigned long long)cursor);out+=json_string(n);}else out+="null";out+="}";
+        out+="],\"next\":";if(cursor<max){char n[24];snprintf(n,sizeof n,"w%010llu",(unsigned long long)cursor);out+=json_string(n);}else out+="null";out+=",\"owner\":"+json_string(owner.c_str())+",\"context\":"+treadmill_profiles::context()+"}";
         return tool(id,out,false);
       }
       std::string wid=jstr(jraw(args,"id"));if(!valid_id(wid))return tool(id,"invalid id (format w0000000000)",true);
+      if(!summary_owned(wid,owner))return tool(id,"workout_not_found_for_owner",true);
       if(engine.tombstoned(wid))return tool(id,"workout_in_trash",true);
       std::string path=engine.path(wid,"json");struct stat st{};
       if(stat(path.c_str(),&st)!=0)return tool(id,"summary_not_found",true);
@@ -93,7 +101,9 @@ class McpHandler: public AsyncWebHandler {
       if(busy())return tool(id,"workout_active_or_finalizing: retry after the treadmill is stopped",true);
       FsLease lease;if(!lease.owned)return tool(id,"archive_busy: retry in a moment",true);
       if(!initialized||!treadmill_storage::mounted)return tool(id,"storage_not_ready",true);
-      std::string out="{\"items\":[";DIR *d=opendir(plan_dir().c_str());size_t count=0,scanned=0;
+      if(!treadmill_profiles::expected_owner(jstr(jraw(args,"owner"))))return tool(id,"owner_changed: retain intended owner and recheck get_active_profile",true);
+      if(!library_prepare("programs"))return tool(id,"library_not_ready",true);
+      std::string out="{\"owner\":"+json_string(treadmill_profiles::library_owner().c_str())+",\"items\":[";DIR *d=opendir(plan_dir().c_str());size_t count=0,scanned=0;
       if(d){while(auto *en=readdir(d)){if(++scanned>160)break;std::string n=en->d_name;if(n.size()!=22||n.substr(17)!=".json"||!plan_id(n.substr(0,17)))continue;if(count>=64)break;if(count++)out+=',';out+=json_string(n.substr(0,17).c_str());}closedir(d);}
       return tool(id,out+"]}",false);
     }
@@ -102,7 +112,9 @@ class McpHandler: public AsyncWebHandler {
       if(busy())return tool(id,"workout_active_or_finalizing: retry after the treadmill is stopped",true);
       FsLease lease;if(!lease.owned)return tool(id,"archive_busy: retry in a moment",true);
       if(!initialized||!treadmill_storage::mounted)return tool(id,"storage_not_ready",true);
-      if(name=="delete_program"){const char *e=plan_delete(pid);return e?tool(id,e,true):tool(id,"{\"deleted\":true}",false);}
+      if(!treadmill_profiles::expected_owner(jstr(jraw(args,"owner"))))return tool(id,"owner_changed: retain intended owner and recheck get_active_profile",true);
+      if(!library_prepare("programs"))return tool(id,"library_not_ready",true);
+      if(name=="delete_program"){if(jstr(jraw(args,"owner"))!=treadmill_profiles::library_owner())return tool(id,"owner_changed: retain intended owner; recheck get_active_profile",true);const char *e=plan_delete(pid);return e?tool(id,e,true):tool(id,"{\"deleted\":true}",false);}
       std::string path=plan_dir()+"/"+pid+".json";struct stat st{};
       if(stat(path.c_str(),&st)!=0)return tool(id,"program_not_found",true);
       if(st.st_size<1||st.st_size>8192)return tool(id,"program_size_invalid",true);
@@ -118,7 +130,8 @@ class McpHandler: public AsyncWebHandler {
       FsLease lease;if(!lease.owned)return tool(id,"archive_busy: retry in a moment",true);
       if(!initialized||!treadmill_storage::mounted||!queue)return tool(id,"storage_not_ready",true);
       if(!plan_stopped())return tool(id,"fresh_stop_required: the treadmill must be stopped, retry in a few seconds",true);
-      plan_payload=prog;plan_target=pid;Event e{};e.kind=6;mutation_pending=true;job_id=pid;job_operation="program_save";job_error.clear();job_state=1;
+      if(!treadmill_profiles::expected_owner(jstr(jraw(args,"owner")))||!library_prepare("programs"))return tool(id,"owner_changed: retain intended owner; recheck get_active_profile",true);
+      plan_owner=treadmill_profiles::library_owner();plan_payload=prog;plan_target=pid;Event e{};e.kind=6;mutation_pending=true;job_id=pid;job_operation="program_save";job_error.clear();job_state=1;
       if(xQueueSend(queue,&e,0)!=pdTRUE){mutation_pending=false;job_state=0;plan_payload.clear();return tool(id,"queue_unavailable",true);}
       ++job_number;if(!job_number)++job_number;
       return tool(id,"{\"saved\":\"queued\",\"program_id\":"+json_string(pid.c_str())+",\"note\":\"written in the background; the program appears in the Programs list on the board\"}",false);
@@ -141,14 +154,15 @@ class McpHandler: public AsyncWebHandler {
     if(method=="ping"){reply(r,200,ok(id,"{}"));return;}
     if(method=="tools/list"){
       reply(r,200,ok(id,"{\"tools\":["
+        "{\"name\":\"get_active_profile\",\"description\":\"Read applied profile context before analysis. Pin profile.id as owner for ALL history/program calls. ready must be true and pending false. Returns stored age, weight_kg, sex, hr_max_mode, hr_max_manual, resting_heart_rate, hr_zone_method; no computed max HR or zone boundaries. On mismatch stop and explicitly retry for intended user, never silently switch.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},"
         "{\"name\":\"get_status\",\"description\":\"Recorder state (idle/recording/finalizing) and storage usage.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},"
-        "{\"name\":\"get_live\",\"description\":\"Latest sample of the current or last workout: heart rate, speed, incline level, distance, calories, zone.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},"
-        "{\"name\":\"list_workouts\",\"description\":\"Page of saved workout ids, ascending. Use next as after. Unavailable while a workout runs.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"after\":{\"type\":\"string\"},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":20}}}},"
-        "{\"name\":\"get_workout_summary\",\"description\":\"Summary JSON of one workout (zones, load, blocks). Unavailable while a workout runs.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"]}},"
-        "{\"name\":\"list_programs\",\"description\":\"Ids of programs stored on the board. Unavailable while a workout runs.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},"
-        "{\"name\":\"get_program\",\"description\":\"Full JSON of one stored program by id.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"]}},"
-        "{\"name\":\"delete_program\",\"description\":\"Delete one stored program by id. Only while the treadmill is stopped. Cannot be undone.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"]}},"
-        "{\"name\":\"save_program\",\"description\":\"Save a custom program on the board; it never starts or moves the motor, the user starts it. Only while stopped. Argument program = {version:1,id:'p'+16 lowercase hex,name:<=80 chars,schema_units:{duration:'s',speed:'km/h',incline:'level'},blocks:[{repeat:1..20,steps:[{duration:1..14400,speed:km/h,incline:level}]}]}. Optional organizing fields: goal (<=40 chars, e.g. endurance), plan (<=40 chars, plan name e.g. Week 43), day ('YYYY-MM-DD', the planned date); use them so the user sees a weekly plan. To be runnable from the page keep the program to about 25 steps after expanding repeats and merging equal neighbours (board plan limit 255 chars); longer programs still save but cannot be started. A step may use zone:1..5 (heart-rate zone) INSTEAD of speed: {duration,zone,incline}; the board's pulse regulator then adapts the speed (slowly, ~0.1-0.5 km/h per 20 s, so a zone step shorter than ~3 min will not settle; without a pulse signal the belt drops to 1 km/h as in Pulse Zone programs). Zones as % of max HR: Z1 50-60 warm-up/recovery, Z2 60-70 aerobic base and fat burn (long steady 20-60 min), Z3 70-80 tempo (10-30 min), Z4 80-90 threshold (3-10 min blocks with recovery), Z5 90-100 short efforts only (30 s-3 min, <10 min total). Use zone steps for long steady blocks and warm-up/cool-down (Z1); use speed steps for short hard intervals. About 80% of weekly time should be Z1-Z2; no hard sessions on consecutive days; check list_workouts/get_workout_summary (trimp, zone_sec) before planning. Max 64 blocks, 64 steps per block, total 14400 s, 8192 bytes; speed and incline must lie on the board's min/max/step grid; same id overwrites.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"program\":{\"type\":\"object\"}},\"required\":[\"program\"]}}"
+        "{\"name\":\"get_live\",\"description\":\"Shared machine telemetry, NOT personal history. Latest current/last workout sample; profile is the recorded owner or null, never the newly selected user.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},"
+        "{\"name\":\"list_workouts\",\"description\":\"Requires pinned owner from get_active_profile. Only that applied owner, no unassigned/unknown records. Ascending scan; use next as after even when items is empty until next=null. Mismatch/pending fails; never silently switch users. Unavailable while a workout runs.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"after\":{\"type\":\"string\"},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":20},\"owner\":{\"type\":\"string\"}},\"required\":[\"owner\"]}},"
+        "{\"name\":\"get_workout_summary\",\"description\":\"Requires pinned owner; summary only for that applied owner (zones, load, blocks). Unknown/unassigned excluded. Unavailable while a workout runs.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"owner\":{\"type\":\"string\"}},\"required\":[\"id\",\"owner\"]}},"
+        "{\"name\":\"list_programs\",\"description\":\"Requires pinned owner; IDs in that applied user library. Unavailable while a workout runs.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"owner\":{\"type\":\"string\"}},\"required\":[\"owner\"]}},"
+        "{\"name\":\"get_program\",\"description\":\"Requires pinned owner; full JSON in that applied user library.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"owner\":{\"type\":\"string\"}},\"required\":[\"id\",\"owner\"]}},"
+        "{\"name\":\"delete_program\",\"description\":\"Delete one stored program by id. Only while the treadmill is stopped. Cannot be undone.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"owner\":{\"type\":\"string\"},\"id\":{\"type\":\"string\"}},\"required\":[\"owner\",\"id\"]}},"
+        "{\"name\":\"save_program\",\"description\":\"Require the SAME pinned owner used for history analysis; a profile switch/pending update rejects the write. Recheck context and explicitly retry for intended user, never silently adopt a new owner. Save a custom program on the board; it never starts or moves the motor, the user starts it. Only while stopped. Argument program = {version:1,id:'p'+16 lowercase hex,name:<=80 chars,schema_units:{duration:'s',speed:'km/h',incline:'level'},blocks:[{repeat:1..20,steps:[{duration:1..14400,speed:km/h,incline:level}]}]}. Optional organizing fields: goal (<=40 chars, e.g. endurance), plan (<=40 chars, plan name e.g. Week 43), day ('YYYY-MM-DD', the planned date); use them so the user sees a weekly plan. To be runnable from the page keep the program to about 25 steps after expanding repeats and merging equal neighbours (board plan limit 255 chars); longer programs still save but cannot be started. A step may use zone:1..5 (heart-rate zone) INSTEAD of speed: {duration,zone,incline}; the board's pulse regulator then adapts the speed (slowly, ~0.1-0.5 km/h per 20 s, so a zone step shorter than ~3 min will not settle; without a pulse signal the belt drops to 1 km/h as in Pulse Zone programs). Honor get_active_profile hr_zone_method: Percent uses % of max HR; Karvonen uses resting HR + % of (max HR - resting HR). Bands: Z1 50-60 warm-up/recovery, Z2 60-70 aerobic base and fat burn (long steady 20-60 min), Z3 70-80 tempo (10-30 min), Z4 80-90 threshold (3-10 min blocks with recovery), Z5 90-100 short efforts only (30 s-3 min, <10 min total). Use zone steps for long steady blocks and warm-up/cool-down (Z1); use speed steps for short hard intervals. About 80% of weekly time should be Z1-Z2; no hard sessions on consecutive days; check list_workouts/get_workout_summary (trimp, zone_sec) before planning. Max 64 blocks, 64 steps per block, total 14400 s, 8192 bytes; speed and incline must lie on the board's min/max/step grid; same id overwrites.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"owner\":{\"type\":\"string\"},\"program\":{\"type\":\"object\"}},\"required\":[\"owner\",\"program\"]}}"
         "]}"));return;
     }
     if(method=="tools/call"){reply(r,200,call(id,jstr(jraw(params,"name")),jraw(params,"arguments")));return;}

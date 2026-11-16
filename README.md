@@ -11,6 +11,7 @@ https://github.com/user-attachments/assets/f829769c-47f4-4251-8f99-d2f9a6cf358a
 
 ## Highlights
 
+- **Multiple users**: one global active profile with a permanent ID; individual personal settings and HR zones, saved programs/routes, History and Progress. Built-in programs and public catalogs stay shared; MCP tools are profile-aware.
 - **Direct Bluetooth FTMS**: Zwift, Kinomap, FitShow, Kinni and other apps connect straight to the treadmill;
 - **Native Zwift incline**: the route grade physically moves the deck;
 - **Built-in web interface** at the treadmill's address: live workout, programs, history, progress, settings. RU/EN, light and dark themes, works offline;

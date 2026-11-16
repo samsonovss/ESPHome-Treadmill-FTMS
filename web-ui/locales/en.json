@@ -170,6 +170,7 @@
     "Наклон, ур.": "Incline, lvl",
     "▶ Продолжить": "▶ Resume",
     "Продолжить": "Resume",
+    "Применено на дорожке.": "Applied on treadmill.",
     "на дорожке": "on treadmill",
     "лучший км": "best km",
     "В корзину": "Move to trash",
@@ -1152,6 +1153,7 @@
     "Не удалось подготовить запуск: остановите дорожку и повторите": "Could not prepare the run: stop the treadmill and try again",
     "От ИИ-агента": "From the AI agent",
     "Составил ИИ-агент через MCP. Открывает Фартлек, группа «От ИИ-агента»": "Made by an AI agent via MCP. Opens Fartlek, group \"From the AI agent\"",
-    "Не удалось сохранить пресет на плате (остановите дорожку и повторите)": "Could not save the preset to the board (stop the treadmill and retry)"
+    "Не удалось сохранить пресет на плате (остановите дорожку и повторите)": "Could not save the preset to the board (stop the treadmill and retry)",
+    "Коэффициент скорости: команда = скорость × коэффициент. Обычно 1. Если мотор едет вдвое медленнее заданного (другой мотор на этой плате) — 2. Корректор скорости дотянет остаток. Если плата режет сверху — поднимите её «Макс. скорость».": "Speed factor: command = speed × factor. Normally 1. If the motor runs at half the set speed (another motor on this board) — 2. The speed corrector trims the rest. If the board caps it — raise its “Max speed”."
   }
 }

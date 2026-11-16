@@ -1,0 +1,21 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {ProfileAPI}=require('./profiles.js');
+const state={version:1,generation:42,revision:7,applied_revision:7,items:[{id:'p1',name:'A'}],active:'p1',pending:false,locked:false};
+const response=(status,data)=>({status,ok:status<400,json:async()=>data});
+test('GET no-store; mutation carries CAS and requires pending acknowledgement',async()=>{const calls=[];const api=new ProfileAPI(async(u,o)=>{calls.push([u,o]);return o.method?response(202,{pending:true,target_revision:8}):response(200,state);});await api.load();assert.equal(calls[0][1].cache,'no-store');assert.deepEqual(await api.save(state.items,'p1'),{pending:true,target_revision:8});assert.equal(JSON.parse(calls[1][1].body).revision,7);assert.equal(api.data.applied_revision,7);});
+test('conflict never retries or overwrites refreshed state',async()=>{let n=0;const api=new ProfileAPI(async()=>{n++;return response(409,{error:'revision_conflict'});});api.data={...state};await assert.rejects(api.save(state.items,'p1'),/revision_conflict/);assert.equal(n,1);assert.equal(api.writing,false);});
+test('pending/locked clients cannot POST',async()=>{const api=new ProfileAPI(()=>assert.fail('must not fetch'));for(const key of ['pending','locked']){api.data={...state,[key]:true};await assert.rejects(api.save([],''),/busy/);}});
+test('network uncertainty does not replay a mutation',async()=>{let n=0;const api=new ProfileAPI(async()=>{n++;throw Error('offline');});api.data={...state};await assert.rejects(api.save(state.items,'p1'),/offline/);assert.equal(n,1);assert.equal(api.writing,false);});
+test('serialize mutations while request is outstanding',async()=>{let release;const api=new ProfileAPI(()=>new Promise(r=>release=r));api.data={...state};const first=api.save(state.items,'p1');await assert.rejects(api.save(state.items,'p1'),/busy/);release(response(202,{target_revision:8}));await first;});
+test('timeout bounds a stalled response body and releases mutation gate without retry',async()=>{const old=global.setTimeout;let expire;global.setTimeout=f=>{expire=f;return 0;};try{let calls=0;const api=new ProfileAPI(async()=>{calls++;return {status:202,ok:true,json:()=>new Promise(()=>{})};});api.data={...state};const saving=api.save(state.items,'p1');await Promise.resolve();expire();await assert.rejects(saving,/profiles_timeout/);assert.equal(api.writing,false);assert.equal(calls,1);}finally{global.setTimeout=old;}});
+const {sameProfileStore,confirmsProfileStore}=require('./profiles.js');
+const full={...state,error:'',items:[{id:'p1',name:'Anton1',age:43,weight:74,gender:'Male',hr_max_mode:'Formula',hr_max_manual:190,resting_heart_rate:60,hr_zone_method:'Percent'}],generation:1474682139,revision:2,applied_revision:2};
+const intended={version:1,active:'p1',items:[{...full.items[0],name:'Anton'}]};
+const tx={before:full,intended};
+const proof={...full,...intended,revision:3,applied_revision:3};
+test('exact Anton1 -> Anton failed-response recovery proof, including already-current noop',()=>{assert.equal(confirmsProfileStore(proof,tx),true);assert.equal(confirmsProfileStore(proof,{before:proof,intended}),true);assert.equal(confirmsProfileStore({...proof,locked:true},tx),true);});
+test('no success for unrelated revision, reboot, pending, error, partial application or store mismatch',()=>{for(const patch of [{revision:4,applied_revision:4},{generation:1},{pending:true},{error:'write_failed'},{applied_revision:2},{revision:2,applied_revision:2},{active:'p2'},{items:[{...proof.items[0],weight:75}]},{items:[...proof.items,{id:'p2'}]}])assert.equal(confirmsProfileStore({...proof,...patch},tx),false,JSON.stringify(patch));assert.equal(sameProfileStore(proof,{...intended,version:2}),false);});
+
+const {profileAgeLabel}=require('./profiles.js');
+test('localized age summary covers Russian singular/few/many and English',()=>{for(const [age,expected] of [[43,'43 года'],[38,'38 лет'],[21,'21 год'],[11,'11 лет'],[12,'12 лет'],[14,'14 лет'],[100,'100 лет']])assert.equal(profileAgeLabel(age,'ru'),expected);assert.equal(profileAgeLabel(43,'en'),'43 years');});

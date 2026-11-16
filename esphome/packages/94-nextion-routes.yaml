@@ -4,11 +4,13 @@ script:
   - id: nx_routes_render
     then:
       - lambda: |-
+          if (treadmill_routes::nx_owner != treadmill_profiles::library_owner() ||
+              treadmill_routes::nx_revision != treadmill_routes::revision.load()) treadmill_routes::nx_build();
           const int n = (int) treadmill_routes::nx_items.size();
           if (treadmill_routes::nx_off >= n) treadmill_routes::nx_off = 0;
           const int off = treadmill_routes::nx_off;
           auto *d = id(display_nextion);
-          d->set_component_text("mapmain.tMsg", "");
+          d->set_component_text("mapmain.tMsg", treadmill_profiles::applied_owner_name);
           d->send_command_printf("vis tEmpty,%d", n == 0 ? 1 : 0);
           for (int i = 0; i < 5; i++) {
             char comp[16], cmd[16];
@@ -45,7 +47,10 @@ script:
           if (treadmill_routes::nx_open(idx)) {
             id(map_select).publish_state(treadmill_routes::CUSTOM_NAME);
           } else {
-            id(display_nextion).set_component_text("mapmain.tMsg", "Stop the belt first");
+            // Reject the old row, then rebuild; never reinterpret its index for another user.
+            treadmill_routes::nx_build();
+            id(nx_routes_render).execute();
+            id(display_nextion).set_component_text("mapmain.tMsg", "Stop / refresh profile");
             ESP_LOGW("NxRoutes", "open failed idx=%d items=%d", idx, (int) treadmill_routes::nx_items.size());
           }
 

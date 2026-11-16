@@ -57,3 +57,10 @@ The header shows a red monitor icon when new display firmware is available and a
 ![Motor speed factor](images/motor-speed-factor.png)
 
 *Settings → Motor board → Command format → Factor* (0.5–3.0, default 1.0). Every speed command sent to the motor board is multiplied by it: with 2.0 a set 10 km/h goes out as `[SETSPD:200]`. Use it when another motor sits on the same board and the belt runs at a fraction of the set speed (measured with an external speed sensor). The speed corrector then only trims the small remainder, so the belt reaches the speed quickly. The 18 km/h limit applies to the set speed, before the factor. If the board itself caps the command, raise its *Max speed* (SPDMAX, now up to 40) in the service menu and press *Write to board*.
+
+### History loading and recovery
+History shows loading until the active profile and all archive pages/ownership metadata are known. Busy/unavailable reads retry automatically (1–10 s backoff), with an explicit Retry button. Available cards appear during pagination; the newest matching workout opens before unrelated missing summaries finish. Lists revalidate every 15 s while History is open and immediately after a profile switch or workout stop. Browser metadata is only a display hint; fresh archive summaries overwrite it. A completed empty list alone is not an empty personal history until the profile is ready.
+
+Focused regressions: `node web-ui/history-loading.test.cjs`; generated-page HTTP fixture: `node web-ui/history-loading.browser.test.cjs` (Playwright/Chrome required). No real device writes are performed. Source synchronization does not update running firmware: compile/flash is separate.
+
+Archive list bulk summaries accept a trailing JSON newline; metadata above the 2048-byte inline limit still uses individual reads. Pagination is bounded at 2048 pages and fails explicitly if incomplete; it never treats the bound or a repeated cursor as an authoritative empty result.

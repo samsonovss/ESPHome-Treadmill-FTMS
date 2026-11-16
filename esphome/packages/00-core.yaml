@@ -27,15 +27,19 @@ esphome:
   friendly_name: treadmill
   project:
     name: samsonovss.treadmill
-    version: "1.0.0-beta.9"
+    version: "1.0.0-beta.10"
   includes:
     - treadmill_dashboard.h
     - treadmill_storage.h
     - gzlite.h
     - recorder_core.h
     - treadmill_recorder.h
+    - treadmill_library_owner.h
     - treadmill_programs.h
     - treadmill_presets.h
+    - treadmill_builtin_presets.h
+    - profile_core.h
+    - treadmill_profiles.h
     - treadmill_mcp.h
     - treadmill_routes.h
     - treadmill_motor.h

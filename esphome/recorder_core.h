@@ -19,6 +19,7 @@
 #include "freertos/task.h"
 namespace treadmill_recorder {
 struct Snapshot {
+  char profile_id[25]{},profile_name[61]{}; // Captured owner; POD for the FreeRTOS queue.
   uint32_t ms=0; int64_t epoch=0; float hr=NAN,speed=0,level=0,max_level=15,max_grade=15,calories=NAN;
   // Energy (cumulative/averages from firmware) and the user profile at workout time.
   float zero_grade=0,fat_kcal=NAN,met_avg=NAN,vo2_avg=NAN,weight=NAN,age=NAN,hrmax=NAN; int male=-1;
@@ -48,6 +49,7 @@ inline int64_t parse_epoch(const char *text) {
 inline constexpr const char *COLUMNS="timestamp,heart_rate,speed_kmh,incline_pct,distance_km,time_s,calories,status,program,zone,incline_level,target_zone,elapsed_s\n";
 class Engine {
  public:
+  char profile_id[25]{},profile_name[61]{};
   std::string base,error,id; uint64_t sequence=0; bool ready=false,active=false,wall_valid=true;
   // 17.10 compact CSV: same columns, but a cell left empty = «same as before» (timestamp: last one + elapsed; time_s: = elapsed).
   int64_t w_epoch=0; double w_el=0; int w_zone=-1,w_tz=-1,w_status=-1; float w_lvl=NAN,w_g=NAN; bool w_first=true;
@@ -173,6 +175,7 @@ class Engine {
     timer=elapsed=distance=hrsum=speedsum=gradesum=maxhr=0; samples=hrcount=running_samples=unflushed=0;reset_insights();
     start_epoch=s.epoch;end_epoch=s.epoch;wall_valid=s.epoch>0;previous=s;cal=s.calories;max_level=s.max_level;max_grade=s.max_grade; memcpy(program,s.program,sizeof program);memcpy(route,s.route,sizeof route);route[sizeof route-1]=0;error.clear();active=true;
     zero_grade=std::isfinite(s.zero_grade)?s.zero_grade:0;fat_kcal=met_avg=vo2_avg=NAN;p_weight=s.weight;p_age=s.age;p_hrmax=s.hrmax;p_male=s.male;
+    snprintf(profile_id,sizeof profile_id,"%s",s.profile_id);snprintf(profile_name,sizeof profile_name,"%s",s.profile_name);
     if(fputs(COLUMNS,file)==EOF) return fail("header_write_failed");
     w_epoch=0;w_el=0;w_zone=w_tz=w_status=-1;w_lvl=w_g=NAN;w_first=true;
     int meta=open(path(id,"meta").c_str(),O_WRONLY|O_CREAT|O_EXCL,0600);
@@ -229,7 +232,7 @@ class Engine {
   std::string blocks_json() const { std::string o; for(size_t i=0;i<blocks.size();i++){char b[80];snprintf(b,sizeof b,"%s[%.0f,%.1f,%.1f,%.0f]",i?",":"",blocks[i][0],blocks[i][1],blocks[i][2],blocks[i][3]);o+=b;} return o; }
   double trimp() const { double t=0; for(int i=1;i<6;i++)t+=zone_sec[i]*i; return t/60.0; }
   std::string summary(bool interrupted) const {
-    return "{\"schema_version\":1,\"timestamp_format\":\"iso8601_utc\",\"id\":"+json_string(id.c_str())+",\"start\":"+(start_epoch>0?json_string(epoch_text(start_epoch).c_str()):"null")+",\"end\":"+(end_epoch>0?json_string(epoch_text(end_epoch).c_str()):"null")+",\"duration_sec\":"+number(timer)+",\"elapsed_sec\":"+number(elapsed)+",\"samples\":"+std::to_string(samples)+",\"distance_km\":"+number(distance)+",\"calories\":"+number(cal)+",\"avg_speed_kmh\":"+number(running_samples?speedsum/running_samples:NAN)+",\"avg_incline_pct\":"+number(running_samples?gradesum/running_samples:NAN)+",\"avg_heart_rate\":"+number(hrcount?hrsum/hrcount:NAN)+",\"max_heart_rate\":"+number(hrcount?maxhr:NAN)+",\"wall_time_valid\":"+(wall_valid?"true":"false")+",\"interrupted\":"+(interrupted?"true":"false")+",\"grade_estimated\":true,\"distance_estimated\":true,\"calories_estimated\":true,\"calories_source\":\"firmware_total_calories\",\"speed_source\":\"live_target\",\"calibration_max_level\":"+number(max_level)+",\"calibration_real_max_grade\":"+number(max_grade)+",\"calibration_zero_grade\":"+number(zero_grade)+",\"fat_g\":"+number(fat_kcal/9.0)+",\"carbs_g\":"+number(std::isfinite(cal)&&std::isfinite(fat_kcal)?std::max(0.0,double(cal)-double(fat_kcal))/4.0:NAN)+",\"avg_met\":"+number(met_avg)+",\"avg_vo2\":"+number(vo2_avg)+",\"energy_source\":\"firmware_per_second_acsm\",\"profile\":{\"weight_kg\":"+number(p_weight)+",\"age\":"+number(p_age)+",\"sex\":"+(p_male==1?"\"male\"":p_male==0?"\"female\"":"null")+",\"hr_max\":"+number(p_hrmax)+"},\"zone_sec\":["+zones_json()+"],\"target_zone\":"+(target_zone?std::to_string(target_zone):std::string("null"))+",\"max_speed_kmh\":"+number(running_samples?max_speed:NAN)+",\"ascent_m\":"+number(ascent)+",\"phases\":["+phases_json()+"],\"trimp\":"+number(trimp())+",\"blocks_sec\":300,\"blocks\":["+blocks_json()+"],\"zwift_profile\":"+zwift_json()+",\"route\":"+(route[0]?json_string(route):std::string("null"))+",\"program\":"+json_string(program)+",\"time_base\":\"treadmill\",\"sample_clock\":\"treadmill\"}\n";
+    return "{\"schema_version\":1,\"timestamp_format\":\"iso8601_utc\",\"id\":"+json_string(id.c_str())+",\"start\":"+(start_epoch>0?json_string(epoch_text(start_epoch).c_str()):"null")+",\"end\":"+(end_epoch>0?json_string(epoch_text(end_epoch).c_str()):"null")+",\"duration_sec\":"+number(timer)+",\"elapsed_sec\":"+number(elapsed)+",\"samples\":"+std::to_string(samples)+",\"distance_km\":"+number(distance)+",\"calories\":"+number(cal)+",\"avg_speed_kmh\":"+number(running_samples?speedsum/running_samples:NAN)+",\"avg_incline_pct\":"+number(running_samples?gradesum/running_samples:NAN)+",\"avg_heart_rate\":"+number(hrcount?hrsum/hrcount:NAN)+",\"max_heart_rate\":"+number(hrcount?maxhr:NAN)+",\"wall_time_valid\":"+(wall_valid?"true":"false")+",\"interrupted\":"+(interrupted?"true":"false")+",\"grade_estimated\":true,\"distance_estimated\":true,\"calories_estimated\":true,\"calories_source\":\"firmware_total_calories\",\"speed_source\":\"live_target\",\"calibration_max_level\":"+number(max_level)+",\"calibration_real_max_grade\":"+number(max_grade)+",\"calibration_zero_grade\":"+number(zero_grade)+",\"fat_g\":"+number(fat_kcal/9.0)+",\"carbs_g\":"+number(std::isfinite(cal)&&std::isfinite(fat_kcal)?std::max(0.0,double(cal)-double(fat_kcal))/4.0:NAN)+",\"avg_met\":"+number(met_avg)+",\"avg_vo2\":"+number(vo2_avg)+",\"energy_source\":\"firmware_per_second_acsm\",\"profile\":{\"id\":"+(profile_id[0]?json_string(profile_id):"null")+",\"name\":"+(profile_id[0]?json_string(profile_name):"null")+",\"weight_kg\":"+number(p_weight)+",\"age\":"+number(p_age)+",\"sex\":"+(p_male==1?"\"male\"":p_male==0?"\"female\"":"null")+",\"hr_max\":"+number(p_hrmax)+"},\"zone_sec\":["+zones_json()+"],\"target_zone\":"+(target_zone?std::to_string(target_zone):std::string("null"))+",\"max_speed_kmh\":"+number(running_samples?max_speed:NAN)+",\"ascent_m\":"+number(ascent)+",\"phases\":["+phases_json()+"],\"trimp\":"+number(trimp())+",\"blocks_sec\":300,\"blocks\":["+blocks_json()+"],\"zwift_profile\":"+zwift_json()+",\"route\":"+(route[0]?json_string(route):std::string("null"))+",\"program\":"+json_string(program)+",\"time_base\":\"treadmill\",\"sample_clock\":\"treadmill\"}\n";
   }
   bool write_summary(bool interrupted) {
     // LittleFS VFS exposes rename: write+sync+close first, rename within same mount.
@@ -243,7 +246,7 @@ class Engine {
   void recover(const std::string &i) {
     FILE *f=fopen(path(i,"csv").c_str(),"rb");if(!f){error="recovery_open_failed";return;}
     id=i;timer=elapsed=distance=hrsum=speedsum=gradesum=maxhr=0;samples=hrcount=running_samples=0;start_epoch=end_epoch=0;wall_valid=true;cal=NAN;max_level=max_grade=NAN;program[0]=0;route[0]=0;
-    zero_grade=0;fat_kcal=met_avg=vo2_avg=p_weight=p_age=p_hrmax=NAN;p_male=-1;reset_insights();double pt=NAN,pd=NAN,pg=NAN,ph=NAN;int pz=-1;
+    zero_grade=0;fat_kcal=met_avg=vo2_avg=p_weight=p_age=p_hrmax=NAN;p_male=-1;profile_id[0]=profile_name[0]=0;reset_insights();double pt=NAN,pd=NAN,pg=NAN,ph=NAN;int pz=-1;
     FILE *meta=fopen(path(i,"meta").c_str(),"rb");if(meta){{int k=fscanf(meta,"%f %f %f",&max_level,&max_grade,&zero_grade);if(k<2){max_level=max_grade=NAN;}if(k<3)zero_grade=0;}if(ferror(meta))error="recovery_metadata_read_failed";if(fclose(meta)!=0)error="recovery_metadata_close_failed";}else if(errno!=ENOENT)error="recovery_metadata_open_failed";
     char line[768]; bool header=fgets(line,sizeof line,f)&&strcmp(line,COLUMNS)==0;
     while(header&&fgets(line,sizeof line,f)) {

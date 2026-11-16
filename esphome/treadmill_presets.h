@@ -2,9 +2,11 @@
 // User preset lists (pulse / hiit / fartlek): one small JSON file per kind on the SD card, whole-list read/replace.
 // Same rules as the program store: only with the belt stopped and no workout being recorded.
 #include "esphome/components/json/json_util.h"
+#include "treadmill_library_owner.h"
+#include "treadmill_builtin_presets.h"
 namespace treadmill_recorder {
 inline std::atomic<uint32_t> presets_rev{0};
-inline std::string preset_dir(){return std::string(treadmill_storage::BASE_PATH)+"/presets";}
+inline std::string preset_dir(){return library_dir("presets");}
 inline const char *preset_kind(const char *uri){
  const char *q=strchr(uri,'?');if(!q||strncmp(q+1,"kind=",5)!=0)return nullptr;q+=6;
  for(const char *k:{"pulse","hiit","fartlek"})if(strcmp(q,k)==0)return k;
@@ -44,6 +46,8 @@ class PresetHandler:public AsyncWebHandler {
   if(!kind){body_.clear();body_valid_=false;reply(r,400,"{\"error\":\"invalid_kind\"}");return;}
   FsLease lease;if(!lease.owned||busy()){body_.clear();body_valid_=false;reply(r,409,"{\"error\":\"workout_active_or_finalizing\"}");return;}
   if(!initialized||!treadmill_storage::mounted){body_.clear();body_valid_=false;reply(r,503,"{\"error\":\"storage_not_ready\"}");return;}
+  if(!library_prepare("presets")){reply(r,503,"{\"error\":\"library_not_ready\"}");return;}
+  if(r->method()==HTTP_POST&&!library_expected(r)){reply(r,409,"{\"error\":\"owner_changed\"}");return;}
   const std::string dir=preset_dir(),path=dir+"/"+kind+".json",tmp=path+".tmp";
   if(r->method()==HTTP_GET){
    struct stat st{};if(stat(path.c_str(),&st)!=0){reply(r,errno==ENOENT?200:500,errno==ENOENT?"{\"items\":[]}":"{\"error\":\"preset_stat_failed\"}");return;}
@@ -66,17 +70,27 @@ class PresetHandler:public AsyncWebHandler {
 inline PresetHandler preset_handler;
 
 // Display (Nextion list pages) side: read-only snapshot of one preset kind, seed markers and invalid items skipped.
-struct NxPre{std::string name,plan;int hi=60,lo=60,cycles=8;float warm=3,cool=3,low=NAN,high=NAN;bool manual=false,hasWC=false;};
+struct NxPre{std::string name,plan,wmode,cmode;int hi=60,lo=60,cycles=8;float warm=3,cool=3,low=NAN,high=NAN;bool manual=false,hasWC=false;};
 inline std::vector<NxPre> nx_pre_items;
 inline int nx_pre_off=0;
-inline bool nx_pre_load(const char *kind){
- nx_pre_items.clear();nx_pre_off=0;
+inline std::string nx_pre_owner;
+inline uint32_t nx_pre_revision=0;
+inline std::string nx_pre_loaded_kind;
+inline void append_standard_presets(const char *kind){
+ for(const auto &b:treadmill_builtin_presets::items){if(strcmp(b.kind,kind)!=0)continue;NxPre p;
+ p.name=std::string("Стандарт · ")+b.name;p.plan=b.plan;p.hi=b.hi;p.lo=b.lo;p.cycles=b.cycles;
+ p.warm=b.warm;p.cool=b.cool;p.low=b.low;p.high=b.high;p.manual=b.manual;p.hasWC=b.hasWC;p.wmode=b.wmode;p.cmode=b.cmode;nx_pre_items.push_back(std::move(p));}
+}
+inline bool load_profile_presets(const char *kind){
+ nx_pre_items.clear();nx_pre_off=0;nx_pre_owner.clear();nx_pre_loaded_kind=kind;
  FsLease lease;if(!lease.owned||!treadmill_storage::mounted||!initialized)return false;
+ if(busy()||!library_prepare("presets"))return false;nx_pre_owner=treadmill_profiles::library_owner();nx_pre_revision=presets_rev.load();
  const std::string path=preset_dir()+"/"+kind+".json";struct stat st{};
- if(stat(path.c_str(),&st)!=0||st.st_size<1||st.st_size>8192)return false;
+ if(stat(path.c_str(),&st)!=0){if(errno==ENOENT){append_standard_presets(kind);return true;}return false;}
+ if(st.st_size<1||st.st_size>8192)return false;
  FILE *f=fopen(path.c_str(),"rb");if(!f)return false;
  std::string b;b.resize(st.st_size);bool ok=fread(b.data(),1,b.size(),f)==b.size();fclose(f);if(!ok)return false;
- return esphome::json::parse_json(b,[&](JsonObject root)->bool{
+ bool parsed=esphome::json::parse_json(b,[&](JsonObject root)->bool{
   if(!root["items"].is<JsonArray>())return false;
   JsonArray arr=root["items"];for(JsonObject it:arr){
    if(it.isNull()||!it["name"].is<const char *>()||it["seed"].as<int>()!=0)continue;
@@ -90,10 +104,13 @@ inline bool nx_pre_load(const char *kind){
    if(it["low"].is<float>())p.low=it["low"].as<float>();
    if(it["high"].is<float>())p.high=it["high"].as<float>();
    p.manual=it["hiitManual"].as<bool>();
+   if(it["wmode"].is<const char *>())p.wmode=it["wmode"].as<std::string>();
+   if(it["cmode"].is<const char *>())p.cmode=it["cmode"].as<std::string>();
    nx_pre_items.push_back(std::move(p));
    if(nx_pre_items.size()>=24)break;
   }
   return true;
  });
+ if(!parsed){nx_pre_items.clear();return false;}append_standard_presets(kind);return true;
 }
 }
