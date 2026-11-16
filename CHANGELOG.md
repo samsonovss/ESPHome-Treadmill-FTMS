@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.11 (display 1.0.5)
 
 - Align motor-board service values in fixed input/unit columns; keep acknowledgements below the fields.
 - Integrate approved variant E header: shared compact status/profile/clock/language enclosure, cohesive icons and separators, retaining responsive navigation, profile menu behavior and motor-temperature warnings.
