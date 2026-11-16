@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Align motor-board service values in fixed input/unit columns; keep acknowledgements below the fields.
+- Integrate approved variant E header: shared compact status/profile/clock/language enclosure, cohesive icons and separators, retaining responsive navigation, profile menu behavior and motor-temperature warnings.
+
 ## 1.0.0-beta.10 (display 1.0.5)
 
 - Recorder bulk-summary pages return at most two records (requested limit remains an upper bound), preserving the cursor and summary data. Live read-only checks found 13,213-byte responses stalled after 1,327/2,767 bytes; one/two-record responses completed in 0.17/0.31 seconds. This is a bounded-payload mitigation, not a proven TCP/root-cause fix; device verification remains separate.
