@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.0-beta.12 (display 1.0.5)
+
 - Use the built-in Nextion driver in ESPHome 2026.11.0 instead of the local override. Keep `tft_upload_http_buffer_size_tx: 1024` for GitHub TFT redirects (ESPHome #21435) and retain the separate BLE override for FTMS/Zwift.
 
 - Switch from the external VL53L1X driver to the built-in component in ESPHome 2026.11.0. Preserve millimetres for `My Raw Distance` and centimetres for `My Distance`. Verified on the treadmill: Nextion showed 50 cm at a measured distance of 50 cm, and RunFree worked in a separate hands-on test.
