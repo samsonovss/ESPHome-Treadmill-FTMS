@@ -217,7 +217,7 @@ Videos: [control dashboard overview](https://youtube.com/shorts/wjRsA46usog) · 
   - `treadmill.yaml`: private build with your own Wi-Fi/API/OTA secrets ([`secrets.example.yaml`](esphome/secrets.example.yaml));
   - [`packages/`](esphome/packages/): hardware, sensors, BLE/FTMS, programs, recorder, display, updates;
   - `*.h`: C++ parts (web page, recorder, programs, routes, MCP, motor);
-  - [`components/`](esphome/components/): patched ESPHome components (BLE server for Zwift, Nextion);
+  - [`components/`](esphome/components/): local BLE server patch for FTMS/Zwift;
 - [`web-ui/`](web-ui/): web interface sources; `generate.py` builds `esphome/treadmill_dashboard.h`;
 - [`nextion_display/`](nextion_display/): display source, HMI and compiled TFT;
 - [`route_profiles/`](route_profiles/): Zwift running routes (map + elevation) for the route catalog;

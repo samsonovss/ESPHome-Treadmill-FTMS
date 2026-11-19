@@ -242,14 +242,14 @@ sensor:
 # Используется как источник данных для вычислений и отображения.
   - platform: vl53l1x
     distance_mode: long
-    distance:
-      entity_category: diagnostic
-      name: My Raw Distance
-      id: my_raw_distance
-      unit_of_measurement: "mm" 
-    # range_status:
-    #   name: My Range Status
-    #   id: my_range_status
+    entity_category: diagnostic
+    name: My Raw Distance
+    id: my_raw_distance
+    unit_of_measurement: "mm"
+    accuracy_decimals: 0
+    # Built-in VL53L1X publishes metres; retain millimetres for existing consumers.
+    filters:
+      - multiply: 1000.0
     update_interval: 1s
 
 # My Distance — шаблонный сенсор, переводит my_raw_distance из мм в см.
@@ -850,6 +850,7 @@ sensor:
       return current_distance_km;
     on_value:
       - lambda: |-
+          treadmill_maintenance::observe(x);
           if (id(current_page) == 1) {
             char distance_str[10];
             sprintf(distance_str, "%.2f", id(treadmill_distance_km).state);

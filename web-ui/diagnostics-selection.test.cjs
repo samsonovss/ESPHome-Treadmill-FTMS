@@ -1,0 +1,14 @@
+'use strict';
+// Small DOM harness for the actual diagnostic block; no device/API requests.
+const {JSDOM}=require(process.env.JSDOM_MODULE||'jsdom'),fs=require('node:fs'),assert=require('node:assert/strict');
+const dom=new JSDOM('<div id="diag"></div>',{runScripts:'outside-only'}),w=dom.window;
+let source=fs.readFileSync(__dirname+'/settings.js','utf8');source=source.slice(source.indexOf(" {const c=customs.diag;"),source.indexOf(' // ---- About: firmware facts'));
+w.eval(`const customs={diag:document.getElementById('diag')},painters=[],active='diag';const W=(r,e)=>e,lang=()=> 'en',tx=(n,r,e)=>(n.textContent=e,n),ST=(n,t)=>{if(n.textContent!==t)n.textContent=t;},el=(tag,cls,html)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(html!=null)n.innerHTML=html;return n;};window.events=[{t:10000,k:'req',m:'Request failed'}];window.live={heap:32000,block:20000,uptime:60,loop:10};const TMDiag={live:()=>live,day:()=>({gaps:0}),events:()=>events,status:()=> 'ok',history:()=>[],started:0,on:()=>{},clear:()=>{},report:()=>''};${source};window.paint=painters[0];`);
+const d=w.document;w.paint();const row=d.querySelector('.dg-list .dg-r'),leaf=row.querySelector('.dg-m').firstChild;const range=d.createRange();range.setStart(leaf,0);range.setEnd(leaf,7);w.getSelection().addRange(range);
+w.paint();assert.equal(w.getSelection().toString(),'Request');assert.equal(row.querySelector('.dg-m').firstChild,leaf);
+w.events.push({t:20000,k:'js',m:'New event'});w.live.loop=22;w.paint();assert.equal(w.getSelection().toString(),'Request');assert.equal(d.querySelectorAll('.dg-list .dg-r').length,2);assert.match(d.querySelector('.dg-facts').textContent,/22 ms/);
+w.events[0].t=30000;w.events[0].n=2;w.paint();assert.equal(w.getSelection().toString(),'Request');assert.equal(row.querySelector('.dg-m').textContent,'Request failed');w.getSelection().removeAllRanges();w.paint();assert.equal(row.querySelector('.dg-m').textContent,'Request failed ×2');
+// Retain a selected oldest row past the display window, then prune after collapse.
+const r2=d.createRange();r2.selectNodeContents(leaf);w.getSelection().addRange(r2);for(let i=0;i<65;i++)w.events.push({t:40000+i,k:'req',m:'Event '+i});w.paint();assert(row.isConnected);assert(w.getSelection().toString());w.getSelection().removeAllRanges();w.paint();assert(!row.isConnected);
+const facts=d.querySelector('.dg-facts'),factLeaf=facts.firstChild,r3=d.createRange();r3.setStart(factLeaf,0);r3.setEnd(factLeaf,8);w.getSelection().addRange(r3);w.live.loop=33;w.paint();assert.equal(facts.firstChild,factLeaf);assert.match(facts.textContent,/22 ms/);w.getSelection().removeAllRanges();w.paint();assert.match(facts.textContent,/33 ms/);
+console.log('PASS unchanged tick, new event, grouped count/time deferral, bounded-row retention, facts selection');dom.window.close();

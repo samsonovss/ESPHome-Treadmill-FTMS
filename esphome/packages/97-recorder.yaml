@@ -6,7 +6,7 @@ esphome:
         - lambda: 'treadmill_recorder::register_handler(); treadmill_routes::register_handler(); treadmill_mcp::register_handler();'
     - priority: -110
       then:
-        - lambda: 'treadmill_recorder::initialize();'
+        - lambda: 'treadmill_recorder::initialize(); treadmill_maintenance::initialize();'
         # HR Zones для веб-интерфейса сразу после загрузки (а не только после смены настроек).
         - script.execute: update_heart_rate_zones
 script:
@@ -128,6 +128,13 @@ sensor:
 
 # Stage 2 profiles: no history ownership; component mutations stay on main loop.
 interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          const auto now = id(sntp_time).now();
+          treadmill_maintenance::tick(!id(motor_running) && !id(treadmill_running) &&
+              !id(pause_active) && !id(calibration_active) && !id(free_running_active),
+              now.is_valid() ? now.timestamp : 0, millis());
   - interval: 2s
     then:
       - lambda: |-

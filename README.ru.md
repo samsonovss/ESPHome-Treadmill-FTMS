@@ -216,7 +216,7 @@ ESP32-S3 — центральный контроллер. Он получает 
   - `treadmill.yaml`: приватная сборка со своими секретами Wi-Fi/API/OTA ([`secrets.example.yaml`](esphome/secrets.example.yaml));
   - [`packages/`](esphome/packages/): оборудование, датчики, BLE/FTMS, программы, запись тренировок, дисплей, обновления;
   - `*.h`: части на C++ (веб-страница, запись тренировок, программы, маршруты, MCP, двигатель);
-  - [`components/`](esphome/components/): исправленные компоненты ESPHome (BLE-сервер для Zwift, Nextion);
+  - [`components/`](esphome/components/): локальная правка BLE-сервера для FTMS/Zwift;
 - [`web-ui/`](web-ui/): исходники веб-интерфейса; `generate.py` собирает `esphome/treadmill_dashboard.h`;
 - [`nextion_display/`](nextion_display/): исходники дисплея, HMI и скомпилированный TFT;
 - [`route_profiles/`](route_profiles/): беговые трассы Zwift (карта + высоты) для каталога маршрутов;

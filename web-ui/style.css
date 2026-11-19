@@ -319,3 +319,12 @@ body[data-page=main] main{position:relative}body[data-page=main] main>header{pos
 .header-tools[slot="header-tools"] .health.connection-dot{display:none}
 @media(hover:hover){.header-tools[slot="header-tools"] #profile-select:hover,.header-tools[slot="header-tools"] .language-toggle:hover{background:#25333e}}
 @media(max-width:600px){.header-tools[slot="header-tools"] #profile-select{max-width:150px}}
+.mnt-badge{border:0;background:none;color:var(--amber-55a,#eab255);padding:4px 7px;cursor:pointer;display:grid;place-items:center}.mnt-badge[hidden]{display:none}.mnt-badge:hover{background:#25333e;border-radius:6px}
+.ds-maintenance{display:grid;gap:20px;padding:4px 24px 24px}
+.mnt-meter{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+.mnt-metric{display:grid;align-content:start;gap:4px;min-width:0;padding:16px 18px}.mnt-metric+.mnt-metric{border-inline-start:1px solid var(--line)}
+@media(max-width:550px){.mnt-meter{grid-template-columns:1fr}.mnt-metric+.mnt-metric{border-inline-start:0;border-block-start:1px solid var(--line)}}
+.mnt-label{color:var(--muted);font-weight:600}.mnt-value{font-size:30px;line-height:1.15;font-variant-numeric:tabular-nums}
+.mnt-service{display:grid;gap:10px}.mnt-service h4,.mnt-summary,.mnt-note{margin:0}.mnt-service h4{font-size:16px}.mnt-summary,.mnt-note{color:var(--muted)}.mnt-note{font-size:13px;line-height:1.45}.mnt-note:empty{display:none}
+.mnt-form{display:grid;gap:12px;justify-items:start}.mnt-fields{width:min(100%,280px)}.mnt-note a{color:var(--accent)}.mnt-form label{display:grid;align-content:end;gap:5px;min-width:0;font-size:13px}.mnt-form input{box-sizing:border-box;width:min(100%,116px);min-width:0;height:42px;color:inherit;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}.mnt-actions{display:flex;gap:10px;flex-wrap:wrap}.mnt-actions button{height:40px;max-width:100%}
+@media(max-width:700px){.ds-maintenance{padding:4px 16px 16px}}

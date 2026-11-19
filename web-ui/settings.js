@@ -128,6 +128,7 @@ const DeviceSettings={mount({root,controls,t,lang}){
    {custom:'about'},
    {sec:['О проекте','About the project']},
    {custom:'proj'}]],
+  ['maintenance','<path d="M14 6a5 5 0 0 0-6 6L3 17a2 2 0 0 0 4 4l5-5a5 5 0 0 0 6-6l-3 3-4-4 3-3z"/>','Обслуживание','Maintenance','Общий пробег и напоминание о смазке полотна.','Total distance and a belt lubrication reminder.',[{custom:'maintenance'}]],
   ['diag','<path d="M3 12h4l3-8 4 16 3-8h4"/>','Диагностика','Diagnostics','Сбои платы и связи — чтобы понять, где тормозит.','Board and link problems — to see what is slow.',[
    {custom:'diag'}]],
   ['agents','<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 14h.01M15 14h.01M9 17h6"/>','Агенты (MCP)','Agents (MCP)','ИИ-агент читает данные дорожки и может сохранять программы.','An AI agent reads treadmill data and can save programs.',[
@@ -170,7 +171,7 @@ const el=(tag,cls,html)=>{const n=document.createElement(tag);if(cls)n.className
   if(tbar){card.classList.add('ds-tabbed');head.hidden=true;let k=null;try{k=localStorage.getItem('tm.ptab.'+id);}catch{}const all=[...tbar.children];(all.find(x=>x.dataset.k===k)||all[0]).click();}
   if(info0.children.length)card.append(tx(el('h4','ds-sec'),'Сейчас','Now'),info0);for(const x of card.querySelectorAll('.ds-info'))if(!x.children.length)x.remove();body.append(card);cards[id]=card;}
  // Side menu (11.10): settings sections grouped on the left instead of 12 pills in two rows
- {const GR=[[W('Дорожка','Treadmill'),['speed','belt','incline','handrail','board','safety']],[W('Тренировка','Training'),['profile','hr','pulse','hrm','zwift']],[W('Система','System'),['display','conn','diag','agents']]],all=[...tabs.children];
+ {const GR=[[W('Дорожка','Treadmill'),['speed','belt','incline','handrail','board','safety','maintenance']],[W('Тренировка','Training'),['profile','hr','pulse','hrm','zwift']],[W('Система','System'),['display','conn','diag','agents']]],all=[...tabs.children];
   for(const [t,ids] of GR){const g=el('div','ds-grp');g.append(el('div','ds-grpt',t));for(const id of ids){const b=all.find(x=>x.dataset.id===id);if(b)g.append(b);}if(g.children.length>1)tabs.append(g);}
   const rest=all.filter(b=>!b.closest('.ds-grp'));if(rest.length){const g=el('div','ds-grp');g.append(...rest);tabs.append(g);}}
  // ---- Zones hero: coloured bar, boundaries, click = target zone ----
@@ -425,6 +426,75 @@ const el=(tag,cls,html)=>{const n=document.createElement(tag);if(cls)n.className
     hint.textContent='';SH(res,`<div class="ht-v ${ok?'ok':'bad'}">${!n?W('Пульса нет','No heart rate'):ok?W('Сигнал отличный','Signal is good'):W('Сигнал с перебоями','Signal is unstable')}</div><div class="ht-cs">${n?chip(true,`${Math.min(...v)}–${Math.max(...v)} ${W('уд/мин','bpm')}`):''}${chip(!run.gaps,W('пропусков ','gaps ')+run.gaps)}${chip(!run.jumps,W('скачков ','jumps ')+run.jumps)}${chip(!run.zeros,W('нулей ','zeros ')+run.zeros)}</div>`+(ok?'':`<small class="ht-tip">${!n?W('Ремень не подключён или не касается кожи: смочите электроды и наденьте плотнее.','Strap not connected or not touching the skin: wet the electrodes and tighten it.'):W('Смочите электроды и затяните ремень. Не помогло — замените батарейку.','Wet the electrodes and tighten the strap. Still bad — replace the battery.')}</small>`));},500);};
   painters.push(()=>{if(!run||!btn.disabled)btn.disabled=!controls.fresh()||!hrOn();if(!run)hint.textContent=hrOn()?W('Наденьте ремень и постойте спокойно — проверим пропуски и скачки пульса.','Wear the strap and stand still — we check for gaps and jumps.'):W('Сначала подключите пульсометр.','Connect a monitor first.');});}
  // ---- Diagnostics: live SSE cards, browser-only chart and persistent event journal ----
+ // Maintenance is stored on the board; the browser only reads and edits the shared settings.
+ let maintenance=null;
+ const maintenanceNumber=m=>(m/1000).toLocaleString(W('ru-RU','en-GB'),{maximumFractionDigits:1});
+ const maintenanceKm=m=>maintenanceNumber(m)+W(' км',' km');
+ {const c=customs.maintenance,odo=el('strong','mnt-value'),state=el('p','mnt-summary'),msg=el('p','mnt-note'),form=el('form','mnt-form');
+  const meter=el('div','mnt-meter'),total=el('div','mnt-metric'),lubrication=el('div','mnt-metric'),since=el('strong','mnt-value'),remaining=el('small','mnt-note');
+  const service=el('section','mnt-service'),fields=el('div','mnt-fields'),actions=el('div','mnt-actions');
+  total.append(tx(el('span','mnt-label'),'Общий пробег дорожки','Total treadmill distance'),odo,tx(el('small','mnt-note'),'С начала учёта · все пользователи','Since tracking began · all users'));
+  lubrication.append(tx(el('span','mnt-label'),'Пробег после смазки','Distance since lubrication'),since,remaining);
+  meter.append(total,lubrication);
+  msg.setAttribute('role','status');
+  const number=(ru,en)=>{const lab=el('label'),input=el('input');input.type='number';input.min='0';input.step='1';lab.append(tx(el('span'),ru,en),input);fields.append(lab);return input;};
+  const km=number('Напоминать о смазке каждые, км','Remind me to lubricate every (km)');
+  const save=tx(el('button','ds-go'),'Сохранить','Save'),mark=tx(el('button','ds-ghost'),'Отметить смазку','Record lubrication');mark.type='button';actions.append(save,mark);form.append(fields,actions);
+  const note=tx(el('p','mnt-note'),'0 — без напоминаний.','0 turns off the reminder.');
+  const example=el('p','mnt-note'),source=tx(el('a'),'Horizon Fitness','Horizon Fitness');
+  source.href='https://help.horizonfitness.com/hc/en-us/articles/47019960556564-Running-Deck-Belt-Lubrication-for-Silicone-Surfaces-ONLY';source.target='_blank';source.rel='noopener noreferrer';
+  example.append(tx(el('span'),'Пример: ','Example: '),source,tx(el('span'),' рекомендует около 241 км или 3 месяца для полотен с силиконовой смазкой. Для своей дорожки сверяйтесь с её инструкцией.',' recommends about 241 km (150 miles) or 3 months for silicone-lubricated belts. Follow your model’s manual.'));
+  service.append(tx(el('h4'),'Смазка полотна','Belt lubrication'),state,form,note,example,msg);c.append(meter,service);
+  const badge=el('button','mnt-badge',SVG('<path d="M14 6a5 5 0 0 0-6 6L3 17a2 2 0 0 0 4 4l5-5a5 5 0 0 0 6-6l-3 3-4-4 3-3z"/>'));badge.type='button';badge.hidden=true;document.querySelector('.header-tools')?.prepend(badge);
+  badge.onclick=()=>{document.querySelector('.concept-host')?.shadowRoot?.querySelector('#vtabs [data-v="set"]')?.click();tabs.querySelector('[data-id="maintenance"]').click();};
+  let reading=null,writing=false,dirty=false,unsupported=false,nextRead=0;
+  function paintM(){const m=maintenance,used=m?.last_m==null?null:Math.max(0,m.total_m-m.last_m),limit=m?.interval_km*1000;
+   const distanceDue=limit>0&&used!=null&&used>=limit;
+   const fmt=t=>new Date(t*1000).toLocaleDateString(W('ru-RU','en-GB'));
+   const hint=W('Пора смазать полотно','Belt lubrication is due');badge.hidden=!controls.fresh()||!distanceDue;badge.title=hint;badge.setAttribute('aria-label',hint);
+   if(active!=='maintenance')return;
+   ST(odo,m?maintenanceKm(m.total_m):'—');
+   ST(since,used==null?'—':limit>0?maintenanceNumber(used)+W(' из ',' of ')+maintenanceKm(limit):maintenanceKm(used));
+   ST(remaining,!m?'':used==null?W('Смазка не отмечена','No lubrication recorded'):distanceDue?hint:limit>0?W('До напоминания осталось ','Until reminder: ')+maintenanceKm(limit-used):W('Напоминание выключено','Reminder off'));
+   ST(state,m?.last_at!=null?W('Последняя отметка: ','Last recorded: ')+fmt(m.last_at):m?(used==null?'':W('Дата последней отметки неизвестна','Last recorded date unknown')):unsupported?W('Появится после обновления прошивки','Available after a firmware update'):W('Ожидаем данные дорожки','Waiting for treadmill data'));
+   if(m&&!dirty&&document.activeElement!==km&&km.value!==String(m.interval_km))km.value=m.interval_km;
+   const lock=!m||!controls.fresh()||controls.state()!=='stopped'||writing;save.disabled=mark.disabled=lock;km.disabled=lock;
+  }
+  km.max='100000';
+  async function request(url,opts){const res=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(4000),...opts});if(!res.ok)throw Object.assign(new Error('maintenance'),{status:res.status});return res.json();}
+  async function readState(timeout=4000){const m=await request('/api/maintenance',{signal:AbortSignal.timeout(timeout)});if(!Number.isFinite(m.total_m)||m.total_m<0||!Number.isInteger(m.interval_km)||!Number.isInteger(m.interval_months))throw Error('maintenance response');return m;}
+  function refresh(force=false){if(writing||reading||!controls.fresh()||(!force&&Date.now()<nextRead))return;
+   nextRead=Date.now()+30000;
+   reading=readState().then(m=>{maintenance=m;unsupported=false;}).catch(e=>{if([404,405,501].includes(e.status)){unsupported=true;nextRead=Date.now()+120000;}}).finally(()=>{reading=null;paintM();});
+  }
+  async function change(params){if(!maintenance||writing||!controls.fresh()||controls.state()!=='stopped')return;
+   writing=true;ST(msg,W('Сохраняю…','Saving…'));paintM();
+   try{
+    if(reading)await reading;
+    if(!controls.fresh()||controls.state()!=='stopped')throw Object.assign(new Error('busy'),{status:409});
+    const before=maintenance,config=params.action==='config',matches=m=>m.interval_km===Number(params.km)&&m.interval_months===0;
+    let receipt;
+    try{receipt=await request('/api/maintenance?'+new URLSearchParams(params),{method:'POST',headers:{'X-Treadmill-Maintenance':'1'}});}
+    catch(e){if(e.status||!config||matches(before))throw e;}
+    if(receipt&&(!Number.isInteger(receipt.target)||!Number.isInteger(receipt.generation)))throw Error('receipt');
+    let saved=false;
+    const deadline=performance.now()+5500;
+    while(performance.now()<deadline){
+     await new Promise(resolve=>setTimeout(resolve,300));
+     const left=Math.ceil(deadline-performance.now());if(left<=0)break;
+     const m=await readState(Math.min(1000,left)).catch(()=>null);if(!m)continue;
+     maintenance=m;if(m.generation!==(receipt?.generation??before.generation))break;
+     if(receipt&&m.completed===receipt.target){if(m.failed)throw Object.assign(new Error('save'),{status:503});saved=!config||matches(m);break;}
+     if(!receipt&&config&&!m.failed&&m.completed!==before.completed&&matches(m)){saved=true;break;}
+    }
+    if(!saved)throw Error('unconfirmed');if(config)dirty=false;ST(msg,W('Сохранено на дорожке','Saved on the treadmill'));
+   }catch(e){ST(msg,e.status===409?W('Дорожка занята. Дождитесь полной остановки.','Treadmill busy. Wait until it has fully stopped.'):e.status===503?W('Не удалось сохранить на дорожке','Could not save on the treadmill'):W('Сохранение не подтверждено','Save not confirmed'));}
+   finally{writing=false;paintM();refresh(true);}
+  }
+  form.oninput=()=>{dirty=true;};form.onsubmit=e=>{e.preventDefault();change({action:'config',km:km.value||0,months:0});};
+  mark.onclick=()=>{if(confirm(W('Отметить, что полотно уже смазано?','Record that the belt has been lubricated?')))change({action:'mark'});};
+  painters.push(()=>{paintM();refresh();});setInterval(()=>{if(!document.hidden)refresh();},30000);
+ }
  {const c=customs.diag;c.classList.add('dg-dashboard');
   const text=(tag,cls,value)=>{const n=el(tag,cls);n.textContent=value;return n;};
   const head=el('div','dg-head'),sum=el('div','dg-sum'),lower=el('div','dg-lower'),chart=el('section','dg-panel'),recent=el('section','dg-panel'),more=el('details','dg-more dg-panel'),list=el('div','dg-list'),facts=el('pre','dg-facts'),bar=el('div','dg-bar');
@@ -433,29 +503,51 @@ const el=(tag,cls,html)=>{const n=document.createElement(tag);if(cls)n.className
   copyB.onclick=async()=>{const r=TMDiag.report();try{await navigator.clipboard.writeText(r);msg.textContent=W('Скопировано — пришлите в чат','Copied — paste it into the chat');}catch{let ta=c.querySelector('.dg-ta');if(!ta){ta=el('textarea','dg-ta');ta.readOnly=true;bar.after(ta);}ta.value=r;ta.select();msg.textContent=W('Скопируйте текст ниже','Copy the text below');}};
   clrB.onclick=()=>{if(confirm(W('Очистить журнал диагностики в этом браузере? График останется.','Clear this browser’s diagnostics journal? The chart will remain.')))TMDiag.clear();};
   const KB=v=>v==null?'—':Math.round(v/1024)+W(' КБ',' KB'),up=s=>s==null?'—':s>=86400?Math.floor(s/86400)+W(' д ',' d ')+Math.floor(s%86400/3600)+W(' ч',' h'):s>=3600?Math.floor(s/3600)+W(' ч ',' h ')+Math.floor(s%3600/60)+W(' мин',' min'):Math.floor(s/60)+W(' мин',' min'),clock=t=>new Date(t).toLocaleTimeString(lang()==='ru'?'ru-RU':'en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  // Reconcile only changed leaves. Never detach a selected row (even at the ring limit).
+  const selected=n=>{const s=document.getSelection();if(!s||s.isCollapsed)return false;for(let i=0;i<s.rangeCount;i++)if(s.getRangeAt(i).intersectsNode(n))return true;return false;};
+  const patch=(n,f)=>{if(n.nodeType!==f.nodeType||n.nodeName!==f.nodeName){if(!selected(n))n.replaceWith(f);return;}
+   if(n.nodeType===3){if(n.data!==f.data&&!selected(n))n.data=f.data;return;}
+   for(const a of [...n.attributes])if(!f.hasAttribute(a.name))n.removeAttribute(a.name);
+   for(const a of f.attributes)if(n.getAttribute(a.name)!==a.value)n.setAttribute(a.name,a.value);
+   sync(n,[...f.childNodes]);};
+  const sync=(parent,fresh)=>{for(let i=0;i<fresh.length;i++){const f=fresh[i],n=parent.childNodes[i];if(n)patch(n,f);else parent.append(f);}while(parent.childNodes.length>fresh.length){const n=parent.lastChild;if(selected(n))break;n.remove();}};
+  const safeText=(n,value)=>{if(n.textContent!==value&&!selected(n))n.textContent=value;};
+  const eventKeys=new WeakMap();let eventSeq=0;
+  const eventKey=e=>e.id!=null?'id:'+e.id:eventKeys.get(e)||(()=>{const k='local:'+(++eventSeq);eventKeys.set(e,k);return k;})();
+  const eventRows=(parent,events,raw,names)=>{const keys=new Set(events.map(eventKey));
+   for(const r of [...parent.children])if(!keys.has(r.dataset.eventKey)&&!selected(r))r.remove();
+   let previous=null;
+   for(const e of events){const key=eventKey(e);let r=[...parent.children].find(n=>n.dataset.eventKey===key);
+    if(!r){r=el('div','dg-r');r.dataset.eventKey=key;r.append(text('span','dg-time',''),text('span','dg-m',''));const before=previous?previous.nextSibling:parent.firstChild;parent.insertBefore(r,before);}
+    // A grouped event's timestamp/count may change; defer just its selected leaves.
+    const f=r.cloneNode(false);f.append(text('span','dg-time',clock(e.t)),text('span','dg-m',(raw?e.m:(names[e.k]||e.k))+(e.n>1?' ×'+e.n:'')));f.title=new Date(e.t).toLocaleString();patch(r,f);previous=r;
+   }};
+  const recentTitle=text('h3','',''),recentNote=text('p','dg-msg',''),recentRows=el('div');recent.append(recentTitle,recentNote,recentRows);
+  document.addEventListener('selectionchange',()=>{if(document.getSelection()?.isCollapsed)paintD();});
   let showHeap=true,showBlock=true;
   function paintD(){if(active!=='diag')return;const b=TMDiag.live(),d=TMDiag.day(),ev=TMDiag.events(),status=TMDiag.status();
    const verdict={ok:W('Всё в порядке','All good'),warning:W('Свободная память уменьшается','Free memory is decreasing'),low:W('Мало памяти дольше минуты','Low memory for over a minute'),disconnected:W('Нет связи с дорожкой','Treadmill disconnected'),pending:W('Ожидаем свежие данные','Waiting for fresh data')};
-   head.className='dg-head '+(status==='ok'?'ok':status==='low'?'bad':'warn');head.textContent=(status==='ok'?'✓ ':status==='pending'?'◷ ':'⚠ ')+verdict[status];
+   head.className='dg-head '+(status==='ok'?'ok':status==='low'?'bad':'warn');safeText(head,(status==='ok'?'✓ ':status==='pending'?'◷ ':'⚠ ')+verdict[status]);
    const tile=(title,value,sub,foot,warn=false)=>{const t=el('article','dg-t'+(warn?' warn':''));t.append(text('small','',title),text('b','',value),text('span','dg-sub',sub),text('span','dg-foot',foot));return t;};
-   sum.replaceChildren(tile(W('ПАМЯТЬ ESP32','ESP32 MEMORY'),KB(b.heap),W('Крупнейший блок: ','Largest block: ')+KB(b.block),b.trend==='decreasing'?W('Уменьшается','Decreasing')+(b.drop!=null?' · −'+b.drop+W(' КБ',' KB'):''):b.trend==='stable'?W('Стабильна','Stable'):W('Оценка тренда после 1 ч','Trend available after 1 h'),status==='warning'||status==='low'),tile('PSRAM',b.psram==null?'—':(b.psram/1048576).toFixed(1)+W(' МБ',' MB'),W('Свободно','Free'),W('Внешняя память','External memory')),tile('WI-FI',b.rssi==null?'—':b.rssi+' dBm',b.rssi==null?W('Нет свежего измерения','No fresh measurement'):b.rssi>=-67?W('Хороший сигнал','Good signal'):b.rssi>=-80?W('Слабый сигнал','Weak signal'):W('Очень слабый сигнал','Very weak signal'),W('Разрывов за 24 ч: ','Gaps in 24 h: ')+d.gaps),tile(W('ВРЕМЯ РАБОТЫ','UPTIME'),up(b.uptime),W('С последнего запуска платы','Since last board start'),b.rr?(/web_server\.ota|ota/i.test(b.rr)?W('Перезапуск: обновление OTA','Restart: OTA update'):W('Перезапуск: ','Restart: ')+b.rr):W('Причина сброса: ожидаем данные','Reset reason: awaiting data')));
+   const nextSum=el('div');nextSum.append(tile(W('ПАМЯТЬ ESP32','ESP32 MEMORY'),KB(b.heap),W('Крупнейший блок: ','Largest block: ')+KB(b.block),b.trend==='decreasing'?W('Уменьшается','Decreasing')+(b.drop!=null?' · −'+b.drop+W(' КБ',' KB'):''):b.trend==='stable'?W('Стабильна','Stable'):W('Оценка тренда после 1 ч','Trend available after 1 h'),status==='warning'||status==='low'),tile('PSRAM',b.psram==null?'—':(b.psram/1048576).toFixed(1)+W(' МБ',' MB'),W('Свободно','Free'),W('Внешняя память','External memory')),tile('WI-FI',b.rssi==null?'—':b.rssi+' dBm',b.rssi==null?W('Нет свежего измерения','No fresh measurement'):b.rssi>=-67?W('Хороший сигнал','Good signal'):b.rssi>=-80?W('Слабый сигнал','Weak signal'):W('Очень слабый сигнал','Very weak signal'),W('Разрывов за 24 ч: ','Gaps in 24 h: ')+d.gaps),tile(W('ВРЕМЯ РАБОТЫ','UPTIME'),up(b.uptime),W('С последнего запуска платы','Since last board start'),b.rr?(/web_server\.ota|ota/i.test(b.rr)?W('Перезапуск: обновление OTA','Restart: OTA update'):W('Перезапуск: ','Restart: ')+b.rr):W('Причина сброса: ожидаем данные','Reset reason: awaiting data')));
    const MB=v=>(v/1048576).toFixed(1).replace('.',lang()==='ru'?',':'.')+W(' МБ',' MB');
    const storageReady=b.storageTotal>0&&b.storageUsed>=0&&b.storageUsed<=b.storageTotal&&b.storageFree>=0&&b.storageFree<=b.storageTotal;
    const storage=tile(W('ХРАНИЛИЩЕ','STORAGE'),storageReady?MB(b.storageFree):'—',storageReady?W('Занято ','Used ')+MB(b.storageUsed)+W(' из ',' of ')+MB(b.storageTotal):W('Ожидаем данные хранилища','Waiting for storage data'),W('Тренировки, программы и маршруты','Workouts, programs and routes'));
-   if(storageReady){const meter=document.createElement('progress');meter.className='dg-storage-meter';meter.max=b.storageTotal;meter.value=b.storageUsed;meter.setAttribute('aria-label',W('Заполнение файлового хранилища','File storage usage'));storage.querySelector('.dg-sub').append(meter);storage.querySelector('b').title=W('Свободно в разделе файлов','Free in the file partition');}sum.append(storage);
+   if(storageReady){const meter=document.createElement('progress');meter.className='dg-storage-meter';meter.max=b.storageTotal;meter.value=b.storageUsed;meter.setAttribute('aria-label',W('Заполнение файлового хранилища','File storage usage'));storage.querySelector('.dg-sub').append(meter);storage.querySelector('b').title=W('Свободно в разделе файлов','Free in the file partition');}nextSum.append(storage);
    const icons=['<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 1v4m6-4v4M9 19v4m6-4v4M1 9h4m-4 6h4m14-6h4m-4 6h4"/><rect x="9" y="9" width="6" height="6"/>','<path d="M13 2 5 14h6l-1 8 9-13h-6z"/>','<path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/>','<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>','<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M12 6.5h5m-5 11h5"/>'];
-   [...sum.children].forEach((card,i)=>{const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('class','dg-icon');icon.setAttribute('aria-hidden','true');icon.innerHTML=icons[i];card.prepend(icon);});
+   [...nextSum.children].forEach((card,i)=>{const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('class','dg-icon');icon.setAttribute('aria-hidden','true');icon.innerHTML=icons[i];card.prepend(icon);});sync(sum,[...nextSum.children]);
    const h=TMDiag.history(),now=Date.now(),start=h[0]?.t??now,end=Math.max(now,start+1000),max=Math.max(32,...h.map(p=>p.v/1024))*1.1;
    const path=k=>{let prev=null;return h.filter(p=>p.k===k).map(p=>{const move=!prev||prev.segment!==p.segment||p.t-prev.t>150000;prev=p;return (move?'M':'L')+(44+(p.t-start)/(end-start)*590).toFixed(1)+','+(200-p.v/1024/max*170).toFixed(1);}).join(' ');};
-   chart.innerHTML=`<h3>${W('Память во времени','Memory over time')}</h3><p class="dg-msg">${W('Сбор с открытия страницы: ','Collecting since page opened: ')}${clock(TMDiag.started)}</p><div class="dg-legend"><label><input type="checkbox" data-line="heap" ${showHeap?'checked':''}> ${W('Свободно','Free')} <i class="dg-cyan"></i></label><label><input type="checkbox" data-line="block" ${showBlock?'checked':''}> ${W('Крупнейший блок','Largest block')} <i class="dg-purple"></i></label></div><svg viewBox="0 0 660 240" role="img" aria-label="${W('История памяти в этом браузере','Memory history in this browser')}"><text x="0" y="22">${Math.ceil(max)} ${W('КБ','KB')}</text><line x1="44" y1="30" x2="634" y2="30"/><line x1="44" y1="200" x2="634" y2="200"/><text x="18" y="202">0</text><path class="dg-heap" d="${showHeap?path('heap'):''}"/><path class="dg-block" d="${showBlock?path('block'):''}"/></svg><div class="dg-axis-time"><time>${clock(start)}</time><time>${clock(end)}</time></div><p class="dg-msg">${h.length?W('Только полученные измерения · до 1200 точек. Разрывы — нет связи, перезапуск или устаревшие данные.','Received measurements only · up to 1200 points. Gaps mean disconnection, restart or stale data.'):W('Ожидаем измерения памяти. История с платы не загружается.','Waiting for memory measurements. No history is downloaded from the board.')}</p>`;
+   const nextChart=el('section');nextChart.innerHTML=`<h3>${W('Память во времени','Memory over time')}</h3><p class="dg-msg">${W('Сбор с открытия страницы: ','Collecting since page opened: ')}${clock(TMDiag.started)}</p><div class="dg-legend"><label><input type="checkbox" data-line="heap" ${showHeap?'checked':''}> ${W('Свободно','Free')} <i class="dg-cyan"></i></label><label><input type="checkbox" data-line="block" ${showBlock?'checked':''}> ${W('Крупнейший блок','Largest block')} <i class="dg-purple"></i></label></div><svg viewBox="0 0 660 240" role="img" aria-label="${W('История памяти в этом браузере','Memory history in this browser')}"><text x="0" y="22">${Math.ceil(max)} ${W('КБ','KB')}</text><line x1="44" y1="30" x2="634" y2="30"/><line x1="44" y1="200" x2="634" y2="200"/><text x="18" y="202">0</text><path class="dg-heap" d="${showHeap?path('heap'):''}"/><path class="dg-block" d="${showBlock?path('block'):''}"/></svg><div class="dg-axis-time"><time>${clock(start)}</time><time>${clock(end)}</time></div><p class="dg-msg">${h.length?W('Только полученные измерения · до 1200 точек. Разрывы — нет связи, перезапуск или устаревшие данные.','Received measurements only · up to 1200 points. Gaps mean disconnection, restart or stale data.'):W('Ожидаем измерения памяти. История с платы не загружается.','Waiting for memory measurements. No history is downloaded from the board.')}</p>`;
+   sync(chart,[...nextChart.childNodes]);
    chart.querySelectorAll('input').forEach(i=>i.onchange=()=>{if(i.dataset.line==='heap')showHeap=i.checked;else showBlock=i.checked;paintD();});
    const names={open:W('Страница открыта','Page opened'),boot:W('Перезапуск / сброс платы','Board restart / reset'),gap:W('Разрыв потока данных','Data stream gap'),sse:W('Переподключение потока','Stream reconnection'),mem:W('Длительно мало памяти','Sustained low memory'),leak:W('Память уменьшается','Memory decreasing'),req:W('Ошибка запроса','Request error'),slow:W('Медленный запрос','Slow request'),js:W('Ошибка страницы','Page error'),long:W('Задержка страницы','Page stall'),loop:W('Длинный цикл прошивки','Long firmware loop'),hr:W('Связь с пульсометром','Heart rate monitor connection'),hrdrop:W('Потеря пульсометра','Heart rate monitor lost')};
-   const rows=(events,raw)=>events.map(e=>{const r=el('div','dg-r');r.append(el('span','dg-time',clock(e.t)),text('span','dg-m',(raw?e.m:(names[e.k]||e.k))+(e.n>1?' ×'+e.n:'')));r.title=new Date(e.t).toLocaleString();return r;});
-   recent.replaceChildren(el('h3','',W('Последние события','Recent events')),el('p','dg-msg',W('Журнал — только в этом браузере','Journal — only in this browser')),...rows(ev.slice(-5).reverse(),false));
-   if(!ev.length)recent.append(el('p','dg-msg',W('Событий нет','No events')));
-   more.querySelector('summary').textContent=W('Технические подробности и журнал','Technical details and journal')+' ('+ev.length+')';
-   facts.textContent=W('Цикл прошивки: ','Firmware loop: ')+(b.loop==null?'—':b.loop+' ms')+'\n'+W('Цикл — не процент загрузки CPU.','Loop duration is not CPU usage.')+'\n'+W('Источник: SSE дорожки. Старые значения не показываются как свежие.','Source: treadmill SSE. Old values are not shown as fresh.')+'\n'+W('Сводка за 24 ч: ','24 h summary: ')+JSON.stringify(d)+'\n'+W('Исходные сообщения ниже сохранены без перевода. Полные данные — в отчёте.','Original messages below are preserved untranslated. Full data is in the report.');
-   list.replaceChildren(...rows(ev.slice(-60).reverse(),true));
+   safeText(recentTitle,W('Последние события','Recent events'));safeText(recentNote,W('Журнал — только в этом браузере','Journal — only in this browser'));
+   eventRows(recentRows,ev.slice(-5).reverse(),false,names);
+   if(!ev.length&&!recentRows.children.length)recentRows.append(text('p','dg-msg',W('Событий нет','No events')));
+   safeText(more.querySelector('summary'),W('Технические подробности и журнал','Technical details and journal')+' ('+ev.length+')');
+   const nextFacts=text('pre','dg-facts',W('Цикл прошивки: ','Firmware loop: ')+(b.loop==null?'—':b.loop+' ms')+'\n'+W('Цикл — не процент загрузки CPU.','Loop duration is not CPU usage.')+'\n'+W('Источник: SSE дорожки. Старые значения не показываются как свежие.','Source: treadmill SSE. Old values are not shown as fresh.')+'\n'+W('Сводка за 24 ч: ','24 h summary: ')+JSON.stringify(d)+'\n'+W('Исходные сообщения ниже сохранены без перевода. Полные данные — в отчёте.','Original messages below are preserved untranslated. Full data is in the report.'));patch(facts,nextFacts);
+   eventRows(list,ev.slice(-60).reverse(),true,names);
   }
   painters.push(paintD);let pending=false;TMDiag.on(()=>{if(!pending){pending=true;setTimeout(()=>{pending=false;paintD();},250);}});setInterval(paintD,5000);}
  // ---- About: firmware facts + hardware of this build ----

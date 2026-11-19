@@ -2,6 +2,8 @@
 
 [Русская версия](BUILD.ru.md) · [Back to README](../README.md)
 
+Source builds require **ESPHome 2026.11.0 or newer** for the built-in Nextion and VL53L1X drivers. The local BLE server patch for FTMS/Zwift is still included.
+
 ## Two builds, one code base
 
 All logic lives in [`esphome/packages/00-core.yaml`](../esphome/packages/00-core.yaml) and the packages it includes. The two top-level files differ only in the network part:
