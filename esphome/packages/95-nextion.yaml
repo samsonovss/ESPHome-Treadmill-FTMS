@@ -1,3 +1,13 @@
+esphome:
+  includes:
+    - treadmill_nextion_output.h
+  on_boot:
+    - priority: 900
+      then:
+        - lambda: |-
+            treadmill_display::nextion = id(display_nextion);
+            treadmill_display::phase_beep = []() { id(nx_beep).execute(); };
+
 display:
   - platform: nextion
     uart_id: uart_0
@@ -14,6 +24,7 @@ display:
     # --- Синхронизация при старте ---
     on_setup:
       then:
+        - lambda: 'id(nx_controls_ready) = false;'
         - delay: 500ms
         - lambda: |-
             int brightness = id(brightness_level);
@@ -26,37 +37,11 @@ display:
             ESP_LOGI("Nextion", "Setting dim value");
             id(display_nextion).send_command_printf("dim=%d", brightness);
         - delay: 500ms
-        - switch.nextion.publish:
-            id: bt_tempmode
-            state: !lambda 'return id(bt_tempmode_state);'
-            publish_state: true
-            send_to_nextion: true
-
-  # - delay: 500ms
-  # - switch.nextion.publish:
-  #     id: bt_display_off
-  #     state: !lambda 'return id(bt_display_off_state);'
-  #     publish_state: true
-  #     send_to_nextion: false
-  # - delay: 500ms
-  # - switch.nextion.publish:
-  #     id: safe_mode_switch
-  #     state: !lambda 'return id(safe_mode_switch_state);'
-  #     publish_state: true
-  #     send_to_nextion: false
-  # - delay: 500ms
-  # - switch.nextion.publish:
-  #     id: bt_speed_correction
-  #     state: !lambda 'return id(bt_speed_correction_state);'
-  #     publish_state: true
-  #     send_to_nextion: false
-  # - delay: 500ms
-  # - switch.nextion.publish:
-  #     id: bt_tempmode
-  #     state: !lambda 'return id(bt_tempmode_state);'
-  #     publish_state: true
-  #     send_to_nextion: false
-
+        - lambda: |-
+            id(nx_safe_mode_switch).set_state(id(safe_mode_switch_state), true, true);
+            id(nx_bt_tempmode).set_state(id(bt_tempmode_state), true, true);
+            id(nx_bt_speed_correction).set_state(id(bt_speed_correction_state), true, true);
+            id(nx_controls_ready) = true;
 
     # Глобальное отслеживание всех страниц — всё в одном месте
     on_page:
@@ -283,3 +268,606 @@ text_sensor:
     entity_category: diagnostic
     component_name: load.ver
     update_interval: 60s
+
+# Training page HR display. The common sensor updates current_zone first.
+sensor:
+  - id: !extend heart_rate_sensor
+    on_value:
+      - lambda: |-
+          static int last_heart_rate = -1;  // кэш текста
+          static int last_zone = -1;        // кэш зоны
+
+          if (isnan(x)) {
+            if (id(current_page) == 1) {
+              id(display_nextion).send_command_printf("p0.pic=%d;t0.txt=\"-\";t0.bco=%d", 7, 14792);
+              ESP_LOGI("Nextion", "BLE disconnected, reset HR display");
+            }
+            return;
+          }
+
+          const int hr = (int)x;
+          const int heart_rate_zone = id(current_zone);
+
+          // обновляем текст пульса всегда при изменении
+          if (id(current_page) == 1 && hr != last_heart_rate) {
+            id(display_nextion).send_command_printf("t0.txt=\"%d\"", hr);
+            ESP_LOGI("Nextion", "Update HR text: %d", hr);
+            last_heart_rate = hr;
+          }
+
+          // картинка и фон — при смене зоны ИЛИ
+          if ((id(current_page) == 1) && heart_rate_zone != last_zone) {
+            uint16_t picture_ids[] = {7, 2, 3, 4, 5, 6};
+            uint16_t colors[]      = {14792, 15487, 11744, 64992, 64294, 63688};
+
+            uint16_t picture_id = picture_ids[heart_rate_zone];
+            uint16_t t0_bco     = colors[heart_rate_zone];
+
+            id(display_nextion).send_command_printf("p0.pic=%d", picture_id);
+            id(display_nextion).send_command_printf("t0.bco=%d", t0_bco);
+
+            ESP_LOGI("Nextion", "Update HR zone: %d", heart_rate_zone);
+            last_zone = heart_rate_zone;
+          }
+
+  - id: !extend treadmill_speed_goal_sensor
+    on_value:
+      - lambda: |-
+          static float last_sent = -100.0f;
+          const float current = id(treadmill_speed_goal_sensor).state;
+          if (fabs(current - last_sent) >= 0.05f) {
+            last_sent = current;
+            // Обновляем Nextion только на странице скорости
+            if (id(current_page) == 1) {
+              char speed_str[10];
+              sprintf(speed_str, "%.1f", current);
+              id(display_nextion).set_component_text("t1", speed_str);
+              ESP_LOGD("Nextion", "Отправка команды на дисплей - скорость");
+            }
+          }
+
+  - id: !extend treadmill_incline_goal_sensor
+    on_value:
+      - lambda: |-
+          float current = id(treadmill_incline_goal_sensor).state;
+
+          if (id(current_page) == 1) {
+            char incline_str[10];
+            sprintf(incline_str, "%.1f", current);
+            id(display_nextion).set_component_text("t4", incline_str);
+            ESP_LOGD("Nextion", "Отправка команды на дисплей - наклон");
+          }
+
+  - id: !extend treadmill_time_sec
+    on_value:
+      - lambda: |-
+          const int total = (int)x;
+          const int seconds = total % 60;
+
+          if ((id(motor_running) || id(pause_active)) && (id(current_page) == 1)) {
+            int total_minutes = total / 60;
+            char time_str[32];
+            snprintf(time_str, sizeof(time_str), "%02d:%02d", total_minutes, seconds);
+            id(display_nextion).set_component_text("t3", time_str);
+          }
+
+  - id: !extend treadmill_distance_km
+    on_value:
+      - lambda: |-
+          if (id(current_page) == 1) {
+            char distance_str[10];
+            sprintf(distance_str, "%.2f", id(treadmill_distance_km).state);
+            id(display_nextion).set_component_text("t2", distance_str);
+          }
+
+# Display buttons delegate to the existing treadmill scripts.
+
+# Map ID — сенсор выбора маршрута с дисплея Nextion (переменная mapid).
+# При изменении значения публикует в map_select название и длину выбранного маршрута.
+# Используется для синхронизации выбора карты между Nextion и ESPHome.
+  - platform: nextion
+    name: "Map ID"
+    id: map_id_sensor
+    variable_name: "mapid"
+    #update_interval: 1s
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    on_value:
+      then:
+        - lambda: |-
+            // 17.10: встроенные трассы убраны из прошивки — маршруты только «свои» (веб-UI, Custom route)
+            (void) x;
+
+
+# Brightness Slider — ползунок яркости с дисплея Nextion.
+# Обновляется каждые 2 секунды, сохраняет значение в переменную brightness_level.
+  - platform: nextion
+    id: nextion_slider
+    component_name: display.hbright
+    entity_category: diagnostic
+    name: "Brightness Slider"
+    update_interval: 2s
+    on_value:
+      then:
+        - lambda: |-
+            id(brightness_level) = (int)x;
+
+# Age from Nextion — внутренний сенсор, читает возраст (n_age) с дисплея.
+# При корректном значении (16–100 лет) обновляет number‑сенсор age_number.
+# При некорректном вводе пишет предупреждение в лог.
+  - platform: nextion
+    nextion_id: display_nextion
+    id: age_sensor
+    name: "Age from Nextion"
+    internal: true
+    component_name: n_age
+    on_value:
+      then:
+        - lambda: |-
+            int new_age = x; // Значение от number_sensor
+            if (new_age >= 16 && new_age <= 100) {
+              id(age_number).make_call().set_value(new_age).perform();
+              //id(age_number).publish_state(new_age);
+              ESP_LOGI("Settings", "Age updated to: %d", new_age);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_age);
+            }
+
+
+# Weight from Nextion — внутренний сенсор, читает n_weight с дисплея.
+# При корректном значении (40–100 кг) обновляет weight_kg, иначе пишет предупреждение.
+# Используется для учёта веса в расчётах (калории, MET и т.д.).
+  - platform: nextion
+    nextion_id: display_nextion
+    id: weight_sensor
+    name: "Weight from Nextion"
+    internal: true
+    component_name: n_weight
+    on_value:
+      then:
+        - lambda: |-
+            int new_weight = x; // Значение от Nextion
+            if (new_weight >= 40 && new_weight <= 100) {
+              id(weight_kg).make_call().set_value(new_weight).perform();
+              //id(weight_kg).publish_state(new_weight);
+              ESP_LOGI("Settings", "Weight updated to: %d kg", new_weight);
+            } else {
+              ESP_LOGW("Settings", "Invalid weight value: %d kg", new_weight);
+            }
+
+
+# Time from Nextion — внутренний сенсор, читает n_min (заданное время тренировки).
+# При корректном значении (1–999 мин) обновляет set_run_time, иначе пишет предупреждение.
+# Используется для задания длительности тренировки через интерфейс Nextion.
+  - platform: nextion
+    nextion_id: display_nextion
+    id: time_sensor
+    name: "time from Nextion"
+    internal: true
+    component_name: n_min
+    on_value:
+      then:
+        - lambda: |-
+            int new_time = x; // Значение от number_sensor
+            if (new_time >= 1 && new_time <= 999) {
+              //id(set_run_time).publish_state(new_time);
+              id(set_run_time).make_call().set_value(new_time).perform();
+              ESP_LOGI("Settings", "Age updated to: %d", new_time);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_time);
+            }
+
+# Time Warm from Nextion — внутренний сенсор, читает n_warm (разминка).
+# При корректном значении (0–10 мин) обновляет set_warm_up_time, иначе пишет предупреждение.
+# Используется для задания длительности разминки.
+  - platform: nextion
+    nextion_id: display_nextion
+    id: warm_sensor
+    name: "time warm from Nextion"
+    internal: true
+    component_name: n_warm
+    on_value:
+      then:
+        - lambda: |-
+            int new_time_warm = x; // Значение от number_sensor
+            if (new_time_warm >= 0 && new_time_warm <= 10) {
+              //id(set_warm_up_time).publish_state(new_time_warm);
+              id(set_warm_up_time).make_call().set_value(new_time_warm).perform();
+              ESP_LOGI("Settings", "Age updated to: %d", new_time_warm);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_time_warm);
+            }
+
+# Time Cool from Nextion — внутренний сенсор, читает n_cool (заминка).
+# При корректном значении (0–10 мин) обновляет set_cool_down_time, иначе пишет предупреждение.
+# Используется для задания длительности заминки.
+  - platform: nextion
+    nextion_id: display_nextion
+    id: cool_sensor
+    name: "time cool from Nextion"
+    internal: true
+    component_name: n_cool
+    on_value:
+      then:
+        - lambda: |-
+            int new_time_cool = x; // Значение от number_sensor
+            if (new_time_cool >= 0 && new_time_cool <= 10) {
+              //id(set_cool_down_time).publish_state(new_time_cool);
+              id(set_cool_down_time).make_call().set_value(new_time_cool).perform();
+              ESP_LOGI("Settings", "Age updated to: %d", new_time_cool);
+              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
+            } else {
+              ESP_LOGW("Settings", "Invalid age value: %d", new_time_cool);
+            }
+
+binary_sensor:
+  - platform: nextion
+    page_id: 1
+    component_id: 15
+    id: m0_stop
+    on_press:
+      then:
+        - logger.log: "pause pressed"
+        - script.execute: pause_training
+        - lambda: id(m0_stop).publish_state(false);
+
+  - platform: nextion
+    page_id: 25
+    component_id: 2
+    id: bstop
+    on_press:
+      then:
+        - logger.log: "bstop pressed, scheduling stop_program"
+        - if:
+            condition:
+              lambda: 'return id(free_running_mode_switch).state || id(motor_running) || id(pause_active);'
+            then:
+              - script.execute: stop_program
+              - lambda: id(bstop).publish_state(false);
+            else:
+              - logger.log: "bstop: Treadmill already stopped, skipping"
+
+        - lambda: |-
+            ESP_LOGI("Nextion", "Button (bstop) press");
+
+  # bresume — кнопка на странице 13
+  # Логирует событие, востанавливает тренировку
+  - platform: nextion
+    page_id: 25
+    component_id: 1
+    id: bresume
+    on_press:
+      then:
+        - lambda: |-
+            ESP_LOGI("Nextion", "Button (bresume) press");
+            id(bresume).publish_state(false);
+        - script.execute: resume_training
+
+  # bquick_start — кнопка быстрого старта на главной странице.
+  # Запускает ручной режим после задержки, сбрасывает выбор программы.
+  - platform: nextion
+    page_id: 0
+    component_id: 3
+    id: bquick_start
+    on_press:
+      then:
+        - lambda: 'ESP_LOGI("Nextion", "Button (bquick_start) press, start in 3.4 s");'
+        - delay: 3400ms
+        - script.execute: start_manual
+        - lambda: |-
+            id(program_select).publish_state("None");
+            id(bquick_start).publish_state(false);
+
+  # bfartlek — плитка Fartlek на главной странице (как bhiit): выбирает программу Fartlek.
+  - platform: nextion
+    page_id: 0
+    component_id: 8
+    id: bfartlek
+    on_press:
+      then:
+        - lambda: |-
+            id(program_select).publish_state("Fartlek");
+            id(bfartlek).publish_state(false);
+
+  # b_cal — кнопка калибровки (страница caldistspeed).
+  # Меняет надписи на дисплее, показывает обратный отсчёт, запускает скрипт калибровки.
+  - platform: nextion
+    page_id: 15
+    component_id: 4
+    id: b_cal
+    on_press:
+      then:
+        - lambda: |-
+           id(display_nextion).set_component_text("b_cal", "Running...");
+           id(display_nextion).set_component_text("caldistspeed.t_info_calib", "3");
+           id(display_nextion).send_command_printf("p_zone.pic=76"); // картинка зоны
+           ESP_LOGI("Nextion", "Sending command for p_zone.pic=76");
+           id(display_nextion).set_component_text("caldistspeed.t_speed_up", "");
+           id(display_nextion).set_component_text("caldistspeed.t_speed_down", "");
+           id(display_nextion).set_component_text("caldistspeed.t_lenght", "");
+        - delay: 1000ms
+        - lambda: id(display_nextion).set_component_text("caldistspeed.t_info_calib", "2");
+        - delay: 1000ms
+        - lambda: id(display_nextion).set_component_text("caldistspeed.t_info_calib", "1");
+        - delay: 1000ms
+        - script.execute: start_calibration
+        - lambda: |-
+            id(b_cal).publish_state(false);
+            ESP_LOGI("Nextion", "Button (b_cal) press");
+
+  # bstart_program — кнопка запуска программы (страница Time).
+  # После задержки запускает выбранную программу.
+  - platform: nextion
+    page_id: 5
+    component_id: 9
+    id: bstart_program
+    on_press:
+      then:
+        - delay: 3400ms
+        - script.execute: start_program
+        - lambda: |-
+            id(bstart_program).publish_state(false);
+
+  # bmap — кнопка перехода к выбору карты (главная страница).
+  # Логирует событие, сбрасывает состояние кнопки.
+  - platform: nextion
+    page_id: 0
+    component_id: 6
+    id: bmap
+    on_press:
+      then:
+        - lambda: |-
+            ESP_LOGI("Nextion", "INFO tab (bmap) press");
+            id(bmap).publish_state(false);
+
+  # bsettings — кнопка настроек (главная страница).
+  # Логирует событие, сбрасывает состояние кнопки.
+  - platform: nextion
+    page_id: 0
+    component_id: 7
+    id: bsettings
+    on_press:
+      then:
+        - lambda: |-
+            ESP_LOGI("Nextion", "INFO tab (bsettings) press");
+            id(bsettings).publish_state(false);
+
+  # bhiit — кнопка запуска программы HIIT (главная страница).
+  # Устанавливает программу HIIT, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 0
+    component_id: 5
+    id: bhiit
+    on_press:
+      then:
+        - lambda: |-
+            id(program_select).publish_state("HIIT");  // Выбираем программу
+        - lambda: id(bhiit).publish_state(false);
+
+  # bhr_zone — кнопка запуска программы Pulse Zone (главная страница).
+  # Устанавливает программу Pulse Zone, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 0
+    component_id: 4
+    id: bhr_zone
+    on_press:
+      then:
+        - lambda: |-
+            id(program_select).publish_state("Pulse Zone");  // Выбираем программу
+        - lambda: id(bhr_zone).publish_state(false);
+
+  # bzone1 — кнопка выбора зоны 1 (страница Pulse Zone).
+  # Устанавливает зону 1, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 2
+    id: bzone1
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("1");
+        - lambda: id(bzone1).publish_state(false);
+        - script.execute: nx_zone_route_fix
+
+  # bzone2 — кнопка выбора зоны 2.
+  # Устанавливает зону 2, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 3
+    id: bzone2
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("2");
+        - lambda: id(bzone2).publish_state(false);
+        - script.execute: nx_zone_route_fix
+
+  # bzone3 — кнопка выбора зоны 3.
+  # Устанавливает зону 3, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 4
+    id: bzone3
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("3");
+        - lambda: id(bzone3).publish_state(false);
+        - script.execute: nx_zone_route_fix
+
+  # bzone4 — кнопка выбора зоны 4.
+  # Устанавливает зону 4, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 5
+    id: bzone4
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("4");
+        - lambda: id(bzone4).publish_state(false);
+        - script.execute: nx_zone_route_fix
+
+  # bzone5 — кнопка выбора зоны 5.
+  # Устанавливает зону 5, сбрасывает кнопку.
+  - platform: nextion
+    page_id: 2
+    component_id: 6
+    id: bzone5
+    on_press:
+      then:
+        - lambda: |-
+            id(zone_select).publish_state("5");
+        - lambda: id(bzone5).publish_state(false);
+        - script.execute: nx_zone_route_fix
+
+button:
+# Update Nextion — обновляет прошивку дисплея Nextion (загрузка TFT‑файла).
+  - platform: template
+    id: update_nextion_button
+    name: Update Nextion
+    entity_category: diagnostic
+    on_press:
+      then:
+        - lambda: 'id(display_nextion)->upload_tft();'
+
+switch:
+# Gender Switch — переключатель пола с дисплея Nextion (bt0).
+# При значении 1 устанавливает "Female", при 0 — "Male".
+# При изменении обновляет gender_select и запускает пересчёт пульсовых зон.
+  - platform: nextion
+    id: gender_switch
+    name: "Gender Switch"
+    internal: true
+    component_name: bt0  # Соответствует имени в Nextion
+    on_turn_on:  # bt0.val = 1 (Female)
+      - lambda: |-
+          if (id(gender_select).current_option() != "Female") {
+            id(gender_select).publish_state("Female");
+            ESP_LOGI("Settings", "Gender set to Female from bt0");
+            id(update_heart_rate_zones).execute();
+          }
+    on_turn_off:  # bt0.val = 0 (Male)
+      - lambda: |-
+          if (id(gender_select).current_option() != "Male") {
+            id(gender_select).publish_state("Male");
+            ESP_LOGI("Settings", "Gender set to Male from bt0");
+            id(update_heart_rate_zones).execute();
+          }
+
+
+#кнопка nextion для вкл/выкл дисплея по датчику растояния через 1 минуту
+  - platform: nextion
+    name: "Disp. auto on-off"
+    id: bt_display_off
+    component_name: display.bt_display_off
+    on_turn_on:
+      - globals.set:
+          id: bt_display_off_state
+          value: !lambda 'return id(bt_display_off).state;'
+    on_turn_off:
+      - globals.set:
+          id: bt_display_off_state
+          value: !lambda 'return id(bt_display_off).state;'
+
+  - platform: nextion
+    id: nx_safe_mode_switch
+    internal: true
+    component_name: system.bt_savemode
+    on_turn_on:
+      - lambda: 'if (id(nx_controls_ready) && !id(safe_mode_switch_state)) id(safe_mode_switch).turn_on();'
+    on_turn_off:
+      - lambda: 'if (id(nx_controls_ready) && id(safe_mode_switch_state)) id(safe_mode_switch).turn_off();'
+
+  - id: !extend safe_mode_switch
+    on_turn_on:
+      - lambda: 'if (id(nx_controls_ready)) id(nx_safe_mode_switch).set_state(true, true, true);'
+    on_turn_off:
+      - lambda: 'if (id(nx_controls_ready)) id(nx_safe_mode_switch).set_state(false, true, true);'
+
+  - platform: nextion
+    id: nx_bt_tempmode
+    internal: true
+    component_name: system.bt_tempmode
+    on_turn_on:
+      - lambda: 'if (id(nx_controls_ready) && !id(bt_tempmode_state)) id(bt_tempmode).turn_on();'
+    on_turn_off:
+      - lambda: 'if (id(nx_controls_ready) && id(bt_tempmode_state)) id(bt_tempmode).turn_off();'
+
+  - id: !extend bt_tempmode
+    on_turn_on:
+      - lambda: 'if (id(nx_controls_ready)) id(nx_bt_tempmode).set_state(true, true, true);'
+    on_turn_off:
+      - lambda: 'if (id(nx_controls_ready)) id(nx_bt_tempmode).set_state(false, true, true);'
+
+  - platform: nextion
+    id: nx_bt_speed_correction
+    internal: true
+    component_name: system.bt_speed_corr
+    on_turn_on:
+      - lambda: 'if (id(nx_controls_ready) && !id(bt_speed_correction_state)) id(bt_speed_correction).turn_on();'
+    on_turn_off:
+      - lambda: 'if (id(nx_controls_ready) && id(bt_speed_correction_state)) id(bt_speed_correction).turn_off();'
+
+  - id: !extend bt_speed_correction
+    on_turn_on:
+      - lambda: 'if (id(nx_controls_ready)) id(nx_bt_speed_correction).set_state(true, true, true);'
+    on_turn_off:
+      - lambda: 'if (id(nx_controls_ready)) id(nx_bt_speed_correction).set_state(false, true, true);'
+
+# Display feedback for the shared heart-rate BLE client.
+ble_client:
+  - id: !extend fit_smart
+    on_connect:
+      - then:
+          - delay: 20ms
+          - lambda: |-
+              id(display_nextion).send_command_printf("hr=1");
+              ESP_LOGI("Nextion", "Sending command for hr=1");
+          - if:
+              condition:
+                lambda: 'return id(current_page) == 0;'
+              then:
+                - lambda: |-
+                    id(display_nextion).send_command_printf("p_error.pic=15");
+                    id(display_nextion).send_command_printf("vis p_error,1");
+                    ESP_LOGI("Nextion", "Sending command for p_error.pic and vis p_error 1");
+                - delay: 3000ms  # Задержка 3 секунды
+                - lambda: |-
+                    id(display_nextion).send_command_printf("vis p_error,0");
+                    id(display_nextion).send_command_printf("mainPage.bhr_zone.aph=127");
+                    id(display_nextion).send_command_printf("mainPage.bhiit.aph=127");
+                    ESP_LOGI("Nextion", "Sending command for vis p_error 0 and mainPage.bhr_zone.aph=127 and mainPage.bhiit.aph=127");
+
+                    //id(display_nextion).send_command_printf("mainPage.bfit_test.aph=127");
+    on_disconnect:
+      - then:
+          - lambda: |-
+              if (id(current_page) == 1) {
+                id(display_nextion).set_component_text("b0", "-"); // Устанавливаем строку на дисплей
+                id(display_nextion).send_command_printf("b0.pic=7");
+                ESP_LOGI("Nextion", "Sending command for b0.pic=7");
+              }
+
+              // Устанавливаем значение hr в 0 отключено
+              id(display_nextion).send_command_printf("hr=0");
+              ESP_LOGI("Nextion", "Sending command for hr=0");
+              // Если сейчас на главной — затемняем кнопки программ
+              if (id(current_page) == 0) {
+                id(display_nextion).send_command_printf("mainPage.bhr_zone.aph=80");
+                id(display_nextion).send_command_printf("mainPage.bhiit.aph=80");
+                ESP_LOGI("Nextion", "Sending command for mainPage.bhr_zone.aph=80 and mainPage.bhiit.aph=80");
+                //id(display_nextion).send_command_printf("mainPage.bfit_test.aph=80");
+              }
+              id(display_nextion).set_component_text("bluetooth.tBatt", "-");
+              id(display_nextion).set_component_text("bluetooth.tHr", "");
+              id(display_nextion).set_component_text("bluetooth.tModel", "-");
+
+globals:
+  - id: nx_controls_ready
+    type: bool
+    restore_value: no
+    initial_value: 'false'

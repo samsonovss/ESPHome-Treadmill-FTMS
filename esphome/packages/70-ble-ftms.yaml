@@ -27,70 +27,33 @@ ble_client:
   - mac_address: "00:00:00:00:00:00"  # placeholder: the real strap is chosen at runtime (HR select, restored from flash)
     id: fit_smart
     on_connect:
-      # HR monitor connected → stop BLE scanning: Wi-Fi shares the radio and gets several times faster (09.10).
-      - esp32_ble_tracker.stop_scan:
-      - text_sensor.template.publish:
-          id: connection_status
-          state: "Подключен"
-      - delay: 20ms 
-      - lambda: |-
-          id(name_bt_sensor).update();   // запросить модель
+      - then:
+          # HR monitor connected → stop BLE scanning: Wi-Fi shares the radio and gets several times faster (09.10).
+          - esp32_ble_tracker.stop_scan:
+          - text_sensor.template.publish:
+              id: connection_status
+              state: "Подключен"
+          - delay: 20ms
+          - lambda: |-
+              id(name_bt_sensor).update();   // запросить модель
 
-          ESP_LOGI("ble_client", "Connected to fit_smart");
-          // Принудительное чтение батареи при подключении
-          id(battery_level_sensor).update();
-          // Устанавливаем значение hr в 1 (подключено)
-          id(display_nextion).send_command_printf("hr=1");
-          ESP_LOGI("Nextion", "Sending command for hr=1");
-      - if:
-          condition:
-            lambda: 'return id(current_page) == 0;'
-          then:
-            - lambda: |-
-                id(display_nextion).send_command_printf("p_error.pic=15");
-                id(display_nextion).send_command_printf("vis p_error,1");
-                ESP_LOGI("Nextion", "Sending command for p_error.pic and vis p_error 1");
-            - delay: 3000ms  # Задержка 3 секунды
-            - lambda: |-
-                id(display_nextion).send_command_printf("vis p_error,0");
-                id(display_nextion).send_command_printf("mainPage.bhr_zone.aph=127"); 
-                id(display_nextion).send_command_printf("mainPage.bhiit.aph=127"); 
-                ESP_LOGI("Nextion", "Sending command for vis p_error 0 and mainPage.bhr_zone.aph=127 and mainPage.bhiit.aph=127");
-
-                //id(display_nextion).send_command_printf("mainPage.bfit_test.aph=127"); 
+              ESP_LOGI("ble_client", "Connected to fit_smart");
+              // Принудительное чтение батареи при подключении
+              id(battery_level_sensor).update();
     on_disconnect:
-      # Scan again so the monitor is found when it comes back.
-      - esp32_ble_tracker.start_scan:
-          continuous: true
-      - sensor.template.publish:
-          id: heart_rate_sensor
-          state: 0 # !lambda 'return NAN;'
-      - lambda: |-
-          if (id(current_page) == 1) {
-            id(display_nextion).set_component_text("b0", "-"); // Устанавливаем строку на дисплей
-            id(display_nextion).send_command_printf("b0.pic=7");
-            ESP_LOGI("Nextion", "Sending command for b0.pic=7");
-          }
-
-          // Устанавливаем значение hr в 0 отключено
-          id(display_nextion).send_command_printf("hr=0");
-          ESP_LOGI("Nextion", "Sending command for hr=0");
-          // Если сейчас на главной — затемняем кнопки программ
-          if (id(current_page) == 0) {
-            id(display_nextion).send_command_printf("mainPage.bhr_zone.aph=80"); 
-            id(display_nextion).send_command_printf("mainPage.bhiit.aph=80"); 
-            ESP_LOGI("Nextion", "Sending command for mainPage.bhr_zone.aph=80 and mainPage.bhiit.aph=80");
-            //id(display_nextion).send_command_printf("mainPage.bfit_test.aph=80"); 
-          }
-          id(display_nextion).set_component_text("bluetooth.tBatt", "-");
-          id(display_nextion).set_component_text("bluetooth.tHr", "");
-          id(display_nextion).set_component_text("bluetooth.tModel", "-");
-      - sensor.template.publish:
-          id: battery_level_sensor
-          state: 0 # !lambda 'return NAN;'
-      - text_sensor.template.publish:
-          id: connection_status
-          state: "Отключено"
+      - then:
+          # Scan again so the monitor is found when it comes back.
+          - esp32_ble_tracker.start_scan:
+              continuous: true
+          - sensor.template.publish:
+              id: heart_rate_sensor
+              state: 0 # !lambda 'return NAN;'
+          - sensor.template.publish:
+              id: battery_level_sensor
+              state: 0 # !lambda 'return NAN;'
+          - text_sensor.template.publish:
+              id: connection_status
+              state: "Отключено"
 
 # Running Speed and Cadence Service (RSC, UUID 0x1814)
 # Этот сервис можно включить для совместимости с приложениями, которые ожидают данные

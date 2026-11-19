@@ -12,7 +12,7 @@ script:
               : "Overheat Emergency Stop";
 
           id(program_status).publish_state(status);
-          id(display_nextion).send_command_printf("page 24");
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 24"));
           ESP_LOGE("Overheat", "%s", status);
       - script.execute: stop_program
       - delay: 250ms
@@ -86,14 +86,14 @@ script:
 
           // --- Выводим на дисплей Nextion статус "PAUSE"
           id(program_status).publish_state("Pause");
-          id(display_nextion).set_component_text("speed.tstatus", "Pause");
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", "Pause"));
 
           // Принудительно обновляем скорость-наклон на 0 на странице 1
-          id(display_nextion).set_component_text("t1", "0.0");
-          id(display_nextion).set_component_text("t4", "0.0");
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("t1", "0.0"));
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("t4", "0.0"));
 
           if (id(current_page) != 25) {
-            id(display_nextion).goto_page("pause");
+            TREADMILL_DISPLAY_OUTPUT(goto_page("pause"));
             ESP_LOGI("treadmill", "Nextion Page Pause");
           }
 
@@ -112,7 +112,7 @@ script:
             - lambda: |-
                 ESP_LOGW("Overheat", "Resume blocked by overheat protection");
                 id(program_status).publish_state("Start blocked: Overheat");
-                id(display_nextion).send_command_printf("page 24");
+                TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 24"));
             - script.stop: resume_training
       - lambda: |-
           // Снимаем флаг паузы
@@ -151,7 +151,7 @@ script:
           if (id(saved_program_status).size() > 0) {
             id(program_status).publish_state(id(saved_program_status).c_str());
             if (id(current_page) == 1) {
-              id(display_nextion).set_component_text("speed.tstatus", id(saved_program_status).c_str());
+              TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", id(saved_program_status).c_str()));
             }
           }
 
@@ -164,7 +164,7 @@ script:
           ESP_LOGI("FTMS", "Отправлено уведомление: Resumed (0x04)");
 
           if (id(current_page) == 25) {
-            id(display_nextion).goto_page("speed");
+            TREADMILL_DISPLAY_OUTPUT(goto_page("speed"));
             ESP_LOGI("treadmill", "Nextion Page speed");
           }
 
@@ -252,7 +252,7 @@ script:
             - lambda: |-
                 ESP_LOGW("Overheat", "Manual start blocked by overheat protection");
                 id(program_status).publish_state("Start blocked: Overheat");
-                id(display_nextion).send_command_printf("page 24");
+                TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 24"));
             - script.stop: start_manual
       - script.execute: reset_workout_data
       - lambda: |-
@@ -281,7 +281,7 @@ script:
           id(remaining_run_time) = (run_time > 0) ? run_time * 60 : 0;
           id(remaining_cool_down_time) = 0;
           id(program_status).publish_state("Manual Mode");
-          id(display_nextion).set_component_text("speed.tstatus", "Manual Mode");
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", "Manual Mode"));
           id(control_mode) = 0;  // Ручной режим
           id(auto_mode) = false;
 
@@ -300,7 +300,7 @@ script:
             char wbuf[32];
             snprintf(wbuf, sizeof(wbuf), "Warm-up: (%d:%02d)", id(remaining_warm_up_time) / 60, id(remaining_warm_up_time) % 60);
             id(program_status).publish_state(wbuf);
-            id(display_nextion).set_component_text("speed.tstatus", wbuf);
+            TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", wbuf));
             ESP_LOGI("Route", "Route warm-up %d s", id(remaining_warm_up_time));
           }
           ESP_LOGI("Manual", "Установлен ручной режим (control_mode = 0), иконка 62");
@@ -321,7 +321,7 @@ script:
           ESP_LOGI("FTMS", "Отправлено уведомление: Training Status 0x%02X", ts0);
 
           if (id(current_page) != 1) {
-            id(display_nextion).send_command_printf("page 1");
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 1"));
             ESP_LOGI("Nextion", "Переключение на страницу 1");
           }
 
@@ -344,7 +344,7 @@ script:
             - lambda: |-
                 ESP_LOGW("Overheat", "Program start blocked by overheat protection");
                 id(program_status).publish_state("Start blocked: Overheat");
-                id(display_nextion).send_command_printf("page 24");
+                TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 24"));
             - script.stop: start_program
       - script.execute: reset_workout_data
       - lambda: |-
@@ -374,13 +374,13 @@ script:
           if (program == "Pulse Zone" || program == "Fat Burn" || program == "Recovery run") {
             id(control_mode) = 2;  // Управление по пульсу
             id(auto_mode) = true;
-            id(display_nextion).send_command_printf("speed.p_icon_mode.pic=59");
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.p_icon_mode.pic=59"));
             ESP_LOGI("Program", "Установлен режим управления по пульсу (control_mode = 2), иконка 59");
 
           } else if (program == "HIIT") {
             id(control_mode) = 0;  // HIIT управляется отдельным скриптом
             id(auto_mode) = false;
-            id(display_nextion).send_command_printf("speed.p_icon_mode.pic=62");
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.p_icon_mode.pic=62"));
             ESP_LOGI("Program", "Установлен HIIT (control_mode = 0), иконка 62");
 
             // Сброс счётчика и установка первой фазы HIIT
@@ -398,7 +398,7 @@ script:
                     cycles);
 
             id(program_status).publish_state(buffer);
-            id(display_nextion).set_component_text("speed.tstatus", buffer);
+            TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", buffer));
             ESP_LOGI("DEBUG", "Status updated: %s", buffer);
 
             // Training Status: High Intensity Interval (0x04)
@@ -416,7 +416,7 @@ script:
             id(fartlek_seg) = 0;
             id(fartlek_t) = 0;
             { float T0 = id(treadmill_time_sec).state; id(fartlek_last_t) = isnan(T0) ? 0 : (int) T0; }   // 22.10
-            id(display_nextion).send_command_printf("speed.p_icon_mode.pic=62");
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.p_icon_mode.pic=62"));
             if (id(last_training_status)[1] != 0x04) {
               id(training_status_char).set_value({0x00, 0x04});
               id(training_status_char).notify();
@@ -427,7 +427,7 @@ script:
           } else {
             id(control_mode) = 0;  // Ручной режим для остальных
             id(auto_mode) = false;
-            id(display_nextion).send_command_printf("speed.p_icon_mode.pic=62");
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.p_icon_mode.pic=62"));
             ESP_LOGI("Program", "Установлен ручной режим (control_mode = 0), иконка 62");
           }
 
@@ -454,7 +454,7 @@ script:
             char buffer[64];
             snprintf(buffer, sizeof(buffer), "Warm-up: (%d:%02d)", warm_up_minutes, warm_up_seconds);
             id(program_status).publish_state(buffer);
-            id(display_nextion).set_component_text("speed.tstatus", buffer);
+            TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", buffer));
             ESP_LOGI("DEBUG", "Status updated: %s", buffer);
 
             // Training Status: Warming Up (0x02)
@@ -497,7 +497,7 @@ script:
                         remaining_minutes, remaining_seconds);
               }
               id(program_status).publish_state(buffer);
-              id(display_nextion).set_component_text("speed.tstatus", buffer);
+              TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", buffer));
               ESP_LOGI("DEBUG", "Status updated: %s", buffer);
 
               // Training Status в зависимости от программы
@@ -521,7 +521,7 @@ script:
               // Только для НЕ-HIIT программ выводим "No duration"
               if (program != "HIIT" && program != "Fartlek") {
                 id(program_status).publish_state("Program: No duration");
-                id(display_nextion).set_component_text("speed.tstatus", "Program: No duration");
+                TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", "Program: No duration"));
               }
             }
           }
@@ -530,7 +530,7 @@ script:
           id(warm_up_time) = 0;
 
           if (id(current_page) != 1) {
-            id(display_nextion).send_command_printf("page 1");
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 1"));
             ESP_LOGI("Nextion", "Переключение на страницу 1");
           }
 
@@ -639,7 +639,7 @@ script:
                         cycles_left);
 
                 id(program_status).publish_state(hiit_buf);
-                id(display_nextion).set_component_text("speed.tstatus", hiit_buf);
+                TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", hiit_buf));
                 ESP_LOGI("DEBUG", "Status updated immediately after warm-up: %s", hiit_buf);
 
                 // --- FTMS уведомление для HIIT ---
@@ -658,7 +658,7 @@ script:
               else {
                 // Для остальных программ публикуем "Warm-up: Done"
                 id(program_status).publish_state("Warm-up: Done");
-                id(display_nextion).set_component_text("speed.tstatus", "Warm-up: Done");
+                TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", "Warm-up: Done"));
                 // 16.10: фартлек — после разминки план (fartlek_tick), маршрут без программы — ручной режим
                 if (program == "Fartlek" || program == "None") {
                   if (program == "Fartlek") { float T0 = id(treadmill_time_sec).state; id(fartlek_last_t) = isnan(T0) ? 0 : (int) T0; id(fartlek_t) = 0; }   // 22.10: plan starts after warm-up
@@ -719,7 +719,7 @@ script:
             }
             if (warm_up_time % 10 == 0 || id(remaining_warm_up_time) <= 0) {   // 22.10: «Wait pulse / Need» shows at once, not up to 10 s later
               id(program_status).publish_state(buffer);
-              id(display_nextion).set_component_text("speed.tstatus", buffer);
+              TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", buffer));
               ESP_LOGI("DEBUG", "Status updated: %s, length: %d", buffer, strlen(buffer));
             }
           }
@@ -760,7 +760,7 @@ script:
           char buffer[32];
           snprintf(buffer, sizeof(buffer), "Cool-down: (%d:%02d)", id(remaining_cool_down_time) / 60, id(remaining_cool_down_time) % 60);
           id(program_status).publish_state(buffer);
-          id(display_nextion).set_component_text("speed.tstatus", buffer);
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", buffer));
           ESP_LOGI("CoolDown", "Begin cool-down %d s", id(remaining_cool_down_time));
           id(cool_down).execute();
 
@@ -835,7 +835,7 @@ script:
             char buffer[64];
             snprintf(buffer, sizeof(buffer), "Cool-down: (%d:%02d)", remaining_minutes, remaining_seconds);
             id(program_status).publish_state(buffer);
-            id(display_nextion).set_component_text("speed.tstatus", buffer);
+            TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", buffer));
             ESP_LOGI("DEBUG", "Status updated: %s, length: %d", buffer, strlen(buffer));
           }
 
@@ -870,7 +870,7 @@ script:
           id(target_speed_goal) = 0;
           id(ui_control_state).update();   // «stopped» first
           id(program_status).publish_state(msg);
-          id(display_nextion).set_component_text("speed.tstatus", msg.c_str());
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", msg.c_str()));
           id(stop_program).execute();
 
   - id: start_hiit
@@ -991,7 +991,7 @@ script:
           // вычисляем оставшееся время
           int remaining = phase_duration - id(interval_time);
           if (remaining < 0) remaining = 0;
-          if ((remaining >= 1 && remaining <= 2) || phase_switched) id(nx_beep).execute();   // 3-2-1 countdown + phase change
+          if ((remaining >= 1 && remaining <= 2) || phase_switched) treadmill_display::beep();   // 3-2-1 countdown + phase change
           int rem_min = remaining / 60;
           int rem_sec = remaining % 60;
 
@@ -1016,7 +1016,7 @@ script:
           }
 
           id(program_status).publish_state(buffer);
-          id(display_nextion).set_component_text("speed.tstatus", buffer);
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", buffer));
           ESP_LOGI("DEBUG", "Status updated: %s", buffer);
 
           // --- Отправляем Training Status FTMS ---
@@ -1241,7 +1241,7 @@ script:
                         remaining_minutes, remaining_seconds);
               }
               id(program_status).publish_state(buffer);
-              id(display_nextion).set_component_text("speed.tstatus", buffer);
+              TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", buffer));
               ESP_LOGI("DEBUG", "Status updated: %s, length: %d", buffer, strlen(buffer));
             }
           }
@@ -1280,7 +1280,7 @@ script:
               char buffer[64];
               snprintf(buffer, sizeof(buffer), "Cool-down: (%d:%02d)", cool_down_minutes, cool_down_seconds);
               id(program_status).publish_state(buffer);
-              id(display_nextion).set_component_text("speed.tstatus", buffer);
+              TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", buffer));
               ESP_LOGI("DEBUG", "Status updated: %s, length: %d", buffer, strlen(buffer));
               id(cool_down).execute();
             } else {
@@ -1486,13 +1486,13 @@ script:
 
           // --- Сразу обнуляем дисплей так как глобал и их нужно сбрасывать (глобал важны для режима пауза)
           //время
-          id(display_nextion).set_component_text("speed.t3", "00:00");
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.t3", "00:00"));
           //скорость
-          id(display_nextion).set_component_text("speed.t1", "0.0");
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.t1", "0.0"));
           //наклон
-          id(display_nextion).set_component_text("speed.t4", "0.0");
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.t4", "0.0"));
           //дистанция
-          id(display_nextion).set_component_text("speed.t2", "0.00");
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.t2", "0.00"));
 
 
           id(remaining_run_time) = 0;
@@ -1536,7 +1536,7 @@ script:
       - delay: 10ms
       - lambda: |-
           if (id(current_page) == 1 || id(current_page) == 25) {
-            id(display_nextion).goto_page("info");
+            TREADMILL_DISPLAY_OUTPUT(goto_page("info"));
             ESP_LOGI("treadmill", "Nextion Page info");
           }
 
@@ -1585,7 +1585,7 @@ script:
             ESP_LOGW("SafeStop", "Ошибка датчика расстояния, вызываем паузу");
             id(pause_training).execute();
             id(program_status).publish_state("Stopped: Sensor Error");
-            id(display_nextion).send_command_printf("page 25");
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 25"));
             return;
           }
 
@@ -1594,7 +1594,7 @@ script:
             ESP_LOGW("SafeStop", "Бегун вне безопасного диапазона (%.0f см), вызываем паузу", distance_cm);
             id(pause_training).execute();
             id(program_status).publish_state("Stopped: Out of Safe Range");
-            id(display_nextion).send_command_printf("page 25");
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 25"));
             return;
           }
 
@@ -1856,7 +1856,7 @@ script:
           auto send_txt = [&](const char* component, const char* fmt, auto value) {
             char buf[20];
             snprintf(buf, sizeof(buf), fmt, value);
-            id(display_nextion).send_command_printf("%s.txt=\"%s\"", component, buf);
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("%s.txt=\"%s\"", component, buf));
           };
 
           // --- Зоны ---
@@ -1873,11 +1873,11 @@ script:
 
           for (int i = 0; i < 5; i++) {
             int percent = total_zone_time > 0 ? (zones[i] * 100) / total_zone_time : 0;
-            id(display_nextion).send_command_printf("info.j%d.val=%d", i, percent);
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("info.j%d.val=%d", i, percent));
 
             char buf[24];
             snprintf(buf, sizeof(buf), "%d:%02d", zones[i] / 60, zones[i] % 60);
-            id(display_nextion).send_command_printf("info.t%d.txt=\"%s\"", i, buf);
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("info.t%d.txt=\"%s\"", i, buf));
           }
 
           // --- Общее время ---
@@ -1885,7 +1885,7 @@ script:
           int total_seconds = (int)id(last_time_stored) % 60;
           char duration[24];
           snprintf(duration, sizeof(duration), "%02d:%02d", total_minutes, total_seconds);
-          id(display_nextion).send_command_printf("info.t5.txt=\"%s\"", duration);
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("info.t5.txt=\"%s\"", duration));
 
           // --- Остальные значения для info ---
           send_txt("info.t6", "%.2f", id(last_distance_stored));
@@ -1917,7 +1917,7 @@ script:
           snprintf(values[9], sizeof(values[9]), "%.0f", id(avg_heart_rate_stored));
 
           for (int i = 0; i < 10; i++) {
-            id(display_nextion).send_command_printf("%s.txt=\"%s\"", avg_components[i], values[i]);
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("%s.txt=\"%s\"", avg_components[i], values[i]));
           }
 
 
@@ -2088,7 +2088,7 @@ script:
                   char cbuf[32];
                   snprintf(cbuf, sizeof(cbuf), "Cool-down: (%d:%02d)", id(remaining_cool_down_time) / 60, id(remaining_cool_down_time) % 60);
                   id(program_status).publish_state(cbuf);
-                  id(display_nextion).set_component_text("speed.tstatus", cbuf);
+                  TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", cbuf));
                   ESP_LOGI("InclineMap", "Map '%s' end (%.3f km) -> route cool-down %d s", selected, cur_km, id(remaining_cool_down_time));
                   return;
                 }
@@ -2148,7 +2148,7 @@ script:
                 id(program_status).publish_state("Start blocked: Overheat");
                 id(free_running_active) = false;
                 id(free_running_mode_switch).turn_off();
-                id(display_nextion).send_command_printf("page 24");
+                TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 24"));
             - script.stop: free_running_mode
       - if:
           condition:
@@ -2327,7 +2327,7 @@ script:
             - lambda: |-
                 ESP_LOGW("Overheat", "Calibration start blocked by overheat protection");
                 id(program_status).publish_state("Start blocked: Overheat");
-                id(display_nextion).send_command_printf("page 24");
+                TREADMILL_DISPLAY_OUTPUT(send_command_printf("page 24"));
             - script.stop: start_calibration
       - lambda: |- 
           id(recorder_event).execute(3); // finish any real session; calibration never starts an archive
@@ -2341,8 +2341,8 @@ script:
           id(target_speed_goal) = 40;
           id(set_speed).publish_state(4.0);      // Устанавливаем скорость в интерфейсе
           id(program_status).publish_state("Калибровка: Бегите в передней зоне");
-          id(display_nextion).set_component_text("t_info_calib", "    Step 1:\\rFront zone\\r      30s");
-          id(display_nextion).send_command_printf("p_zone.pic=74"); // Картинка зоны 
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("t_info_calib", "    Step 1:\\rFront zone\\r      30s"));
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("p_zone.pic=74")); // Картинка зоны
           ESP_LOGI("Calibration", "Калибровка начата, скорость установлена на 4 км/ч");
 
           // Fitness Machine Status: Started or Resumed (0x04)
@@ -2361,8 +2361,8 @@ script:
       - delay: 30s  # Первые 30 секунд — бег в передней зоне
       - lambda: |- 
           id(program_status).publish_state("Калибровка: Бегите в задней зоне");
-          id(display_nextion).set_component_text("t_info_calib", "   Step 2:\\rRear zone\\r     30s");
-          id(display_nextion).send_command_printf("p_zone.pic=75"); // Картинка зоны 
+          TREADMILL_DISPLAY_OUTPUT(set_component_text("t_info_calib", "   Step 2:\\rRear zone\\r     30s"));
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("p_zone.pic=75")); // Картинка зоны
           ESP_LOGI("Calibration", "Переключение на заднюю зону");
       - delay: 30s  # Следующие 30 секунд — бег в задней зоне
       - lambda: |- 
@@ -2442,20 +2442,20 @@ script:
               }
 
               id(program_status).publish_state("Калибровка завершена");
-              id(display_nextion).set_component_text("t_info_calib", " Calibration\\r  Complete");
-              id(display_nextion).send_command_printf("p_zone.pic=73"); // Картинка зоны 
+              TREADMILL_DISPLAY_OUTPUT(set_component_text("t_info_calib", " Calibration\\r  Complete"));
+              TREADMILL_DISPLAY_OUTPUT(send_command_printf("p_zone.pic=73")); // Картинка зоны
               ESP_LOGI("Nextion", "Sending command for p_zone.pic=73");
 
-              id(display_nextion).set_component_text_printf("caldistspeed.t_speed_up", "%d", (int)id(accel_cm).state);
-              id(display_nextion).set_component_text_printf("caldistspeed.t_speed_down", "%d", (int)id(decel_cm).state);
-              id(display_nextion).set_component_text_printf("caldistspeed.t_lenght", "%d", (int)id(treadmill_length).state);
-              id(display_nextion).set_component_text("b_cal", "Calibrate");
+              TREADMILL_DISPLAY_OUTPUT(set_component_text_printf("caldistspeed.t_speed_up", "%d", (int)id(accel_cm).state));
+              TREADMILL_DISPLAY_OUTPUT(set_component_text_printf("caldistspeed.t_speed_down", "%d", (int)id(decel_cm).state));
+              TREADMILL_DISPLAY_OUTPUT(set_component_text_printf("caldistspeed.t_lenght", "%d", (int)id(treadmill_length).state));
+              TREADMILL_DISPLAY_OUTPUT(set_component_text("b_cal", "Calibrate"));
 
               ESP_LOGI("Calibration", "Калибровка завершена: min=%d см, max=%d см, длина=%d см, accel=%d см, decel=%d см",
                        min_distance, max_distance, treadmill_length_int, accel_zone_int, decel_zone_int);
             } else {
               id(program_status).publish_state("Калибровка: Ошибка данных");
-              id(display_nextion).set_component_text("t_info_calib", "Calibration\\r     Eror");
+              TREADMILL_DISPLAY_OUTPUT(set_component_text("t_info_calib", "Calibration\\r     Eror"));
               ESP_LOGW("Calibration", "Ошибка: недостаточно данных с датчика");
             }
 

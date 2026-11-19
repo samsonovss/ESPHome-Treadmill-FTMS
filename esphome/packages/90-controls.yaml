@@ -103,7 +103,7 @@ select:
     on_value:
       - lambda: |-
           bool is_male = (id(gender_select).current_option() == "Male");
-          id(display_nextion).send_command_printf("age.bt0.val=%d", is_male ? 0 : 1);
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("age.bt0.val=%d", is_male ? 0 : 1));
           ESP_LOGI("Nextion", "Gender synced: %s", is_male ? "Male" : "Female");
 
       - script.execute: update_heart_rate_zones
@@ -799,7 +799,7 @@ number:
     on_value:
       - lambda: |-
           //if (id(age).state) {
-          id(display_nextion).send_command_printf("age.n_age.val=%d", (int)id(age_number).state);
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("age.n_age.val=%d", (int)id(age_number).state));
           ESP_LOGI("Nextion", "Sending command for age.n_age.val");
           //}
       - script.execute: update_heart_rate_zones
@@ -850,7 +850,7 @@ number:
     on_value:
       - lambda: |-
           // Отправляем вес на дисплей 
-          id(display_nextion).send_command_printf("age.n_weight.val=%d", (int)id(weight_kg).state);
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("age.n_weight.val=%d", (int)id(weight_kg).state));
           ESP_LOGI("Nextion", "Sending weight to age.n_weight: %d kg", (int)id(weight_kg).state);
           //ESP_LOGI("Settings", "Weight updated to: %d kg", (int)id(weight_kg).state);
 
@@ -917,7 +917,7 @@ number:
             if (id(current_page) == 1) {
               char incline_str[10];
               snprintf(incline_str, sizeof(incline_str), "%.1f", incline);
-              id(display_nextion).set_component_text("t4", incline_str);
+              TREADMILL_DISPLAY_OUTPUT(set_component_text("t4", incline_str));
             }
 
             // --- FTMS: Target Incline Changed (0x06) ---
@@ -948,7 +948,7 @@ number:
     on_value:
       - lambda: |-
           //if (id(age).state) {
-          id(display_nextion).send_command_printf("Time.n_warm.val=%d", (int)id(set_warm_up_time).state);
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("Time.n_warm.val=%d", (int)id(set_warm_up_time).state));
           ESP_LOGI("Nextion", "Sending command for Time.n_warm.val");
           //}
       - script.execute: wc_remember   # 22.10
@@ -983,7 +983,7 @@ number:
           }
 
           //if (id(age).state) {
-          id(display_nextion).send_command_printf("Time.n_min.val=%d", (int)id(set_run_time).state);
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("Time.n_min.val=%d", (int)id(set_run_time).state));
           ESP_LOGI("Nextion", "Sending command for Time.n_min.val");
           //}
 
@@ -1003,7 +1003,7 @@ number:
     on_value:
       - lambda: |-
           //if (id(age).state) {
-          id(display_nextion).send_command_printf("Time.n_cool.val=%d", (int)id(set_cool_down_time).state);
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("Time.n_cool.val=%d", (int)id(set_cool_down_time).state));
           ESP_LOGI("Nextion", "Sending command for Time.n_cool.val");
           //}
       - script.execute: wc_remember   # 22.10
@@ -1066,7 +1066,7 @@ number:
                   if (id(current_page) == 1) {
                     char heart_str[10];
                     sprintf(heart_str, "%.0f", heart_rate);
-                    id(display_nextion).send_command_printf("t0.txt=\"%s\"", heart_str);
+                    TREADMILL_DISPLAY_OUTPUT(send_command_printf("t0.txt=\"%s\"", heart_str));
                     ESP_LOGI("Nextion", "Sending command for t0.txt");
 
                     uint16_t picture_id = 7; // Серый по умолчанию
@@ -1089,8 +1089,8 @@ number:
                       picture_id = 6; // Красный
                       t0_bco = 64040;
                     }
-                    id(display_nextion).send_command_printf("p0.pic=%d", picture_id);
-                    id(display_nextion).send_command_printf("t0.bco=%d", t0_bco);
+                    TREADMILL_DISPLAY_OUTPUT(send_command_printf("p0.pic=%d", picture_id));
+                    TREADMILL_DISPLAY_OUTPUT(send_command_printf("t0.bco=%d", t0_bco));
                     ESP_LOGI("Nextion", "Sending command for p0.pic and t0.bco");
                   }
 
@@ -1138,8 +1138,8 @@ number:
             if (b < 20) b = 20;
             if (b > 100) b = 100;
             id(brightness_level) = b;
-            id(display_nextion).set_component_value("display.hbright", b);
-            id(display_nextion).send_command_printf("dim=%d", b);
+            TREADMILL_DISPLAY_OUTPUT(set_component_value("display.hbright", b));
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("dim=%d", b));
 
   - platform: template
     id: treadmill_slider_max
@@ -1156,9 +1156,9 @@ number:
     on_value:
       then:
         - lambda: |-
-            id(display_nextion).send_command_printf("speed.h_position.maxval=%d", (int)id(treadmill_slider_max).state);
-            id(display_nextion).send_command_printf("speed.h_position1.maxval=%d", (int)id(treadmill_slider_max).state);
-            id(display_nextion).send_command_printf("caldistspeed.h_position.maxval=%d", (int)id(treadmill_slider_max).state);
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.h_position.maxval=%d", (int)id(treadmill_slider_max).state));
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.h_position1.maxval=%d", (int)id(treadmill_slider_max).state));
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("caldistspeed.h_position.maxval=%d", (int)id(treadmill_slider_max).state));
             ESP_LOGI("Nextion", "Sending command for speed.h_position.maxval and speed.h_position1.maxval and caldistspeed.h_position.maxval");
 
 
@@ -1177,9 +1177,9 @@ number:
     on_value:
       then:
         - lambda: |-
-            id(display_nextion).send_command_printf("speed.h_position.minval=%d", (int)id(treadmill_slider_min).state);
-            id(display_nextion).send_command_printf("speed.h_position1.minval=%d", (int)id(treadmill_slider_min).state);
-            id(display_nextion).send_command_printf("caldistspeed.h_position.minval=%d", (int)id(treadmill_slider_min).state);
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.h_position.minval=%d", (int)id(treadmill_slider_min).state));
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.h_position1.minval=%d", (int)id(treadmill_slider_min).state));
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("caldistspeed.h_position.minval=%d", (int)id(treadmill_slider_min).state));
             ESP_LOGI("Nextion", "Sending command for speed.h_position.minval and speed.h_position1.minval and caldistspeed.h_position.minval");
 
 
@@ -1198,7 +1198,7 @@ number:
     on_value:
       then:
         - lambda: |-
-            id(display_nextion).set_component_text_printf("caldistspeed.t_lenght", "%d", (int)id(treadmill_length).state);
+            TREADMILL_DISPLAY_OUTPUT(set_component_text_printf("caldistspeed.t_lenght", "%d", (int)id(treadmill_length).state));
   - platform: template
     id: accel_strong_cm
     name: TM Strong Accel
@@ -1226,7 +1226,7 @@ number:
     on_value:
       then:
         - lambda: |-
-            id(display_nextion).set_component_text_printf("caldistspeed.t_speed_up", "%d", (int)id(accel_cm).state);
+            TREADMILL_DISPLAY_OUTPUT(set_component_text_printf("caldistspeed.t_speed_up", "%d", (int)id(accel_cm).state));
   - platform: template
     id: decel_cm
     name: TM Decel
@@ -1242,7 +1242,7 @@ number:
     on_value:
       then:
         - lambda: |-
-            id(display_nextion).set_component_text_printf("caldistspeed.t_speed_down", "%d", (int)id(decel_cm).state);
+            TREADMILL_DISPLAY_OUTPUT(set_component_text_printf("caldistspeed.t_speed_down", "%d", (int)id(decel_cm).state));
   - platform: template
     id: decel_strong_cm
     name: TM Strong Decel
@@ -1285,30 +1285,6 @@ switch:
           id: diagnostic_mode
           value: 'false'
 
-# Gender Switch — переключатель пола с дисплея Nextion (bt0).
-# При значении 1 устанавливает "Female", при 0 — "Male".
-# При изменении обновляет gender_select и запускает пересчёт пульсовых зон.
-  - platform: nextion
-    id: gender_switch
-    name: "Gender Switch"
-    internal: true
-    component_name: bt0  # Соответствует имени в Nextion
-    on_turn_on:  # bt0.val = 1 (Female)
-      - lambda: |-
-          if (id(gender_select).current_option() != "Female") {
-            id(gender_select).publish_state("Female");
-            ESP_LOGI("Settings", "Gender set to Female from bt0");
-            id(update_heart_rate_zones).execute();
-          }
-    on_turn_off:  # bt0.val = 0 (Male)
-      - lambda: |-
-          if (id(gender_select).current_option() != "Male") {
-            id(gender_select).publish_state("Male");
-            ESP_LOGI("Settings", "Gender set to Male from bt0");
-            id(update_heart_rate_zones).execute();
-          }
-
-
   # - platform: template
   #   name: "Emulate Heart Rate"
   #   id: emulate_heart_rate_switch
@@ -1334,39 +1310,28 @@ switch:
   #           ESP_LOGI("Nextion", "Sending command for t0.txt and p0.pic=7 and t0.bco=21162");
   #         }
 
-#кнопка nextion для вкл/выкл дисплея по датчику растояния через 1 минуту
-  - platform: nextion
-    name: "Disp. auto on-off"
-    id: bt_display_off
-    component_name: display.bt_display_off
-    on_turn_on:
-      - globals.set:
-          id: bt_display_off_state
-          value: !lambda 'return id(bt_display_off).state;'
-    on_turn_off:
-      - globals.set:
-          id: bt_display_off_state
-          value: !lambda 'return id(bt_display_off).state;'
-
-#кнопка nextion для вкл/выкл безопасного режима по датчику растояния TOF
-  - platform: nextion
+# Shared treadmill settings; the display only mirrors their state.
+  - platform: template
     name: "Safety stop"
     id: safe_mode_switch
-    component_name: system.bt_savemode
+    restore_mode: DISABLED  # The existing restored global is authoritative.
+    lambda: 'return id(safe_mode_switch_state);'
+    optimistic: true
     on_turn_on:
       - globals.set:
           id: safe_mode_switch_state
-          value: !lambda 'return id(safe_mode_switch).state;'
+          value: 'true'
     on_turn_off:
       - globals.set:
           id: safe_mode_switch_state
-          value: !lambda 'return id(safe_mode_switch).state;'
+          value: 'false'
 
-#кнопка nextion для вкл/выкл режима авто отстановки беговой дорожки при перегрева
-  - platform: nextion
+  - platform: template
     name: "Overheat stop"
     id: bt_tempmode
-    component_name: system.bt_tempmode
+    restore_mode: DISABLED  # The existing restored global is authoritative.
+    lambda: 'return id(bt_tempmode_state);'
+    optimistic: true
     on_turn_on:
       - globals.set:
           id: bt_tempmode_state
@@ -1381,33 +1346,32 @@ switch:
           id(overheat_lockout) = false;
           id(overheat_sensor_fault) = false;
           ESP_LOGI("Overheat", "Protection disabled");
-          
 
-# кнопка Nextion для вкл/выкл режима автокоррекции скорости по энкодеру
-  - platform: nextion
+  - platform: template
     name: "Speed Correction Mode"
     id: bt_speed_correction
-    component_name: system.bt_speed_corr
+    restore_mode: DISABLED  # The existing restored global is authoritative.
+    lambda: 'return id(bt_speed_correction_state);'
+    optimistic: true
     on_turn_on:
       - globals.set:
           id: bt_speed_correction_state
-          value: !lambda 'return id(bt_speed_correction).state;'
+          value: 'true'
       - lambda: |-
           ESP_LOGI("Adaptive Correction", "enabled");
           // При включении адаптива сбрасываем накопитель в текущую цель
           id(target_speed_goal_float) = id(target_speed) / 10.0;
-          id(display_nextion).send_command_printf("speed.p_sync.pic=96");
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.p_sync.pic=96"));
 
     on_turn_off:
       - globals.set:
           id: bt_speed_correction_state
-          value: !lambda 'return id(bt_speed_correction).state;'
+          value: 'false'
       - lambda: |-
           ESP_LOGI("Adaptive Correction", "disable");
           // При выключении тоже можно синхронизировать
           id(target_speed_goal_float) = id(target_speed) / 10.0;
-          id(display_nextion).send_command_printf("speed.p_sync.pic=95");
-
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.p_sync.pic=95"));
 
 # кнопка режима Free Run (шаблонный switch)
   - platform: template
@@ -1425,7 +1389,7 @@ switch:
           id(control_mode) = 1;
           id(free_running_active) = true;
           ESP_LOGI("FreeRun", "Free Run включён, предыдущий режим: %d", id(previous_control_mode));
-          id(display_nextion).send_command_printf("speed.p_icon_mode.pic=58"); // иконка
+          TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.p_icon_mode.pic=58")); // иконка
       - script.execute: free_running_mode
     on_turn_off:
       - lambda: |-
@@ -1436,11 +1400,11 @@ switch:
           // Если активна программа Pulse Zone, возвращаем управление по пульсу
           if (id(control_mode) == 2) {
             id(auto_mode) = true;
-            id(display_nextion).send_command_printf("speed.p_icon_mode.pic=59"); // иконка пульс
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.p_icon_mode.pic=59")); // иконка пульс
             ESP_LOGI("FreeRun", "Возвращено управление по пульсу");
           } else {
             id(auto_mode) = false;
-            id(display_nextion).send_command_printf("speed.p_icon_mode.pic=62"); // иконка убрать
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("speed.p_icon_mode.pic=62")); // иконка убрать
             ESP_LOGI("FreeRun", "Возвращено ручное управление");
           }
 

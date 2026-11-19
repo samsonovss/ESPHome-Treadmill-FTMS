@@ -1,6 +1,17 @@
 # Smart treadmill base configuration.
 # Functional logic is grouped into packages below.
+substitutions:
+  display_mode: "1"  # 0: no display; 1: Nextion; 2: reserved for LVGL
+
 packages:
+  # Never silently build a different variant for an unsupported selection.
+  unsupported_display_mode: !include
+    file: "unsupported-display-mode-${display_mode}-use-0-or-1.yaml"
+    condition: "${display_mode | string not in ['0', '1']}"
+  # Keep the display UART first to preserve port allocation.
+  09_nextion_uart: !include
+    file: 09-nextion-uart.yaml
+    condition: "${display_mode | string == '1'}"
   10_hardware: !include 10-hardware.yaml
   20_globals: !include 20-globals.yaml
   30_scripts: !include 30-scripts.yaml
@@ -10,26 +21,38 @@ packages:
   70_ble_ftms: !include 70-ble-ftms.yaml
   80_binary_text: !include 80-binary-text.yaml
   90_controls: !include 90-controls.yaml
-  95_nextion: !include 95-nextion.yaml
+  95_nextion: !include
+    file: 95-nextion.yaml
+    condition: "${display_mode | string == '1'}"
   96_storage: !include 96-storage.yaml
   97_recorder: !include 97-recorder.yaml
   98_hr_select: !include 98-hr-select.yaml
   98_fartlek: !include 98-fartlek.yaml
   99_diagnostics: !include 99-diagnostics.yaml
   99_motor_cmd: !include 99-motor-cmd.yaml
-  94_nextion_routes: !include 94-nextion-routes.yaml
-  94_nextion_presets: !include 94-nextion-presets.yaml
-  94_nextion_hr: !include 94-nextion-hr.yaml
-  93_fw_update: !include 93-fw-update.yaml
+  94_nextion_routes: !include
+    file: 94-nextion-routes.yaml
+    condition: "${display_mode | string == '1'}"
+  94_nextion_presets: !include
+    file: 94-nextion-presets.yaml
+    condition: "${display_mode | string == '1'}"
+  94_nextion_hr: !include
+    file: 94-nextion-hr.yaml
+    condition: "${display_mode | string == '1'}"
+  # The current GitHub OTA feed serves Nextion firmware only.
+  93_fw_update: !include
+    file: 93-fw-update.yaml
+    condition: "${display_mode | string == '1'}"
 
 esphome:
   name: treadmill
   friendly_name: treadmill
   project:
     name: samsonovss.treadmill
-    version: "1.0.0-beta.12"
+    version: "1.0.0-beta.13"
   includes:
     - treadmill_dashboard.h
+    - treadmill_display_output.h
     - treadmill_maintenance.h
     - treadmill_storage.h
     - gzlite.h

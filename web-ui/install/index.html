@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Install the treadmill firmware</title>
 <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<script src="install.js" defer></script>
 <style>
   :root{color-scheme:dark}
   body{margin:0;background:#0d0f13;color:#d7dce4;font:16px/1.5 system-ui,sans-serif}
@@ -13,6 +14,7 @@
   h2{font-size:18px;margin:28px 0 8px}
   .muted{color:#8a93a3}
   .card{background:#161a21;border:1px solid #252b35;border-radius:12px;padding:20px;margin:20px 0}
+  .card h2{margin-top:0}
   ol{padding-left:22px}li{margin:4px 0}
   a{color:#6aa8ff}
   code{background:#252b35;border-radius:4px;padding:1px 5px}
@@ -26,9 +28,20 @@
   <h1>Install the treadmill firmware</h1>
   <p class="muted">ESPHome Treadmill FTMS · version <span class="v">…</span> · <a href="https://github.com/samsonovss/ESPHome-Treadmill-FTMS">GitHub</a></p>
 
-  <div class="card">
+  <p id="install-status" class="muted" role="status">Loading firmware options… / Загружаем варианты прошивки…</p>
+  <noscript>Enable JavaScript to use the USB installer. / Для установки по USB включите JavaScript.</noscript>
+  <div class="card" id="nextion" hidden>
+    <h2>With Nextion / С дисплеем Nextion</h2>
     <esp-web-install-button manifest="manifest.json">
-      <button slot="activate">Connect and install</button>
+      <button slot="activate">Install Nextion / Установить Nextion</button>
+      <span slot="unsupported">Your browser cannot flash over USB. Use Chrome or Edge on a computer.</span>
+      <span slot="not-allowed">Open this page over HTTPS.</span>
+    </esp-web-install-button>
+  </div>
+  <div class="card" id="headless" hidden>
+    <h2>No display / Без дисплея</h2>
+    <esp-web-install-button manifest="manifest-headless.json">
+      <button slot="activate">Install without display / Установить без дисплея</button>
       <span slot="unsupported">Your browser cannot flash over USB. Use Chrome or Edge on a computer.</span>
       <span slot="not-allowed">Open this page over HTTPS.</span>
     </esp-web-install-button>
@@ -45,14 +58,14 @@
   <ol>
     <li>Join the <b>Treadmill Setup</b> Wi-Fi hotspot and pick your home network.</li>
     <li>Open <code>http://treadmill.local</code> (or the IP from your router).</li>
-    <li>From now on updates come over Wi-Fi: <i>Settings → System</i>, one click.</li>
+    <li>With Nextion, update over Wi-Fi in <i>Settings → System</i>. The no-display build does not use that update feed.</li>
   </ol>
   <p class="muted">Prefer a file? Download <code>treadmill-fw-…factory.bin</code> from the <a href="https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases">releases</a> and flash it with <a href="https://web.esphome.io">ESPHome Web</a>.</p>
 
   <hr style="border:0;border-top:1px solid #252b35;margin:36px 0">
 
   <h1 id="ru">Установка прошивки дорожки</h1>
-  <p class="muted">Версия <span class="v">…</span>. Кнопка «Connect and install» выше.</p>
+  <p class="muted">Версия <span class="v">…</span>. Выберите свой вариант прошивки вверху страницы.</p>
   <h2>Перед началом</h2>
   <ol>
     <li>Плата: <b>ESP32-S3 с 16 МБ флеш-памяти и 8 МБ octal PSRAM</b> (<code>N16R8</code>).</li>
@@ -64,12 +77,9 @@
   <ol>
     <li>Подключитесь к точке доступа <b>Treadmill Setup</b> и выберите домашнюю сеть.</li>
     <li>Откройте <code>http://treadmill.local</code> (или IP из роутера).</li>
-    <li>Дальше обновления идут по Wi-Fi: <i>Настройки → Система</i>, одна кнопка.</li>
+    <li>Версия с Nextion обновляется по Wi‑Fi в разделе <i>Настройки → Система</i>. Версия без дисплея не использует этот канал обновлений.</li>
   </ol>
   <p class="muted">Нужен файл? Скачайте <code>treadmill-fw-…factory.bin</code> из <a href="https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases">релизов</a> и прошейте через <a href="https://web.esphome.io">ESPHome Web</a>.</p>
 </main>
-<script>
-fetch('manifest.json').then(r=>r.json()).then(m=>document.querySelectorAll('.v').forEach(e=>e.textContent=m.version)).catch(()=>{});
-</script>
 </body>
 </html>

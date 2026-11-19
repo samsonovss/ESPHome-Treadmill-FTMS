@@ -207,36 +207,6 @@ sensor:
     lambda: |-
       return id(avg_pace_stored);
 
-# Map ID — сенсор выбора маршрута с дисплея Nextion (переменная mapid).
-# При изменении значения публикует в map_select название и длину выбранного маршрута.
-# Используется для синхронизации выбора карты между Nextion и ESPHome.
-  - platform: nextion
-    name: "Map ID"
-    id: map_id_sensor
-    variable_name: "mapid"
-    #update_interval: 1s
-    entity_category: diagnostic
-    accuracy_decimals: 0
-    on_value:
-      then:
-        - lambda: |-
-            // 17.10: встроенные трассы убраны из прошивки — маршруты только «свои» (веб-UI, Custom route)
-            (void) x;
-
-
-# Brightness Slider — ползунок яркости с дисплея Nextion.
-# Обновляется каждые 2 секунды, сохраняет значение в переменную brightness_level.
-  - platform: nextion
-    id: nextion_slider
-    component_name: display.hbright
-    entity_category: diagnostic
-    name: "Brightness Slider"
-    update_interval: 2s
-    on_value:
-      then:
-        - lambda: |-
-            id(brightness_level) = (int)x;
-
 # My Raw Distance (VL53L1X) — лазерный дальномер ToF в режиме long.
 # Публикует расстояние в мм, обновляется каждую секунду.
 # Используется как источник данных для вычислений и отображения.
@@ -273,7 +243,7 @@ sensor:
             int position_value = (int)distance;
 
             // Обновление дисплея Nextion
-            id(display_nextion).send_command_printf("position=%d", position_value);
+            TREADMILL_DISPLAY_OUTPUT(send_command_printf("position=%d", position_value));
             //ESP_LOGI("Nextion", "Sending command for position");
             //if (id(caldistspeed).state) {
               //id(display_nextion).send_command_printf("caldistspeed.ndist.val=%d", position_value);
@@ -353,11 +323,11 @@ sensor:
                 last_sent_temp = tempmotor;
 
                 if (id(current_page) == 1) {
-                  id(display_nextion).set_component_value("speed.ntemp", tempmotor);
+                  TREADMILL_DISPLAY_OUTPUT(set_component_value("speed.ntemp", tempmotor));
                   ESP_LOGI("Nextion", "Setting value for speed.ntemp = %d", tempmotor);
                 }
                 if (id(current_page) == 10) {
-                  id(display_nextion).set_component_value("motor.ntemp", tempmotor);
+                  TREADMILL_DISPLAY_OUTPUT(set_component_value("motor.ntemp", tempmotor));
                   ESP_LOGI("Nextion", "Setting value for motor.ntemp = %d", tempmotor);
                 }
               }
@@ -412,117 +382,6 @@ sensor:
     accuracy_decimals: 0
     lambda: |-
       return id(max_heart_rate_total);
-
-# Age from Nextion — внутренний сенсор, читает возраст (n_age) с дисплея.
-# При корректном значении (16–100 лет) обновляет number‑сенсор age_number.
-# При некорректном вводе пишет предупреждение в лог.
-  - platform: nextion
-    nextion_id: display_nextion
-    id: age_sensor
-    name: "Age from Nextion"
-    internal: true
-    component_name: n_age  
-    on_value:
-      then:
-        - lambda: |-
-            int new_age = x; // Значение от number_sensor
-            if (new_age >= 16 && new_age <= 100) {
-              id(age_number).make_call().set_value(new_age).perform();
-              //id(age_number).publish_state(new_age); 
-              ESP_LOGI("Settings", "Age updated to: %d", new_age);
-              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
-            } else {
-              ESP_LOGW("Settings", "Invalid age value: %d", new_age);
-            }          
-
-
-# Weight from Nextion — внутренний сенсор, читает n_weight с дисплея.
-# При корректном значении (40–100 кг) обновляет weight_kg, иначе пишет предупреждение.
-# Используется для учёта веса в расчётах (калории, MET и т.д.).
-  - platform: nextion
-    nextion_id: display_nextion
-    id: weight_sensor
-    name: "Weight from Nextion"
-    internal: true
-    component_name: n_weight  
-    on_value:
-      then:
-        - lambda: |-
-            int new_weight = x; // Значение от Nextion
-            if (new_weight >= 40 && new_weight <= 100) {
-              id(weight_kg).make_call().set_value(new_weight).perform();
-              //id(weight_kg).publish_state(new_weight);
-              ESP_LOGI("Settings", "Weight updated to: %d kg", new_weight);
-            } else {
-              ESP_LOGW("Settings", "Invalid weight value: %d kg", new_weight);
-            }
-
-
-# Time from Nextion — внутренний сенсор, читает n_min (заданное время тренировки).
-# При корректном значении (1–999 мин) обновляет set_run_time, иначе пишет предупреждение.
-# Используется для задания длительности тренировки через интерфейс Nextion.
-  - platform: nextion
-    nextion_id: display_nextion
-    id: time_sensor
-    name: "time from Nextion"
-    internal: true
-    component_name: n_min  
-    on_value:
-      then:
-        - lambda: |-
-            int new_time = x; // Значение от number_sensor
-            if (new_time >= 1 && new_time <= 999) {
-              //id(set_run_time).publish_state(new_time);
-              id(set_run_time).make_call().set_value(new_time).perform();
-              ESP_LOGI("Settings", "Age updated to: %d", new_time);
-              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
-            } else {
-              ESP_LOGW("Settings", "Invalid age value: %d", new_time);
-            }    
-
-# Time Warm from Nextion — внутренний сенсор, читает n_warm (разминка).
-# При корректном значении (0–10 мин) обновляет set_warm_up_time, иначе пишет предупреждение.
-# Используется для задания длительности разминки.
-  - platform: nextion
-    nextion_id: display_nextion
-    id: warm_sensor
-    name: "time warm from Nextion"
-    internal: true
-    component_name: n_warm
-    on_value:
-      then:
-        - lambda: |-
-            int new_time_warm = x; // Значение от number_sensor
-            if (new_time_warm >= 0 && new_time_warm <= 10) {
-              //id(set_warm_up_time).publish_state(new_time_warm);
-              id(set_warm_up_time).make_call().set_value(new_time_warm).perform();
-              ESP_LOGI("Settings", "Age updated to: %d", new_time_warm);
-              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
-            } else {
-              ESP_LOGW("Settings", "Invalid age value: %d", new_time_warm);
-            }    
-
-# Time Cool from Nextion — внутренний сенсор, читает n_cool (заминка).
-# При корректном значении (0–10 мин) обновляет set_cool_down_time, иначе пишет предупреждение.
-# Используется для задания длительности заминки.
-  - platform: nextion
-    nextion_id: display_nextion
-    id: cool_sensor
-    name: "time cool from Nextion"
-    internal: true
-    component_name: n_cool 
-    on_value:
-      then:
-        - lambda: |-
-            int new_time_cool = x; // Значение от number_sensor
-            if (new_time_cool >= 0 && new_time_cool <= 10) {
-              //id(set_cool_down_time).publish_state(new_time_cool);
-              id(set_cool_down_time).make_call().set_value(new_time_cool).perform();
-              ESP_LOGI("Settings", "Age updated to: %d", new_time_cool);
-              //id(update_heart_rate_zones).execute(); // Обновляем зоны пульса
-            } else {
-              ESP_LOGW("Settings", "Invalid age value: %d", new_time_cool);
-            }    
 
 # Treadmill Speed Feedback — обратная связь по скорости от мотора (UART), км/ч.
 # Делит значение на 10, обновляется каждые 1.2 секунды, категория diagnostic.
@@ -628,14 +487,6 @@ sensor:
           if (fabs(current - last_sent) >= 0.05f) {
             last_sent = current;
 
-            // Обновляем Nextion только на странице скорости
-            if (id(current_page) == 1) {
-              char speed_str[10];
-              sprintf(speed_str, "%.1f", current);
-              id(display_nextion).set_component_text("t1", speed_str);
-              ESP_LOGD("Nextion", "Отправка команды на дисплей - скорость");
-            }
-
             // Синхронизация ползунка
             id(set_speed).publish_state(current);
           }
@@ -689,20 +540,6 @@ sensor:
 
       // 3. Если мотор выключен — тоже 0.0
       return 0.0;
-
-    on_value:
-      - lambda: |-
-          float current = id(treadmill_incline_goal_sensor).state;
-
-          if (id(current_page) == 1) {
-            char incline_str[10];
-            sprintf(incline_str, "%.1f", current);
-            id(display_nextion).set_component_text("t4", incline_str);
-            ESP_LOGD("Nextion", "Отправка команды на дисплей - наклон");
-          }
-
-
-
 
   # - platform: template
   #   name: "ESP32 Free Memory"
@@ -801,22 +638,6 @@ sensor:
           id: recorder_event
           kind: 2
       - component.update: total_calories
-      - lambda: |-
-          int total = (int)x;
-          int hours = total / 3600;
-          int minutes = (total % 3600) / 60;
-          int seconds = total % 60;
-
-          char buffer[40];
-          snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", hours, minutes, seconds);
-          //id(treadmill_time_formatted).publish_state(buffer);
-
-          if ((id(motor_running) || id(pause_active)) && (id(current_page) == 1)) {
-            int total_minutes = total / 60;
-            char time_str[32];
-            snprintf(time_str, sizeof(time_str), "%02d:%02d", total_minutes, seconds);
-            id(display_nextion).set_component_text("t3", time_str);
-          }
 # Treadmill Distance — расчёт пройденной дистанции.
 # При выключенном моторе сбрасывается, при паузе замирает,
 # при работе мотора накапливается каждую секунду (км/ч → км/сек).
@@ -851,11 +672,6 @@ sensor:
     on_value:
       - lambda: |-
           treadmill_maintenance::observe(x);
-          if (id(current_page) == 1) {
-            char distance_str[10];
-            sprintf(distance_str, "%.2f", id(treadmill_distance_km).state);
-            id(display_nextion).set_component_text("t2", distance_str);
-          }
     unit_of_measurement: "km"
     accuracy_decimals: 2
     update_interval: never   # 24.10: updated on the Treadmill Time tick
@@ -962,17 +778,8 @@ sensor:
     icon: "mdi:heart-pulse"
     on_value:
       - lambda: |-
-          static int last_heart_rate = -1;  // кэш текста
-          static int last_zone = -1;        // кэш зоны
-
-          int hr = (int)x;
-          if (isnan(x)) {
-            if (id(current_page) == 1) {        
-              id(display_nextion).send_command_printf("p0.pic=%d;t0.txt=\"-\";t0.bco=%d", 7, 14792);
-              ESP_LOGI("Nextion", "BLE disconnected, reset HR display");
-            }
-            return;
-          }
+          if (isnan(x)) return;
+          const int hr = (int)x;
 
           // зоны
           // те же границы, что в update_heart_rate_zones (с учётом Карвонена)
@@ -992,28 +799,6 @@ sensor:
           else heart_rate_zone = 5;
 
           id(current_zone) = heart_rate_zone;
-
-          // обновляем текст пульса всегда при изменении
-          if (id(current_page) == 1 && hr != last_heart_rate) {
-            id(display_nextion).send_command_printf("t0.txt=\"%d\"", hr);
-            ESP_LOGI("Nextion", "Update HR text: %d", hr);
-            last_heart_rate = hr;
-          }
-
-          // картинка и фон — при смене зоны ИЛИ
-          if ((id(current_page) == 1) && heart_rate_zone != last_zone) {
-            uint16_t picture_ids[] = {7, 2, 3, 4, 5, 6};
-            uint16_t colors[]      = {14792, 15487, 11744, 64992, 64294, 63688};
-
-            uint16_t picture_id = picture_ids[heart_rate_zone];
-            uint16_t t0_bco     = colors[heart_rate_zone];
-
-            id(display_nextion).send_command_printf("p0.pic=%d", picture_id);
-            id(display_nextion).send_command_printf("t0.bco=%d", t0_bco);
-
-            ESP_LOGI("Nextion", "Update HR zone: %d", heart_rate_zone);
-            last_zone = heart_rate_zone;
-          }
 
 # Battery Level (BLE) — уровень заряда устройства fit_smart.
 # Читает характеристику 0x2A19 из сервиса 0x180F через ble_client.

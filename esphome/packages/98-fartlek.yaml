@@ -138,7 +138,7 @@ script:
           if (!std::isnan(g.i) && fabsf(id(set_incline).state - g.i) > 0.05f) id(set_incline).publish_state(g.i);
           // status: segment, speed, time left in it
           int left = g.d - id(fartlek_t); if (left < 0) left = 0;
-          if ((left >= 1 && left <= 2) || seg_switched) id(nx_beep).execute();   // 24.10: as HIIT — 2, 1 before the end + the change itself (the switch now happens before this line, left<=2 missed it)
+          if ((left >= 1 && left <= 2) || seg_switched) treadmill_display::beep();   // 24.10: as HIIT — 2, 1 before the end + the change itself (the switch now happens before this line, left<=2 missed it)
           // 22.10: "Fartlek k/N Fast|Easy … (m:ss)" — the form the web and the recorder parse (was "Fartlek k/N m:ss": web saw no phase/time left)
           const char *kind = (g.z ? g.z >= 3 : g.s > 6.0f) ? "Fast" : "Easy";
           char buf[64], nx[48];   // nx sized for the worst case (no -Wformat-truncation); real text is ~14 chars
@@ -146,7 +146,7 @@ script:
           else snprintf(buf, sizeof(buf), "Fartlek %d/%d %s %.1f (%d:%02d)", k + 1, (int) segs.size(), kind, g.s, left / 60, left % 60);
           snprintf(nx, sizeof(nx), "%d/%d %s %d:%02d", k + 1, (int) segs.size(), kind, left / 60, left % 60);   // Nextion line is short (~21 chars)
           id(program_status).publish_state(buf);
-          if (id(current_page) == 1) id(display_nextion).set_component_text("speed.tstatus", nx);
+          if (id(current_page) == 1) TREADMILL_DISPLAY_OUTPUT(set_component_text("speed.tstatus", nx));
 
 # 22.10: moved to Treadmill Time on_value (60-sensors.yaml), like HIIT
 #interval:

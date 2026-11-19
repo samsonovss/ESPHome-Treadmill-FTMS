@@ -4,7 +4,7 @@ on:
   push:
     paths: ['web-ui/**', 'esphome/treadmill_dashboard.h', 'esphome/packages/00-core.yaml', '.github/workflows/web-ui.yml']
   pull_request:
-    paths: ['web-ui/**', 'esphome/treadmill_dashboard.h']
+    paths: ['web-ui/**', 'esphome/treadmill_dashboard.h', '.github/workflows/web-ui.yml']
   workflow_dispatch:
 
 permissions:
@@ -21,6 +21,8 @@ jobs:
         run: |
           for f in web-ui/*.js web-ui/demo/mock.js; do node --check "$f"; done
           node web-ui/fit.test.js
+          node --check web-ui/install/install.js
+          python3 web-ui/install/test_build.py
 
   # Live demo on GitHub Pages: the real page + a virtual treadmill (web-ui/demo/mock.js).
   demo:
@@ -41,19 +43,13 @@ jobs:
           python3 web-ui/generate.py
           mkdir -p _site
           cp web-ui/generated/demo.html _site/index.html
-      # USB install page (ESP Web Tools): the factory image of the newest fw-v* release, served from Pages
-      # because GitHub release downloads have no CORS headers.
+      # Serve factory images from Pages because GitHub release downloads have no CORS headers.
       - name: Build the install page
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          mkdir -p _site/install
-          cp web-ui/install/index.html _site/install/
-          TAG=$(gh api "repos/${{ github.repository }}/releases?per_page=30" --jq '[.[]|select(.tag_name|startswith("fw-v"))|select(any(.assets[];.name|endswith(".factory.bin")))][0].tag_name')
-          if [ -z "$TAG" ]; then echo "no release with a factory image yet"; exit 0; fi
-          gh release download "$TAG" -R "${{ github.repository }}" -p '*.factory.bin' -O _site/install/firmware.factory.bin
-          printf '{"name":"Treadmill","version":"%s","new_install_prompt_erase":true,"builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.factory.bin","offset":0}]}]}\n' "${TAG#fw-v}" > _site/install/manifest.json
-          cat _site/install/manifest.json
+          python3 web-ui/install/build.py "$GH_REPO" _site/install
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

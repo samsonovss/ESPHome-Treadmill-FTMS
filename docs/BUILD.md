@@ -20,6 +20,16 @@ For the private build copy [`secrets.example.yaml`](../esphome/secrets.example.y
 > [!NOTE]
 > The public build has no ESPHome OTA, so the ESPHome dashboard cannot flash it over Wi-Fi. Flash it over USB, or install releases from the web page. The private build can be flashed over Wi-Fi, but only after it has been flashed once over USB.
 
+## Display selection
+
+In `esphome/packages/00-core.yaml`, set `display_mode` under `substitutions` before building:
+
+- `"0"` — no display. The web UI and Bluetooth FTMS remain available; the Nextion driver and its UART are not included.
+- `"1"` — Nextion (default).
+- `"2"` — reserved for LVGL; not supported yet.
+
+This is a build-time choice, not a setting on the treadmill. Changing it requires rebuilding and flashing. For a prebuilt image, use the [USB web installer](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/install/) and select the matching display variant (available starting with beta.13). Automatic GitHub firmware updates are disabled in mode `"0"` to avoid installing the Nextion build by mistake.
+
 ## Changing the web interface
 
 The page is written in plain HTML/CSS/JS in [`web-ui/`](../web-ui/), with no framework and no build tools apart from Python 3:

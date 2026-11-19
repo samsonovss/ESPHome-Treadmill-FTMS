@@ -16,15 +16,6 @@ button:
     on_press:
       - script.execute: resume_training
 
-# Update Nextion — обновляет прошивку дисплея Nextion (загрузка TFT‑файла).
-  - platform: template
-    id: update_nextion_button
-    name: Update Nextion
-    entity_category: diagnostic
-    on_press:
-      then:
-        - lambda: 'id(display_nextion)->upload_tft();'
-
 # Start Calibration — запускает процедуру авто‑калибровки беговой дорожки (скрипт start_calibration).
   - platform: template
     id: calibration_button

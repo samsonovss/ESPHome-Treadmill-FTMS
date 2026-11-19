@@ -91,7 +91,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return id(safe_mode_switch).state && id(motor_running);'
+            lambda: 'return id(safe_mode_switch_state) && id(motor_running);'
           then:
             - script.execute: safe_stop
 

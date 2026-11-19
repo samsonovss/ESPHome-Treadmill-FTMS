@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.0.0-beta.13 (display 1.0.5)
+
+- Make the Nextion display optional at build time (`display_mode: "1"` for Nextion, `"0"` without a display). The no-display build omits the Nextion driver and its UART; the web UI and FTMS remain available. Mode `"2"` is reserved for LVGL.
+- Offer both builds in the USB web installer. The built-in GitHub OTA feed still serves Nextion only.
+
 ## 1.0.0-beta.12 (display 1.0.5)
 
 - Use the built-in Nextion driver in ESPHome 2026.11.0 instead of the local override. Keep `tft_upload_http_buffer_size_tx: 1024` for GitHub TFT redirects (ESPHome #21435) and retain the separate BLE override for FTMS/Zwift.

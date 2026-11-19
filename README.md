@@ -20,7 +20,7 @@ https://github.com/user-attachments/assets/f829769c-47f4-4251-8f99-d2f9a6cf358a
 - **Workout history on the board**: every run is recorded to flash and compressed (gzip) after the stop, so the 7 MB archive holds roughly 100-230 hours of running, i.e. several hundred workouts. Charts, a progress tab and **FIT export** for Strava and Garmin Connect ([what goes into the FIT file](docs/WEB_UI.md#fit-export));
 - **One-click updates**: treadmill and display firmware update over Wi-Fi from GitHub releases;
 - **AI agent access (MCP)**: Claude and other agents can read workouts and create programs; they cannot move the belt;
-- **Nextion touchscreen**, **Home Assistant** integration, **laser ToF** user-position and safety zone, optical speed feedback, motor temperature monitoring;
+- **Optional Nextion touchscreen**, **Home Assistant** integration, **laser ToF** user-position and safety zone, optical speed feedback, motor temperature monitoring;
 - **Fully local**: no cloud, no account.
 
 ## Architecture
@@ -63,7 +63,7 @@ No compiling needed: every release ships a ready-made firmware.
 3. **Connect to Wi-Fi.** The board opens the **`Treadmill Setup`** hotspot. Join it, pick your home network and enter the password. It is stored on the board and survives updates.
 4. **Open the treadmill's address** in a browser (shown in your router, or `http://treadmill.local`). Done: from now on, *Settings → System* shows new firmware versions and installs them over Wi-Fi.
 
-Want to change the code? Build it yourself from [`esphome/`](esphome/) with ESPHome: see [Build](docs/BUILD.md).
+**A Nextion display is optional.** When [building from source](docs/BUILD.md#display-selection), set `display_mode` to `"0"` for web and Bluetooth FTMS without a display, or `"1"` for Nextion (default). `"2"` is reserved for future LVGL support and cannot be selected yet. The [USB web installer](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/install/) offers both variants starting with beta.13.
 
 Before the first run, test stopping, minimum speed and incline reset **without a person on the belt**.
 
@@ -151,10 +151,9 @@ Core components:
 - treadmill with access to the lower motor controller interface;
 - bidirectional logic-level converter;
 - step-down power converter;
-- Nextion `NX4880E043-011C`, 4.3-inch, 800 x 480 display;
 - BLE heart-rate strap.
 
-Optional: VL53L1X/TOF400C (Free Run, safety zone, display control), FC-33 (real-speed measurement), DS18B20 (motor temperature), 3D-printed enclosure and mounts.
+Optional: Nextion `NX4880E043-011C` (4.3-inch, 800 × 480), VL53L1X/TOF400C (Free Run, safety zone, display control), FC-33 (real-speed measurement), DS18B20 (motor temperature), 3D-printed enclosure and mounts.
 
 <details>
   <summary><b>Component photos</b></summary>
