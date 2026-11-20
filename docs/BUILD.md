@@ -28,7 +28,7 @@ In `esphome/packages/00-core.yaml`, set `display_mode` under `substitutions` bef
 - `"1"` — Nextion (default).
 - `"2"` — reserved for LVGL; not supported yet.
 
-This is a build-time choice, not a setting on the treadmill. Changing it requires rebuilding and flashing. For a prebuilt image, use the [USB web installer](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/install/) and select the matching display variant (available starting with beta.13). Automatic GitHub firmware updates are disabled in mode `"0"` to avoid installing the Nextion build by mistake.
+This is a build-time choice, not a setting on the treadmill. Changing it requires rebuilding and flashing. For a prebuilt image, use the [USB web installer](https://samsonovss.github.io/ESPHome-Treadmill-FTMS/install/) and select the matching display variant (available starting with beta.13). Starting with beta.15, both builds support one-click GitHub updates on separate channels. Earlier no-display builds must be updated manually once using the matching no-display OTA image.
 
 ## Changing the web interface
 

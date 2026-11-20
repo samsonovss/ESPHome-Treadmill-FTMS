@@ -1,5 +1,6 @@
 # Firmware self-update from GitHub releases (one click in the web UI).
-# manifest.json lives in the fixed release "fw-manifest" and is refreshed by tools/fw-release.sh.
+# Keep the existing Nextion feed for older boards. A headless build must never
+# fall back to it, even if its own feed is unavailable.
 http_request:
   id: fw_http
   verify_ssl: true
@@ -23,7 +24,7 @@ update:
   - platform: http_request
     id: fw_update
     name: "Firmware Update"
-    source: https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases/download/fw-manifest/manifest.json
+    source: "https://github.com/samsonovss/ESPHome-Treadmill-FTMS/releases/download/fw-manifest/${'manifest-headless.json' if display_mode | string == '0' else 'manifest.json'}"
     update_interval: 6h
 
 # Web UI "Check" button: ESPHome REST has no /check for update entities, so expose a button.

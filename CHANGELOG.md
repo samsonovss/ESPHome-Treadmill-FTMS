@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.0-beta.15 (display 1.0.5)
+
+- Enable one-click GitHub updates for no-display builds via a separate OTA manifest. Existing Nextion builds keep their original update feed.
+
 ## 1.0.0-beta.14 (display 1.0.5)
 
 - Fix FTMS discovery after power-on with ESPHome 2026.11.0. The local BLE server now explicitly requests advertising when it starts, so discovery does not depend on connecting a heart-rate monitor first.

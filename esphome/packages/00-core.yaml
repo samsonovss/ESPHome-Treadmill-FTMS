@@ -39,17 +39,14 @@ packages:
   94_nextion_hr: !include
     file: 94-nextion-hr.yaml
     condition: "${display_mode | string == '1'}"
-  # The current GitHub OTA feed serves Nextion firmware only.
-  93_fw_update: !include
-    file: 93-fw-update.yaml
-    condition: "${display_mode | string == '1'}"
+  93_fw_update: !include 93-fw-update.yaml
 
 esphome:
   name: treadmill
   friendly_name: treadmill
   project:
     name: samsonovss.treadmill
-    version: "1.0.0-beta.14"
+    version: "1.0.0-beta.15"
   includes:
     - treadmill_dashboard.h
     - treadmill_display_output.h
