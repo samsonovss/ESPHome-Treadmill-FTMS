@@ -81,6 +81,11 @@ void BLEServer::loop() {
       if (this->device_information_service_->is_running()) {
         this->state_ = RUNNING;
         this->restart_advertising_();
+        // ESPHome's BLE stack now requires an explicit, balanced advertising request.
+        if (!this->advertising_requested_) {
+          this->advertising_requested_ = true;
+          this->parent_->advertising_start();
+        }
         ESP_LOGD(TAG, "BLE server setup successfully");
       } else if (this->device_information_service_->is_created()) {
         this->device_information_service_->start();
@@ -170,7 +175,7 @@ void BLEServer::gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t ga
       this->add_client_(param->connect.conn_id);
       // Resume advertising so additional clients can discover and connect
       if (this->client_count_ < this->max_clients_) {
-        this->parent_->advertising_start();
+        this->parent_->advertising_refresh();
       }
       this->dispatch_callbacks_(CallbackType::ON_CONNECT, param->connect.conn_id);
       break;
@@ -178,7 +183,7 @@ void BLEServer::gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t ga
     case ESP_GATTS_DISCONNECT_EVT: {
       ESP_LOGD(TAG, "BLE Client disconnected");
       this->remove_client_(param->disconnect.conn_id);
-      this->parent_->advertising_start();
+      this->parent_->advertising_refresh();
       this->dispatch_callbacks_(CallbackType::ON_DISCONNECT, param->disconnect.conn_id);
       break;
     }
@@ -226,6 +231,10 @@ void BLEServer::remove_client_(uint16_t conn_id) {
 }
 
 void BLEServer::ble_before_disabled_event_handler() {
+  if (this->advertising_requested_) {
+    this->advertising_requested_ = false;
+    this->parent_->advertising_stop();
+  }
   // Delete all clients
   this->client_count_ = 0;
   // Delete all services

@@ -49,7 +49,7 @@ esphome:
   friendly_name: treadmill
   project:
     name: samsonovss.treadmill
-    version: "1.0.0-beta.13"
+    version: "1.0.0-beta.14"
   includes:
     - treadmill_dashboard.h
     - treadmill_display_output.h

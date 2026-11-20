@@ -93,6 +93,7 @@ class BLEServer : public Component, public Parented<ESP32BLE> {
   std::vector<uint8_t> manufacturer_data_{};
   esp_gatt_if_t gatts_if_{0};
   bool registered_{false};
+  bool advertising_requested_{false};
 
   uint16_t clients_[USE_ESP32_BLE_MAX_CONNECTIONS]{};
   uint8_t client_count_{0};

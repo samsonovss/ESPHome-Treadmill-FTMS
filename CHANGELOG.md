@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.0-beta.14 (display 1.0.5)
+
+- Fix FTMS discovery after power-on with ESPHome 2026.11.0. The local BLE server now explicitly requests advertising when it starts, so discovery does not depend on connecting a heart-rate monitor first.
+
 ## 1.0.0-beta.13 (display 1.0.5)
 
 - Make the Nextion display optional at build time (`display_mode: "1"` for Nextion, `"0"` without a display). The no-display build omits the Nextion driver and its UART; the web UI and FTMS remain available. Mode `"2"` is reserved for LVGL.
